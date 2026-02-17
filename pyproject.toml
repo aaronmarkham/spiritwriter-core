@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "spiritwriter-core"
+version = "0.1.0"
+description = "Shared foundation for AI content pipelines — knowledge base, document ingestion, secrets, LLM abstraction"
+readme = "README.md"
+license = {text = "Apache-2.0"}
+requires-python = ">=3.9"
+authors = [
+    {name = "Aaron Markham"},
+    {name = "Lilit (AI)"},
+]
+dependencies = [
+    "anthropic>=0.40.0",
+    "keyring>=25.0.0",
+    "pymupdf>=1.24.0",
+]
+
+[project.optional-dependencies]
+strands = ["strands-agents>=0.1.0"]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.23"]
+
+[tool.setuptools.packages.find]
+include = ["spiritwriter*"]
