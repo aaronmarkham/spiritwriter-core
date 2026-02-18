@@ -15,56 +15,25 @@ from spiritwriter.models.knowledge import (
     CrossSourceLink,
 )
 from spiritwriter.models.document import DocumentAtom, AtomType
-from spiritwriter.classify.content import is_theme_candidate
+from spiritwriter.stopwords import (
+    is_theme_candidate,
+    STRUCTURAL_NOISE_TERMS,
+    THEME_STOPWORDS,
+)
 
 
-# Default KB directory (can be overridden)
-DEFAULT_KB_DIR = Path("artifacts") / "kb"
-
-# Known structural/noise terms that shouldn't be topics
-STRUCTURAL_NOISE_TERMS = {
-    # Block types (should never be topics)
-    "figure", "figure caption", "caption", "header", "footer",
-    "paragraph", "abstract", "section", "subsection", "title",
-    "table", "equation", "citation", "reference", "bibliography",
-    "author", "date", "keyword", "metadata", "page header", "page footer",
-    # Document structure
-    "volume information", "mathematical expression", "mathematical bracket",
-    "author biography", "affiliations", "contact", "acknowledgments",
-    # Generic academic
-    "introduction", "conclusion", "related work", "background",
-    "methodology", "methods", "results", "discussion", "evaluation",
-    "experimental", "experiment", "future work",
-}
-
-# Stopwords that shouldn't be standalone themes
-THEME_STOPWORDS = {
-    "this", "that", "with", "from", "have", "been", "their", "which",
-    "also", "more", "than", "into", "each", "such", "only", "other",
-    "some", "these", "those", "over", "many", "most", "both", "does",
-    "used", "using", "based", "however", "results", "experimental",
-    "international", "introduction", "related", "conclusion", "nature",
-    "conference", "proceedings", "references", "abstract", "proposed",
-    "machine", "neural", "network", "networks", "learning", "training",
-    "computer", "vision", "language", "intelligence", "artificial",
-    "analysis", "system", "systems", "performance", "algorithm",
-    "knowledge", "information", "processing", "research",
-}
-
-
-def resolve_project(project: str, kb_dir: Optional[Path] = None) -> Optional[Path]:
+def resolve_project(project: str, kb_dir: Path) -> Optional[Path]:
     """Resolve a project identifier to its directory.
 
     Tries: exact dir name, prefix match on ID, name match in project.json.
 
     Args:
         project: Project name, ID, or ID prefix.
-        kb_dir: Override KB directory (default: artifacts/kb).
+        kb_dir: Directory containing knowledge base projects.
 
     Returns:
         Path to project directory, or None if not found.
     """
-    kb_dir = kb_dir or DEFAULT_KB_DIR
     if not kb_dir.exists():
         return None
 
@@ -532,8 +501,8 @@ class KnowledgeBaseManager:
     Wraps the module-level functions with a configurable KB directory.
     """
 
-    def __init__(self, kb_dir: Optional[Path] = None):
-        self.kb_dir = kb_dir or DEFAULT_KB_DIR
+    def __init__(self, kb_dir: Path):
+        self.kb_dir = kb_dir
 
     def resolve(self, project: str) -> Optional[Path]:
         """Resolve a project identifier to its directory."""

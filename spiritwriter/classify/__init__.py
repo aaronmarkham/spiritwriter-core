@@ -1,19 +1,18 @@
-"""Content-aware document classification."""
+"""Content classification and theme filtering."""
 
-from .content import (
-    ContentClassifier,
-    is_institutional_name,
+from .content import ContentClassifier, EXTRACTION_RULES
+from spiritwriter.stopwords import (
     is_theme_candidate,
-    INSTITUTION_PATTERNS,
-    INSTITUTION_INDICATOR_WORDS,
-    EXTRACTION_RULES,
+    is_institutional_name,
+    is_venue_name,
+    is_structural_noise,
 )
 
 __all__ = [
     "ContentClassifier",
-    "is_institutional_name",
-    "is_theme_candidate", 
-    "INSTITUTION_PATTERNS",
-    "INSTITUTION_INDICATOR_WORDS",
     "EXTRACTION_RULES",
+    "is_theme_candidate",
+    "is_institutional_name",
+    "is_venue_name",
+    "is_structural_noise",
 ]

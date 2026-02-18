@@ -22,27 +22,38 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-# Service name for keychain entries
+# Service name for keychain entries — override via configure()
 SERVICE_NAME = "spiritwriter"
 
-# Known API key names and their environment variable equivalents
+# Known API key registry — projects can extend via register_keys()
+# Core keys that any spiritwriter-based project might use
 KNOWN_KEYS = {
-    "ANTHROPIC_API_KEY": "Anthropic API key (required)",
-    "OPENAI_API_KEY": "OpenAI API key (DALL-E, TTS)",
-    "LUMA_API_KEY": "Luma AI API key (video)",
-    "RUNWAY_API_KEY": "Runway ML API key (video)",
-    "ELEVENLABS_API_KEY": "ElevenLabs API key (TTS)",
-    "GOOGLE_CLOUD_API_KEY": "Google Cloud API key (TTS)",
-    "PIKA_API_KEY": "Pika Labs API key (video)",
-    "STABILITY_API_KEY": "Stability AI API key (image/video)",
-    "KLING_API_KEY": "Kling AI API key (video)",
-    "MUBERT_API_KEY": "Mubert API key (music)",
-    "SUNO_API_KEY": "Suno API key (music)",
-    "YOUTUBE_CLIENT_ID": "YouTube OAuth2 client ID (Desktop app)",
-    "YOUTUBE_CLIENT_SECRET": "YouTube OAuth2 client secret",
-    "YOUTUBE_CLIENT_SECRETS_PATH": "Path to YouTube OAuth2 client secrets JSON (legacy)",
-    "YOUTUBE_API_KEY": "YouTube Data API key",
+    "ANTHROPIC_API_KEY": "Anthropic API key",
+    "OPENAI_API_KEY": "OpenAI API key",
 }
+
+
+def configure(service_name: str = None, extra_keys: dict = None):
+    """Configure the secrets module for your project.
+
+    Args:
+        service_name: Keychain service name (default: "spiritwriter").
+        extra_keys: Additional key names to register {name: description}.
+    """
+    global SERVICE_NAME, KNOWN_KEYS
+    if service_name:
+        SERVICE_NAME = service_name
+    if extra_keys:
+        KNOWN_KEYS.update(extra_keys)
+
+
+def register_keys(keys: dict):
+    """Register additional known API key names.
+
+    Args:
+        keys: Dict mapping key names to descriptions.
+    """
+    KNOWN_KEYS.update(keys)
 
 
 def _get_keyring():

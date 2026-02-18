@@ -10,15 +10,15 @@ from .manager import (
     calculate_topic_quality,
     calculate_entity_quality,
     get_atom_type_distribution,
-    STRUCTURAL_NOISE_TERMS,
 )
 
-# Convenience re-exports so `from spiritwriter.kb import KnowledgeProject` works
+# Convenience re-exports
 from spiritwriter.models.knowledge import (
     KnowledgeProject,
     KnowledgeGraph,
     KnowledgeSource,
 )
+from spiritwriter.stopwords import STRUCTURAL_NOISE_TERMS
 
 __all__ = [
     "KnowledgeBaseManager",
