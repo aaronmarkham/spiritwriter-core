@@ -1,13 +1,13 @@
 """Document ingestion pipeline."""
 
-from .document import (
-    ExtractionResult,
+from spiritwriter.ingest.extraction import ExtractionResult
+from spiritwriter.ingest.document import (
     DocumentIngestor,
     DocumentIngestorAgent,  # Backward compatibility alias
 )
 
 __all__ = [
     "ExtractionResult",
-    "DocumentIngestor", 
+    "DocumentIngestor",
     "DocumentIngestorAgent",
 ]
