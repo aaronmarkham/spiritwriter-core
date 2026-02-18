@@ -1,6 +1,7 @@
 """Content classification and theme filtering."""
 
-from .content import ContentClassifier, EXTRACTION_RULES
+from .classifier import ContentClassifier
+from .rules import EXTRACTION_RULES
 from spiritwriter.stopwords import (
     is_theme_candidate,
     is_institutional_name,
