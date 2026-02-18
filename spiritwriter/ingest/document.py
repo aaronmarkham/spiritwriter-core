@@ -952,27 +952,24 @@ Respond with JSON:
         return graph
 
     # Common words to exclude from topics and entities
-    _STOPWORDS = frozenset({
-        "the", "and", "for", "with", "from", "this", "that", "are", "was",
-        "has", "but", "not", "all", "can", "will", "been", "have", "had",
-        "were", "their", "which", "when", "where", "what", "how", "who",
-        "also", "more", "than", "then", "into", "each", "such", "only",
-        "other", "some", "these", "those", "over", "many", "most", "both",
-        "does", "did", "its", "our", "may", "one", "two", "use", "used",
-        "using", "based", "however", "therefore", "thus", "hence",
+        # Common English + academic stopwords for topic extraction filtering.
+    # Combines THEME_STOPWORDS with additional function words and generic terms.
+    from spiritwriter.stopwords import THEME_STOPWORDS as _THEME_SW
+    _STOPWORDS = _THEME_SW | frozenset({
+        # Function words not in THEME_STOPWORDS
+        "the", "and", "for", "are", "was", "has", "but", "not", "all",
+        "can", "will", "had", "were", "when", "where", "what", "how",
+        "who", "then", "did", "its", "our", "may", "one", "two",
+        "therefore", "thus", "hence", "about", "above", "below", "under",
+        "through", "after", "before", "while", "during", "since",
+        "further", "here", "there", "still", "use",
+        # Generic academic terms not already in THEME_STOPWORDS
         "proposed", "present", "presented", "show", "shown", "shows",
-        "result", "results", "approach", "method", "methods", "figure",
-        "table", "section", "paper", "work", "study", "model", "models",
-        "data", "set", "first", "second", "new", "different", "between",
-        "through", "after", "before", "while", "during", "since", "about",
-        "above", "below", "under", "further", "here", "there", "still",
-        "introduction", "related", "conclusion", "abstract", "experimental",
-        "international", "conference", "proceedings", "journal", "nature",
-        "machine", "neural", "network", "networks", "learning", "training",
-        "computer", "vision", "language", "intelligence", "artificial",
-        "analysis", "system", "systems", "performance", "algorithm",
-        "algorithms", "knowledge", "information", "processing", "research",
-        "techniques", "framework", "feature", "features", "representation",
+        "result", "approach", "method", "paper", "work", "study",
+        "model", "models", "data", "set", "first", "second", "new",
+        "different", "between", "methods", "figure", "table", "section",
+        "algorithms", "techniques", "framework", "feature", "features",
+        "representation",
     })
 
     def _extract_mock_topics(self, text: str) -> List[str]:
