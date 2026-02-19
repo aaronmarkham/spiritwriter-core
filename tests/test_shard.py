@@ -159,6 +159,22 @@ class TestMemoryShard:
         assert "namespace packages" in ctx
         assert "</shard>" in ctx
 
+    def test_instruction_hydration_rendering(self):
+        shard = MemoryShard(
+            atoms=[
+                ShardAtom(text="Use cs figures inject to add diagrams", kind=AtomKind.INSTRUCTION, key="inject figure"),
+                ShardAtom(text="Generic instruction without key", kind=AtomKind.INSTRUCTION),
+                ShardAtom(text="A regular fact", kind=AtomKind.FACT),
+            ],
+            scope="project:test",
+            origin="agent:test",
+            tags=["test"],
+        )
+        ctx = shard.hydrate_context()
+        assert "**inject figure**:" in ctx  # keyed instruction
+        assert "⚡ Generic instruction" in ctx  # unkeyed instruction
+        assert "[fact]" in ctx  # regular fact unchanged
+
     def test_parent_shard_tracking(self):
         s1 = self._make_shard()
         s2 = self._make_shard(

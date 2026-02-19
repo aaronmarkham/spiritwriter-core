@@ -40,6 +40,7 @@ class AtomKind(str, Enum):
     ENTITY = "entity"         # Named entity info
     CONTEXT = "context"       # Freeform contextual knowledge
     CHECKPOINT = "checkpoint"  # Pre-flight state snapshot
+    INSTRUCTION = "instruction"  # How to do things (skills, workflows, commands)
 
 
 def _canonical_json(obj: Any) -> bytes:
@@ -255,7 +256,13 @@ class MemoryShard:
         """
         lines = []
         for atom in self.atoms:
-            if atom.entity and atom.key and atom.value:
+            if atom.kind == AtomKind.INSTRUCTION:
+                # Instructions render as actionable steps
+                if atom.key:
+                    lines.append(f"- **{atom.key}**: {atom.text}")
+                else:
+                    lines.append(f"- ⚡ {atom.text}")
+            elif atom.entity and atom.key and atom.value:
                 lines.append(f"- [{atom.kind.value}] {atom.entity}.{atom.key} = {atom.value}")
             elif atom.entity and atom.key:
                 lines.append(f"- [{atom.kind.value}] {atom.entity}.{atom.key}: {atom.text}")
