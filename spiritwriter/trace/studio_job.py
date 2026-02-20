@@ -24,6 +24,7 @@ from spiritwriter.trace.entitlement import (
     EntitlementToken, Capability, create_entitlement, serialize_token,
 )
 from spiritwriter.trace.store import ShardStore
+from spiritwriter.trace.emitter import TraceEmitter
 
 
 @dataclass
@@ -111,6 +112,7 @@ def package_job(
     capabilities: list[str] | None = None,
     secrets: list[str] | None = None,
     scope_prefix: str = "studio",
+    tracer: TraceEmitter | None = None,
 ) -> PackagedJob:
     """Package content + task into encrypted shards with entitlement.
 
@@ -182,9 +184,28 @@ def package_job(
         budget_usd=job_spec.budget_usd,
     )
 
-    return PackagedJob(
+    pkg = PackagedJob(
         content_shard_id=content_shard.shard_id,
         task_shard_id=task_shard.shard_id,
         entitlement_token=token,
         job_key=job_key,
     )
+
+    # Emit trace events
+    if tracer:
+        tracer.entitlement_granted(
+            token_id=token.token_id,
+            granted_to=granted_to,
+            shard_ids=[content_shard.shard_id, task_shard.shard_id],
+            scopes=token.scopes,
+            capabilities=token.capabilities,
+            budget_usd=job_spec.budget_usd,
+        )
+        tracer.studio_job_packaged(
+            content_shard_id=content_shard.shard_id,
+            task_shard_id=task_shard.shard_id,
+            token_id=token.token_id,
+            budget_usd=job_spec.budget_usd,
+        )
+
+    return pkg

@@ -27,6 +27,7 @@ from spiritwriter.trace.entitlement import (
     EntitlementToken, deserialize_token, validate_capability,
     validate_budget, is_expired, get_shard_key, Capability,
 )
+from spiritwriter.trace.emitter import TraceEmitter
 
 
 class StudioRunnerError(Exception):
@@ -74,6 +75,8 @@ class JobContext:
 class BudgetTracker:
     """Track spending against entitlement budget."""
     budget_usd: float
+    token_id: str | None = None
+    tracer: TraceEmitter | None = None
     entries: list[dict[str, Any]] = field(default_factory=list)
 
     @property
@@ -99,6 +102,14 @@ class BudgetTracker:
             "amount": amount,
             "timestamp": _now_iso(),
         })
+        if self.tracer and self.token_id:
+            self.tracer.budget_spent(
+                token_id=self.token_id,
+                label=label,
+                amount=amount,
+                total_spent=self.spent,
+                budget_usd=self.budget_usd,
+            )
 
     def summary(self) -> dict[str, Any]:
         return {
@@ -137,7 +148,11 @@ def parse_job_block(task_text: str) -> tuple[str, str, str]:
     )
 
 
-def hydrate_job(store: ShardStore, task_text: str) -> JobContext:
+def hydrate_job(
+    store: ShardStore,
+    task_text: str,
+    tracer: TraceEmitter | None = None,
+) -> JobContext:
     """Parse task text, validate entitlement, decrypt shards.
 
     This is the main entry point for a studio runner sub-agent.
@@ -148,10 +163,23 @@ def hydrate_job(store: ShardStore, task_text: str) -> JobContext:
     token = deserialize_token(token_str)
 
     if is_expired(token):
+        if tracer:
+            tracer.capability_checked(
+                token_id=token.token_id, capability="token_valid", allowed=False,
+            )
         raise StudioRunnerError("Entitlement token has expired")
 
     if not validate_capability(token, Capability.SHARD_READ):
+        if tracer:
+            tracer.capability_checked(
+                token_id=token.token_id, capability=Capability.SHARD_READ, allowed=False,
+            )
         raise StudioRunnerError("Token lacks shard:read capability")
+
+    if tracer:
+        tracer.capability_checked(
+            token_id=token.token_id, capability=Capability.SHARD_READ, allowed=True,
+        )
 
     # Decrypt content shard
     content_key = get_shard_key(token, content_id)
@@ -160,12 +188,28 @@ def hydrate_job(store: ShardStore, task_text: str) -> JobContext:
         raise StudioRunnerError(f"Content shard {content_id} not found in store")
     content_shard = decrypt_shard(content_enc, content_key)
 
+    if tracer:
+        tracer.shard_decrypted(
+            shard_id=content_id, token_id=token.token_id, scope=content_shard.scope,
+        )
+
     # Decrypt task shard
     task_key = get_shard_key(token, task_id)
     task_enc = store.get_encrypted(task_id)
     if task_enc is None:
         raise StudioRunnerError(f"Task shard {task_id} not found in store")
     task_shard = decrypt_shard(task_enc, task_key)
+
+    if tracer:
+        tracer.shard_decrypted(
+            shard_id=task_id, token_id=token.token_id, scope=task_shard.scope,
+        )
+        tracer.studio_job_started(
+            token_id=token.token_id,
+            content_shard_id=content_id,
+            task_shard_id=task_id,
+            prompt=next((a.text for a in task_shard.atoms if a.key == "production_prompt"), None),
+        )
 
     return JobContext(
         token=token,

@@ -6,6 +6,8 @@ from pathlib import Path
 
 import pytest
 
+from spiritwriter.trace.emitter import TraceEmitter
+
 from spiritwriter.trace.shard import MemoryShard, ShardAtom, AtomKind, DecayClass
 from spiritwriter.trace.store import ShardStore
 from spiritwriter.trace.crypto import generate_job_key, encrypt_shard, serialize_key
@@ -345,3 +347,108 @@ class TestEntitlementHydration:
 
         result = tmp_store.hydrate_with_entitlement(token)
         assert "public info" in result
+
+
+# === Phase 6: Trace Integration ===
+
+class TestTraceIntegration:
+    @pytest.fixture
+    def tracer(self, tmp_path):
+        return TraceEmitter(
+            run_id="test-run",
+            agent_id="test-agent",
+            out_path=str(tmp_path / "trace.jsonl"),
+        )
+
+    def _read_events(self, tracer):
+        with open(tracer.out_path) as f:
+            return [json.loads(line) for line in f]
+
+    def test_package_job_emits_traces(self, tmp_store, sample_atoms, sample_spec, tracer):
+        pkg = package_job(tmp_store, sample_atoms, sample_spec, tracer=tracer)
+        events = self._read_events(tracer)
+        types = [e["type"] for e in events]
+        assert "entitlement_granted" in types
+        assert "studio_job_packaged" in types
+        # Verify entitlement event has correct fields
+        grant_evt = next(e for e in events if e["type"] == "entitlement_granted")
+        assert grant_evt["token_id"] == pkg.entitlement_token.token_id
+        assert grant_evt["budget_usd"] == 15.0
+        assert len(grant_evt["shard_ids"]) == 2
+
+    def test_hydrate_job_emits_traces(self, tmp_store, sample_atoms, sample_spec, tracer):
+        pkg = package_job(tmp_store, sample_atoms, sample_spec)
+        job = hydrate_job(tmp_store, pkg.spawn_task_text(), tracer=tracer)
+        events = self._read_events(tracer)
+        types = [e["type"] for e in events]
+        assert "capability_checked" in types
+        assert types.count("shard_decrypted") == 2  # content + task
+        assert "studio_job_started" in types
+        # Verify chain integrity
+        for i, evt in enumerate(events):
+            if i == 0:
+                assert evt["prev_event_hash"] is None
+            else:
+                assert evt["prev_event_hash"] == events[i - 1]["hash"]
+
+    def test_budget_tracker_emits_traces(self, tracer):
+        bt = BudgetTracker(
+            budget_usd=10.0, token_id="tok-123", tracer=tracer,
+        )
+        bt.record("luma_gen", 4.32)
+        bt.record("tts", 0.02)
+        events = self._read_events(tracer)
+        assert len(events) == 2
+        assert all(e["type"] == "budget_spent" for e in events)
+        assert events[0]["amount"] == 4.32
+        assert events[1]["total_spent"] == pytest.approx(4.34)
+
+    def test_full_pipeline_trace_chain(self, tmp_store, sample_atoms, sample_spec, tmp_path):
+        """Full pipeline: package → hydrate → spend → complete — all traced in one chain."""
+        trace_path = str(tmp_path / "full-trace.jsonl")
+        tracer = TraceEmitter(run_id="full-test", agent_id="lilit", out_path=trace_path)
+
+        # Package (main agent)
+        pkg = package_job(tmp_store, sample_atoms, sample_spec, tracer=tracer)
+
+        # Hydrate (sub-agent)
+        job = hydrate_job(tmp_store, pkg.spawn_task_text(), tracer=tracer)
+
+        # Work (sub-agent spends budget)
+        bt = BudgetTracker(
+            budget_usd=job.budget_usd,
+            token_id=job.token.token_id,
+            tracer=tracer,
+        )
+        bt.record("luma_gen", 4.32)
+
+        # Complete
+        tracer.studio_job_completed(
+            token_id=job.token.token_id,
+            result_shard_id="result-abc",
+            spent_usd=bt.spent,
+            outputs=[{"type": "video", "ref": "/path/to/out.mp4"}],
+        )
+
+        # Verify full chain
+        with open(trace_path) as f:
+            events = [json.loads(line) for line in f]
+
+        types = [e["type"] for e in events]
+        assert types == [
+            "entitlement_granted",
+            "studio_job_packaged",
+            "capability_checked",
+            "shard_decrypted",
+            "shard_decrypted",
+            "studio_job_started",
+            "budget_spent",
+            "studio_job_completed",
+        ]
+
+        # Every event chains to previous
+        for i in range(1, len(events)):
+            assert events[i]["prev_event_hash"] == events[i - 1]["hash"]
+
+        # All share same run_id
+        assert all(e["run_id"] == "full-test" for e in events)

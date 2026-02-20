@@ -113,6 +113,152 @@ class TraceEmitter:
             **kwargs,
         )
 
+    # === Entitlement & Studio Events ===
+
+    def entitlement_granted(
+        self,
+        token_id: str,
+        granted_to: str,
+        shard_ids: list[str],
+        scopes: list[str],
+        capabilities: list[str],
+        budget_usd: float,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """Record entitlement token creation."""
+        return self.emit(
+            "entitlement_granted",
+            token_id=token_id,
+            granted_to=granted_to,
+            shard_ids=shard_ids,
+            scopes=scopes,
+            capabilities=capabilities,
+            budget_usd=budget_usd,
+            **kwargs,
+        )
+
+    def shard_decrypted(
+        self,
+        shard_id: str,
+        token_id: str,
+        scope: str,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """Record shard decryption via entitlement."""
+        return self.emit(
+            "shard_decrypted",
+            shard_id=shard_id,
+            token_id=token_id,
+            scope=scope,
+            **kwargs,
+        )
+
+    def capability_checked(
+        self,
+        token_id: str,
+        capability: str,
+        allowed: bool,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """Record a capability validation check."""
+        return self.emit(
+            "capability_checked",
+            token_id=token_id,
+            capability=capability,
+            allowed=allowed,
+            **kwargs,
+        )
+
+    def budget_spent(
+        self,
+        token_id: str,
+        label: str,
+        amount: float,
+        total_spent: float,
+        budget_usd: float,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """Record budget expenditure."""
+        return self.emit(
+            "budget_spent",
+            token_id=token_id,
+            label=label,
+            amount=amount,
+            total_spent=total_spent,
+            budget_usd=budget_usd,
+            **kwargs,
+        )
+
+    def studio_job_packaged(
+        self,
+        content_shard_id: str,
+        task_shard_id: str,
+        token_id: str,
+        budget_usd: float,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """Record studio job packaging."""
+        return self.emit(
+            "studio_job_packaged",
+            content_shard_id=content_shard_id,
+            task_shard_id=task_shard_id,
+            token_id=token_id,
+            budget_usd=budget_usd,
+            **kwargs,
+        )
+
+    def studio_job_started(
+        self,
+        token_id: str,
+        content_shard_id: str,
+        task_shard_id: str,
+        prompt: str | None = None,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """Record studio job execution start."""
+        return self.emit(
+            "studio_job_started",
+            token_id=token_id,
+            content_shard_id=content_shard_id,
+            task_shard_id=task_shard_id,
+            prompt=prompt,
+            **kwargs,
+        )
+
+    def studio_job_completed(
+        self,
+        token_id: str,
+        result_shard_id: str,
+        spent_usd: float,
+        outputs: list[dict[str, Any]] | None = None,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """Record studio job completion."""
+        return self.emit(
+            "studio_job_completed",
+            token_id=token_id,
+            result_shard_id=result_shard_id,
+            spent_usd=spent_usd,
+            outputs=outputs or [],
+            **kwargs,
+        )
+
+    def studio_job_failed(
+        self,
+        token_id: str,
+        error: str,
+        spent_usd: float = 0.0,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """Record studio job failure."""
+        return self.emit(
+            "studio_job_failed",
+            token_id=token_id,
+            error=error,
+            spent_usd=spent_usd,
+            **kwargs,
+        )
+
     def decision_extracted(
         self,
         shard_id: str,
