@@ -17,6 +17,13 @@ from spiritwriter.trace.entitlement import (
     create_entitlement, validate_capability, validate_scope,
     is_expired, get_shard_key, serialize_token, deserialize_token,
 )
+from spiritwriter.trace.studio_job import (
+    StudioJobSpec, PackagedJob, package_job,
+)
+from spiritwriter.trace.studio_runner import (
+    StudioRunnerError, JobContext, BudgetTracker,
+    parse_job_block, hydrate_job, create_result_shard,
+)
 
 __all__ = [
     "MemoryShard",
@@ -40,4 +47,13 @@ __all__ = [
     "get_shard_key",
     "serialize_token",
     "deserialize_token",
+    "StudioJobSpec",
+    "PackagedJob",
+    "package_job",
+    "StudioRunnerError",
+    "JobContext",
+    "BudgetTracker",
+    "parse_job_block",
+    "hydrate_job",
+    "create_result_shard",
 ]

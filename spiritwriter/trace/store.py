@@ -20,6 +20,11 @@ from pathlib import Path
 from typing import Iterator
 
 from spiritwriter.trace.shard import MemoryShard, ShardRef, DecayClass
+from spiritwriter.trace.crypto import EncryptedShard, encrypt_shard, decrypt_shard, DecryptionError
+from spiritwriter.trace.entitlement import (
+    EntitlementToken, validate_capability, validate_scope,
+    is_expired, get_shard_key, Capability,
+)
 
 
 class ShardStore:
@@ -224,6 +229,94 @@ class ShardStore:
                 continue
 
         return pruned
+
+    # === Encrypted Shard Operations ===
+
+    def _encrypted_path(self, shard_id: str) -> Path:
+        """Path for encrypted shard: same layout, .enc.json suffix."""
+        return self.shards_dir / shard_id[:2] / f"{shard_id[2:]}.enc.json"
+
+    def put_encrypted(self, encrypted: EncryptedShard) -> str:
+        """Store an encrypted shard. Returns shard_id."""
+        path = self._encrypted_path(encrypted.shard_id)
+        if not path.exists():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(encrypted.to_json(), encoding="utf-8")
+
+            # Update index (scope visible even when encrypted)
+            index = self._load_index()
+            scope_shards = index.setdefault(encrypted.scope, [])
+            if encrypted.shard_id not in scope_shards:
+                scope_shards.append(encrypted.shard_id)
+            self._save_index(index)
+
+        return encrypted.shard_id
+
+    def get_encrypted(self, shard_id: str) -> EncryptedShard | None:
+        """Retrieve an encrypted shard by id."""
+        path = self._encrypted_path(shard_id)
+        if not path.exists():
+            return None
+        return EncryptedShard.from_json(path.read_text(encoding="utf-8"))
+
+    def has_encrypted(self, shard_id: str) -> bool:
+        """Check if an encrypted shard exists."""
+        return self._encrypted_path(shard_id).exists()
+
+    def encrypt_and_store(self, shard: MemoryShard, key: bytes) -> EncryptedShard:
+        """Encrypt a shard and store the encrypted version. Returns EncryptedShard."""
+        encrypted = encrypt_shard(shard, key)
+        self.put_encrypted(encrypted)
+        return encrypted
+
+    def decrypt_and_get(self, shard_id: str, key: bytes) -> MemoryShard:
+        """Retrieve and decrypt a shard. Raises DecryptionError on failure."""
+        encrypted = self.get_encrypted(shard_id)
+        if encrypted is None:
+            raise KeyError(f"Encrypted shard {shard_id} not found")
+        return decrypt_shard(encrypted, key)
+
+    # === Entitlement-Aware Hydration ===
+
+    def hydrate_with_entitlement(self, token: EntitlementToken) -> str:
+        """Hydrate all shards an entitlement token grants access to.
+
+        Validates token expiry, scope access, and read capability.
+        Decrypts each entitled shard and renders as injectable context.
+        Raises on expired token or missing capability.
+        """
+        if is_expired(token):
+            raise PermissionError("Entitlement token has expired")
+
+        if not validate_capability(token, Capability.SHARD_READ):
+            raise PermissionError("Token lacks shard:read capability")
+
+        parts = []
+        for shard_id, _key_str in token.shard_keys.items():
+            # Check if we have this shard (encrypted or plaintext)
+            encrypted = self.get_encrypted(shard_id)
+            if encrypted is not None:
+                if not validate_scope(token, encrypted.scope):
+                    raise PermissionError(
+                        f"Token not entitled to scope '{encrypted.scope}' "
+                        f"(shard {shard_id})"
+                    )
+                key = get_shard_key(token, shard_id)
+                shard = decrypt_shard(encrypted, key)
+                parts.append(shard.hydrate_context())
+            else:
+                # Try plaintext shard (for backward compat / unencrypted stores)
+                shard = self.get(shard_id)
+                if shard is not None:
+                    if not validate_scope(token, shard.scope):
+                        raise PermissionError(
+                            f"Token not entitled to scope '{shard.scope}' "
+                            f"(shard {shard_id})"
+                        )
+                    parts.append(shard.hydrate_context())
+                # Shard not found — skip silently (might be on DHT)
+
+        return "\n\n".join(parts)
 
     def stats(self) -> dict:
         """Summary statistics."""
