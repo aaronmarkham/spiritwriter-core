@@ -248,6 +248,10 @@ class MemoryShard:
     def from_json(cls, raw: str) -> MemoryShard:
         return cls.from_dict(json.loads(raw))
 
+    def get_atom(self, key: str) -> ShardAtom | None:
+        """Find the first atom with a matching key."""
+        return next((a for a in self.atoms if a.key == key), None)
+
     def hydrate_context(self) -> str:
         """Render this shard as injectable agent context.
 

@@ -552,3 +552,79 @@ class TestIntegration:
         stats = store.stats()
         assert stats["total_shards"] == 1
         assert stats["total_atoms"] == len(atoms)
+
+
+class TestGetAtom:
+    def test_get_atom_found(self):
+        shard = MemoryShard(
+            atoms=[
+                ShardAtom(text="v1", kind=AtomKind.FACT, key="stage", value="extract_complete"),
+                ShardAtom(text="v2", kind=AtomKind.FACT, key="other"),
+            ],
+            scope="test", origin="t",
+        )
+        atom = shard.get_atom("stage")
+        assert atom is not None
+        assert atom.value == "extract_complete"
+
+    def test_get_atom_missing(self):
+        shard = MemoryShard(atoms=[], scope="test", origin="t")
+        assert shard.get_atom("nope") is None
+
+
+class TestDeleteRef:
+    def test_delete_existing(self, tmp_path):
+        store = ShardStore(tmp_path / "store")
+        shard = MemoryShard(
+            atoms=[ShardAtom(text="x")], scope="test", origin="t",
+        )
+        ref = store.put(shard)
+        store.set_ref("my-ref", ref.shard_id)
+        assert store.get_ref("my-ref") is not None
+        assert store.delete_ref("my-ref") is True
+        assert store.get_ref("my-ref") is None
+
+    def test_delete_nonexistent(self, tmp_path):
+        store = ShardStore(tmp_path / "store")
+        assert store.delete_ref("nope") is False
+
+
+class TestListRefs:
+    def test_list_all(self, tmp_path):
+        store = ShardStore(tmp_path / "store")
+        store.set_ref("job:pipe:current", "abc")
+        store.set_ref("job:pipe:checkpoint", "def")
+        store.set_ref("project-csp", "ghi")
+        refs = store.list_refs()
+        assert refs == ["job:pipe:checkpoint", "job:pipe:current", "project-csp"]
+
+    def test_list_prefix(self, tmp_path):
+        store = ShardStore(tmp_path / "store")
+        store.set_ref("job:pipe:current", "abc")
+        store.set_ref("job:pipe:checkpoint", "def")
+        store.set_ref("project-csp", "ghi")
+        refs = store.list_refs(prefix="job:")
+        assert refs == ["job:pipe:checkpoint", "job:pipe:current"]
+
+
+class TestMoveScope:
+    def test_move_creates_new_shard(self, tmp_path):
+        store = ShardStore(tmp_path / "store")
+        shard = MemoryShard(
+            atoms=[ShardAtom(text="task", key="stage", value="queued")],
+            scope="jobs:queued", origin="orchestrator",
+        )
+        ref = store.put(shard)
+        new_shard = store.move_scope(ref.shard_id, "jobs:in-progress")
+        assert new_shard.scope == "jobs:in-progress"
+        assert new_shard.shard_id != shard.shard_id
+        assert new_shard.parent_shard_id == shard.shard_id
+        # Both exist
+        assert store.has(shard.shard_id)
+        assert store.has(new_shard.shard_id)
+
+    def test_move_not_found(self, tmp_path):
+        store = ShardStore(tmp_path / "store")
+        import pytest
+        with pytest.raises(KeyError):
+            store.move_scope("nonexistent", "jobs:done")

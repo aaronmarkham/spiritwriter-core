@@ -196,6 +196,44 @@ class ShardStore:
             return self.get(shard_id)
         return None
 
+    def delete_ref(self, name: str) -> bool:
+        """Remove a named ref. Returns True if it existed."""
+        ref_path = self.refs_dir / f"{name}.ref"
+        if ref_path.exists():
+            ref_path.unlink()
+            return True
+        return False
+
+    def list_refs(self, prefix: str = "") -> list[str]:
+        """List all named refs, optionally filtered by prefix."""
+        refs = [p.stem for p in self.refs_dir.glob("*.ref")]
+        if prefix:
+            refs = [r for r in refs if r.startswith(prefix)]
+        return sorted(refs)
+
+    def move_scope(self, shard_id: str, new_scope: str) -> MemoryShard:
+        """Create a new shard with updated scope (shards are immutable).
+
+        Stores the new shard and returns it. The original shard
+        remains in the store under its original scope.
+        """
+        shard = self.get(shard_id)
+        if shard is None:
+            raise KeyError(f"Shard {shard_id} not found")
+        new_shard = MemoryShard(
+            atoms=shard.atoms,
+            scope=new_scope,
+            origin=shard.origin,
+            decay_class=shard.decay_class,
+            created_at=shard.created_at,
+            trace_ref=shard.trace_ref,
+            parent_shard_id=shard_id,  # link to original
+            tags=shard.tags,
+            meta=shard.meta,
+        )
+        self.put(new_shard)
+        return new_shard
+
     # === Maintenance ===
 
     def prune_expired(self) -> int:
