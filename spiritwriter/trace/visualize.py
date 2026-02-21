@@ -64,7 +64,9 @@ def render_simple_workflow(events: list[dict[str, Any]]) -> str:
         nonlocal node_id
         nid = f"N{node_id}"
         node_id += 1
-        lines.append(f'    {nid}["{_escape(label)}"]:::{css_class}')
+        # Replace \n with <br/> for Mermaid line breaks in node labels
+        escaped = _escape(label).replace("\\n", "<br/>")
+        lines.append(f'    {nid}["{escaped}"]:::{css_class}')
         return nid
 
     prev_nid = None
@@ -182,16 +184,16 @@ def render_shard_genealogy(events: list[dict[str, Any]]) -> str:
 
     # Render nodes
     for cid in content_shards:
-        lines.append(f'    C_{_short_id(cid)}["📄 Content\\n{_short_id(cid)}..."]:::content')
+        lines.append(f'    C_{_short_id(cid)}["📄 Content<br/>{_short_id(cid)}..."]:::content')
     for tid in task_shards:
-        lines.append(f'    T_{_short_id(tid)}["📋 Task\\n{_short_id(tid)}..."]:::task')
+        lines.append(f'    T_{_short_id(tid)}["📋 Task<br/>{_short_id(tid)}..."]:::task')
     for rid in result_shards:
-        lines.append(f'    R_{_short_id(rid)}["✅ Result\\n{_short_id(rid)}..."]:::result')
+        lines.append(f'    R_{_short_id(rid)}["✅ Result<br/>{_short_id(rid)}..."]:::result')
 
     # Render entitlements and edges
     for cid, tid, tok in jobs:
         tok_node = f"E_{_short_id(tok)}"
-        lines.append(f'    {tok_node}{{"🎫 Entitlement\\n{_short_id(tok)}..."}}:::entitle')
+        lines.append(f'    {tok_node}{{"🎫 Entitlement<br/>{_short_id(tok)}..."}}:::entitle')
         lines.append(f'    C_{_short_id(cid)} --> {tok_node}')
         lines.append(f'    T_{_short_id(tid)} --> {tok_node}')
 
