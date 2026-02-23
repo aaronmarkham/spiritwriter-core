@@ -239,6 +239,9 @@ class ShardStore:
     def prune_expired(self) -> int:
         """Remove shards whose decay class has expired.
 
+        TTL is measured from last_checked if set (actively polled shards
+        stay alive), otherwise from created_at.
+
         Returns count of pruned shards.
         """
         import time
@@ -257,10 +260,13 @@ class ShardStore:
                 continue  # permanent — never prune
             try:
                 from datetime import datetime, timezone
-                created = datetime.fromisoformat(
-                    shard.created_at.replace("Z", "+00:00")
+                # Use last_checked if available (polled shards stay alive),
+                # otherwise fall back to created_at
+                anchor = shard.last_checked or shard.created_at
+                anchor_ts = datetime.fromisoformat(
+                    anchor.replace("Z", "+00:00")
                 ).timestamp()
-                if now - created > ttl:
+                if now - anchor_ts > ttl:
                     self.delete(shard.shard_id)
                     pruned += 1
             except Exception:
@@ -355,6 +361,70 @@ class ShardStore:
                 # Shard not found — skip silently (might be on DHT)
 
         return "\n\n".join(parts)
+
+    # === Sealed Shard Operations (zero-knowledge / owner-encrypted) ===
+
+    def _sealed_path(self, shard_id: str) -> Path:
+        """Path for sealed shard: same layout, .sealed.json suffix."""
+        return self.shards_dir / shard_id[:2] / f"{shard_id[2:]}.sealed.json"
+
+    def put_sealed(self, sealed) -> str:
+        """Store a sealed shard. Returns shard_id.
+
+        Accepts a SealedShard from spiritwriter.trace.sealed.
+        The sealed payload is opaque to the operator — only the
+        owner (holder of the private key) can decrypt it.
+        """
+        path = self._sealed_path(sealed.shard_id)
+        if not path.exists():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(sealed.to_json(), encoding="utf-8")
+
+            # Update index (scope visible even when sealed)
+            index = self._load_index()
+            scope_shards = index.setdefault(sealed.scope, [])
+            if sealed.shard_id not in scope_shards:
+                scope_shards.append(sealed.shard_id)
+            self._save_index(index)
+
+        return sealed.shard_id
+
+    def get_sealed(self, shard_id: str):
+        """Retrieve a sealed shard by id. Returns SealedShard or None.
+
+        Requires PyNaCl to be installed (for deserialization).
+        """
+        path = self._sealed_path(shard_id)
+        if not path.exists():
+            return None
+        from spiritwriter.trace.sealed import SealedShard
+        return SealedShard.from_json(path.read_text(encoding="utf-8"))
+
+    def has_sealed(self, shard_id: str) -> bool:
+        """Check if a sealed shard exists."""
+        return self._sealed_path(shard_id).exists()
+
+    def seal_and_store(self, shard: MemoryShard, owner_pubkey: bytes):
+        """Seal a shard for an owner and store it. Returns SealedShard.
+
+        Requires PyNaCl to be installed.
+        """
+        from spiritwriter.trace.sealed import seal_shard
+        sealed = seal_shard(shard, owner_pubkey)
+        self.put_sealed(sealed)
+        return sealed
+
+    def unseal_and_get(self, shard_id: str, owner_private_key: bytes) -> MemoryShard:
+        """Retrieve and unseal a shard. Raises UnsealError on failure.
+
+        Only the owner (holder of the private key) can call this.
+        Requires PyNaCl to be installed.
+        """
+        from spiritwriter.trace.sealed import unseal_shard, UnsealError
+        sealed = self.get_sealed(shard_id)
+        if sealed is None:
+            raise KeyError(f"Sealed shard {shard_id} not found")
+        return unseal_shard(sealed, owner_private_key)
 
     def stats(self) -> dict:
         """Summary statistics."""

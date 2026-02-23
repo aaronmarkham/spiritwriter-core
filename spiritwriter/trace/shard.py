@@ -162,6 +162,8 @@ class MemoryShard:
     parent_shard_id: str | None = None   # if this shard supersedes another
     tags: list[str] = field(default_factory=list)
     meta: dict[str, Any] = field(default_factory=dict)
+    last_checked: str | None = None      # ISO timestamp — last time content was verified/polled
+    check_count: int = 0                 # number of verification/poll cycles completed
 
     @property
     def shard_id(self) -> str:
@@ -216,6 +218,10 @@ class MemoryShard:
             d["tags"] = self.tags
         if self.meta:
             d["meta"] = self.meta
+        if self.last_checked is not None:
+            d["last_checked"] = self.last_checked
+        if self.check_count:
+            d["check_count"] = self.check_count
         return d
 
     def to_json(self) -> str:
@@ -234,6 +240,8 @@ class MemoryShard:
             parent_shard_id=d.get("parent_shard_id"),
             tags=d.get("tags", []),
             meta=d.get("meta", {}),
+            last_checked=d.get("last_checked"),
+            check_count=d.get("check_count", 0),
         )
         # Verify content address if provided
         stored_id = d.get("shard_id")

@@ -183,6 +183,63 @@ class TestMemoryShard:
         )
         assert s2.parent_shard_id == s1.shard_id
 
+    def test_last_checked_and_check_count_defaults(self):
+        shard = self._make_shard()
+        assert shard.last_checked is None
+        assert shard.check_count == 0
+
+    def test_last_checked_and_check_count_set(self):
+        shard = self._make_shard(
+            last_checked="2025-06-15T12:00:00Z",
+            check_count=42,
+        )
+        assert shard.last_checked == "2025-06-15T12:00:00Z"
+        assert shard.check_count == 42
+
+    def test_last_checked_not_in_content_hash(self):
+        """last_checked and check_count are operational metadata,
+        not content — they must not affect shard_id."""
+        s1 = self._make_shard()
+        s2 = self._make_shard(
+            last_checked="2025-06-15T12:00:00Z",
+            check_count=99,
+        )
+        assert s1.shard_id == s2.shard_id
+
+    def test_last_checked_roundtrip_json(self):
+        shard = self._make_shard(
+            last_checked="2025-06-15T12:00:00Z",
+            check_count=7,
+        )
+        raw = shard.to_json()
+        restored = MemoryShard.from_json(raw)
+        assert restored.last_checked == "2025-06-15T12:00:00Z"
+        assert restored.check_count == 7
+
+    def test_last_checked_omitted_when_default(self):
+        """Sparse serialization — don't include fields at defaults."""
+        shard = self._make_shard()
+        d = json.loads(shard.to_json())
+        assert "last_checked" not in d
+        assert "check_count" not in d
+
+    def test_old_shard_json_without_new_fields(self):
+        """Shards serialized before these fields existed still load fine."""
+        old_json = json.dumps({
+            "shard_id": None,  # will be recomputed
+            "atoms": [{"text": "old fact", "kind": "fact"}],
+            "scope": "project:legacy",
+            "origin": "agent:old",
+            "decay_class": "stable",
+            "created_at": "2024-01-01T00:00:00Z",
+        })
+        # Remove shard_id so it doesn't try to verify against None
+        d = json.loads(old_json)
+        del d["shard_id"]
+        shard = MemoryShard.from_dict(d)
+        assert shard.last_checked is None
+        assert shard.check_count == 0
+
 
 # === ShardStore Tests ===
 
@@ -348,6 +405,23 @@ class TestShardStore:
             origin="agent:test",
             decay_class=DecayClass.PERMANENT,
             created_at="2020-01-01T00:00:00Z",
+        )
+        store.put(shard)
+        pruned = store.prune_expired()
+        assert pruned == 0
+        assert store.count() == 1
+
+    def test_prune_respects_last_checked(self, store):
+        """A shard with old created_at but recent last_checked should survive."""
+        from datetime import datetime, timezone
+        recent = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        shard = MemoryShard(
+            atoms=[ShardAtom(text="actively polled")],
+            scope="monitor:active",
+            origin="agent:test",
+            decay_class=DecayClass.ACTIVE,  # 14-day TTL
+            created_at="2020-01-01T00:00:00Z",  # very old
+            last_checked=recent,  # but just checked
         )
         store.put(shard)
         pruned = store.prune_expired()
