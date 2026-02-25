@@ -29,6 +29,16 @@ from spiritwriter.trace.network import (
     NetworkUnavailable, NetworkTimeout, IntegrityError,
     SwarmMismatchError,
 )
+from spiritwriter.trace.canonicalize import (
+    EntitySenseSig,
+    ResolutionTier,
+    ResolutionResult,
+    CanonicalSchema,
+    CanonicalRegistry,
+    canonicalize_batch,
+    normalize_name,
+    fuzzy_score,
+)
 
 __all__ = [
     "MemoryShard",
@@ -68,4 +78,12 @@ __all__ = [
     "NetworkTimeout",
     "IntegrityError",
     "SwarmMismatchError",
+    "EntitySenseSig",
+    "ResolutionTier",
+    "ResolutionResult",
+    "CanonicalSchema",
+    "CanonicalRegistry",
+    "canonicalize_batch",
+    "normalize_name",
+    "fuzzy_score",
 ]
