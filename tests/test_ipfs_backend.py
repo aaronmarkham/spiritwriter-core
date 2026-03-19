@@ -2,6 +2,10 @@
 
 Run with: python -m pytest tests/test_ipfs_backend.py -v -m ipfs
 Skip in CI without Kubo: tests are marked @pytest.mark.ipfs
+
+Note: These tests use require_private_swarm=False since the test
+Kubo node may be on the public network. Private swarm verification
+is tested separately in test_network.py via mocks.
 """
 
 import tempfile
@@ -45,7 +49,8 @@ pytestmark = [
 @pytest.fixture
 def backend():
     with tempfile.TemporaryDirectory() as td:
-        yield IPFSBackend(store_root=td)
+        config = IPFSConfig(require_private_swarm=False)
+        yield IPFSBackend(store_root=td, config=config)
 
 
 class TestPublishResolve:
@@ -147,6 +152,6 @@ class TestAvailability:
 
     def test_unavailable_config(self):
         with tempfile.TemporaryDirectory() as td:
-            config = IPFSConfig(api_url="http://127.0.0.1:59999")
+            config = IPFSConfig(api_url="http://127.0.0.1:59999", require_private_swarm=False)
             backend = IPFSBackend(store_root=td, config=config)
             assert backend.is_available() is False

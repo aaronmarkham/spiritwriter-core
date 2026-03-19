@@ -27,6 +27,7 @@ from spiritwriter.trace.studio_runner import (
 from spiritwriter.trace.network import (
     NetworkResolver, ShardLocation, ShardManifest,
     NetworkUnavailable, NetworkTimeout, IntegrityError,
+    SwarmMismatchError,
 )
 
 __all__ = [
@@ -66,4 +67,5 @@ __all__ = [
     "NetworkUnavailable",
     "NetworkTimeout",
     "IntegrityError",
+    "SwarmMismatchError",
 ]

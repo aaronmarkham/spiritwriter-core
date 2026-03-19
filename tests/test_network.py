@@ -20,6 +20,7 @@ from spiritwriter.trace.network import (
     NetworkUnavailable,
     NetworkTimeout,
     IntegrityError,
+    SwarmMismatchError,
 )
 
 
@@ -228,6 +229,33 @@ class TestExceptions:
     def test_integrity_error(self):
         with pytest.raises(IntegrityError):
             raise IntegrityError("Shard ID mismatch")
+
+    def test_swarm_mismatch_error(self):
+        with pytest.raises(SwarmMismatchError):
+            raise SwarmMismatchError("Public IPFS detected")
+
+
+# === Swarm Key Registration ===
+
+class TestSwarmKeyRegistration:
+    def test_ipfs_swarm_key_registered(self):
+        """IPFS_SWARM_KEY should be in the secrets known keys after import."""
+        from spiritwriter.secrets.keychain import KNOWN_KEYS
+        # Importing ipfs module triggers register_keys
+        import spiritwriter.trace.backends.ipfs  # noqa: F401
+        assert "IPFS_SWARM_KEY" in KNOWN_KEYS
+
+    def test_swarm_config_default_private(self):
+        """IPFSConfig defaults to requiring private swarm."""
+        from spiritwriter.trace.backends.ipfs import IPFSConfig
+        config = IPFSConfig()
+        assert config.require_private_swarm is True
+
+    def test_swarm_config_opt_out(self):
+        """Can explicitly disable private swarm requirement."""
+        from spiritwriter.trace.backends.ipfs import IPFSConfig
+        config = IPFSConfig(require_private_swarm=False)
+        assert config.require_private_swarm is False
 
 
 # === Protocol Check ===

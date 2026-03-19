@@ -35,6 +35,10 @@ class IntegrityError(Exception):
     """Raised when fetched data fails content-address verification."""
 
 
+class SwarmMismatchError(Exception):
+    """Raised when the IPFS node is not on the expected private swarm."""
+
+
 # === Data Types ===
 
 @dataclass

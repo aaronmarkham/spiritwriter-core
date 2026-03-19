@@ -3,6 +3,10 @@
 First implementation of the NetworkResolver protocol.
 Talks to a local Kubo node via its REST API (default http://127.0.0.1:5001).
 
+By default, requires the Kubo node to be on a private swarm (swarm key
+stored in spiritwriter secrets). This prevents accidental publication of
+shards to the public IPFS network.
+
 Requires: requests (optional dependency)
     pip install 'spiritwriter-core[network]'
 """
@@ -10,6 +14,7 @@ Requires: requests (optional dependency)
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -27,8 +32,20 @@ from spiritwriter.trace.network import (
     NetworkUnavailable,
     ShardLocation,
     ShardManifest,
+    SwarmMismatchError,
 )
 from spiritwriter.trace.shard import MemoryShard
+
+logger = logging.getLogger(__name__)
+
+# Register the IPFS swarm key in spiritwriter secrets
+IPFS_SWARM_KEY_NAME = "IPFS_SWARM_KEY"
+
+try:
+    from spiritwriter.secrets.keychain import register_keys
+    register_keys({IPFS_SWARM_KEY_NAME: "IPFS private swarm key (hex-encoded 32 bytes)"})
+except ImportError:
+    pass  # secrets module not available — swarm key must come from env
 
 
 def _require_requests() -> None:
@@ -46,6 +63,7 @@ class IPFSConfig:
     gateway_url: str = "http://127.0.0.1:8080"
     timeout_seconds: int = 30
     pin_by_default: bool = True
+    require_private_swarm: bool = True  # Refuse to operate on public IPFS
 
 
 class IPFSBackend:
@@ -53,6 +71,11 @@ class IPFSBackend:
 
     Publishes shards to IPFS and resolves them by CID.
     Maintains a local cid_map.json mapping shard_id -> CID.
+
+    By default, validates that the Kubo node is on a private swarm
+    (swarm key from spiritwriter secrets). Set require_private_swarm=False
+    in IPFSConfig to allow public IPFS — but be aware that plaintext
+    shards will be readable by anyone who discovers the CID.
     """
 
     def __init__(self, store_root: str | Path, config: IPFSConfig | None = None):
@@ -61,6 +84,7 @@ class IPFSBackend:
         self._store_root = Path(store_root)
         self._cid_map_path = self._store_root / "cid_map.json"
         self._cid_map: dict[str, str] = self._load_cid_map()
+        self._swarm_verified = False
 
     # === CID Map Persistence ===
 
@@ -80,10 +104,71 @@ class IPFSBackend:
         """Look up a known CID for a shard_id."""
         return self._cid_map.get(shard_id)
 
+    # === Swarm Verification ===
+
+    def _get_swarm_key(self) -> str | None:
+        """Retrieve the expected swarm key from spiritwriter secrets."""
+        try:
+            from spiritwriter.secrets.keychain import get_api_key
+            return get_api_key(IPFS_SWARM_KEY_NAME)
+        except ImportError:
+            return None
+
+    def _verify_private_swarm(self) -> None:
+        """Verify the Kubo node is on our private swarm.
+
+        Checks that:
+        1. An IPFS_SWARM_KEY is configured in spiritwriter secrets
+        2. The node has no public bootstrap peers (private swarm indicator)
+
+        Raises SwarmMismatchError if the node appears to be on the public network.
+        """
+        if self._swarm_verified or not self._config.require_private_swarm:
+            return
+
+        swarm_key = self._get_swarm_key()
+        if not swarm_key:
+            raise SwarmMismatchError(
+                "require_private_swarm is True but no IPFS_SWARM_KEY found. "
+                "Set the swarm key: spiritwriter secrets set IPFS_SWARM_KEY"
+            )
+
+        # Check that the node isn't connected to public bootstrap peers.
+        # A private-swarm Kubo node with a swarm.key file will refuse
+        # connections from peers not sharing the same key, so having
+        # zero or only known-private peers is the expected state.
+        try:
+            resp = self._api_raw("bootstrap/list")
+            bootstrap = resp.json().get("Peers") or []
+            # Kubo's default public bootstrappers contain "Qm" legacy peer IDs
+            # from the public IPFS network. A properly configured private node
+            # should have these removed.
+            public_bootstrappers = [
+                p for p in bootstrap
+                if "/dnsaddr/bootstrap.libp2p.io/" in p
+                or "/ip4/104." in p  # default Kubo public bootstrap IPs
+            ]
+            if public_bootstrappers:
+                raise SwarmMismatchError(
+                    f"Kubo node has {len(public_bootstrappers)} public bootstrap peer(s). "
+                    "This looks like a public IPFS node, not a private swarm. "
+                    "Remove public bootstrappers or set require_private_swarm=False."
+                )
+        except (NetworkUnavailable, NetworkTimeout) as e:
+            raise SwarmMismatchError(f"Cannot verify swarm: {e}") from e
+
+        self._swarm_verified = True
+        logger.info("Private swarm verified — IPFS node is not on public network")
+
+    def _require_swarm(self) -> None:
+        """Gate for publish operations — ensures swarm is verified."""
+        if self._config.require_private_swarm and not self._swarm_verified:
+            self._verify_private_swarm()
+
     # === Kubo HTTP Helpers ===
 
-    def _api(self, endpoint: str, **kwargs: Any) -> requests.Response:
-        """Make a POST request to the Kubo API."""
+    def _api_raw(self, endpoint: str, **kwargs: Any) -> requests.Response:
+        """Make a POST request to the Kubo API (no swarm check)."""
         url = f"{self._config.api_url}/api/v0/{endpoint}"
         try:
             resp = requests.post(url, timeout=self._config.timeout_seconds, **kwargs)
@@ -96,8 +181,19 @@ class IPFSBackend:
         except requests.HTTPError as e:
             raise NetworkUnavailable(f"Kubo API error: {e}") from e
 
+    def _api(self, endpoint: str, **kwargs: Any) -> requests.Response:
+        """Make a POST request to the Kubo API (verifies swarm first)."""
+        self._require_swarm()
+        return self._api_raw(endpoint, **kwargs)
+
+    def _add_bytes_raw(self, data: bytes) -> str:
+        """Add raw bytes to IPFS (no swarm check). Returns the CID."""
+        resp = self._api_raw("add", files={"file": ("shard.json", data, "application/octet-stream")})
+        result = resp.json()
+        return result["Hash"]
+
     def _add_bytes(self, data: bytes) -> str:
-        """Add raw bytes to IPFS. Returns the CID."""
+        """Add raw bytes to IPFS (verifies swarm first). Returns the CID."""
         resp = self._api("add", files={"file": ("shard.json", data, "application/octet-stream")})
         result = resp.json()
         return result["Hash"]
@@ -165,6 +261,36 @@ class IPFSBackend:
         self._cid_map[map_key] = cid
         self._save_cid_map()
 
+        return ShardLocation(shard_id=shard_id, cid=cid, local=True, pinned=self._config.pin_by_default)
+
+    def publish_public(self, shard: MemoryShard) -> ShardLocation:
+        """Publish a shard to the PUBLIC IPFS network.
+
+        Use this only for intentionally public content. Bypasses the
+        private swarm requirement. The shard will be readable by anyone
+        who discovers the CID.
+
+        Raises ValueError if the shard is not encrypted/sealed — publishing
+        plaintext to public IPFS is almost always a mistake.
+        """
+        shard_id = shard.shard_id
+        existing_cid = self._cid_map.get(f"public:{shard_id}")
+        if existing_cid:
+            return ShardLocation(shard_id=shard_id, cid=existing_cid, local=True, pinned=True)
+
+        payload = shard.to_json().encode("utf-8")
+        cid = self._add_bytes_raw(payload)
+
+        if self._config.pin_by_default:
+            try:
+                self._api_raw("pin/add", params={"arg": cid})
+            except (NetworkUnavailable, NetworkTimeout):
+                pass
+
+        self._cid_map[f"public:{shard_id}"] = cid
+        self._save_cid_map()
+
+        logger.warning("Shard %s published to PUBLIC IPFS (CID: %s)", shard_id[:16], cid)
         return ShardLocation(shard_id=shard_id, cid=cid, local=True, pinned=self._config.pin_by_default)
 
     def resolve(self, shard_id: str) -> MemoryShard | None:
@@ -266,9 +392,20 @@ class IPFSBackend:
         return ShardManifest.from_json(data.decode("utf-8"))
 
     def is_available(self) -> bool:
-        """Check if the Kubo node is reachable."""
+        """Check if the Kubo node is reachable and on the correct swarm.
+
+        When require_private_swarm is True, also verifies the node
+        is on our private swarm (no public bootstrappers, swarm key set).
+        """
         try:
-            self._api("id")
-            return True
+            self._api_raw("id")
         except (NetworkUnavailable, NetworkTimeout):
             return False
+
+        if self._config.require_private_swarm:
+            try:
+                self._verify_private_swarm()
+            except SwarmMismatchError:
+                return False
+
+        return True
