@@ -257,6 +257,35 @@ class TestSwarmKeyRegistration:
         config = IPFSConfig(require_private_swarm=False)
         assert config.require_private_swarm is False
 
+    def test_from_env_defaults(self, monkeypatch):
+        """from_env() uses defaults when no env vars set."""
+        from spiritwriter.trace.backends.ipfs import IPFSConfig
+        # Clear any existing env vars
+        for var in ("IPFS_API_URL", "IPFS_GATEWAY_URL", "IPFS_TIMEOUT",
+                     "IPFS_PIN_BY_DEFAULT", "IPFS_REQUIRE_PRIVATE_SWARM"):
+            monkeypatch.delenv(var, raising=False)
+        config = IPFSConfig.from_env()
+        assert config.api_url == "http://127.0.0.1:5001"
+        assert config.gateway_url == "http://127.0.0.1:8080"
+        assert config.timeout_seconds == 30
+        assert config.pin_by_default is True
+        assert config.require_private_swarm is True
+
+    def test_from_env_docker(self, monkeypatch):
+        """from_env() picks up Docker-style env vars."""
+        from spiritwriter.trace.backends.ipfs import IPFSConfig
+        monkeypatch.setenv("IPFS_API_URL", "http://frio-ipfs:5001")
+        monkeypatch.setenv("IPFS_GATEWAY_URL", "http://frio-ipfs:8080")
+        monkeypatch.setenv("IPFS_TIMEOUT", "60")
+        monkeypatch.setenv("IPFS_PIN_BY_DEFAULT", "0")
+        monkeypatch.setenv("IPFS_REQUIRE_PRIVATE_SWARM", "0")
+        config = IPFSConfig.from_env()
+        assert config.api_url == "http://frio-ipfs:5001"
+        assert config.gateway_url == "http://frio-ipfs:8080"
+        assert config.timeout_seconds == 60
+        assert config.pin_by_default is False
+        assert config.require_private_swarm is False
+
 
 # === Protocol Check ===
 

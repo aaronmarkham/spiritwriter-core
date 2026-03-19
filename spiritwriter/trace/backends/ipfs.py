@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -64,6 +65,28 @@ class IPFSConfig:
     timeout_seconds: int = 30
     pin_by_default: bool = True
     require_private_swarm: bool = True  # Refuse to operate on public IPFS
+
+    @classmethod
+    def from_env(cls) -> IPFSConfig:
+        """Build config from environment variables.
+
+        Useful for Docker/container deployments where the Kubo API
+        is at a service hostname (e.g., http://frio-ipfs:5001).
+
+        Env vars:
+            IPFS_API_URL          — Kubo API (default: http://127.0.0.1:5001)
+            IPFS_GATEWAY_URL      — Read-only gateway (default: http://127.0.0.1:8080)
+            IPFS_TIMEOUT          — Timeout in seconds (default: 30)
+            IPFS_PIN_BY_DEFAULT   — "0" to disable auto-pin (default: "1")
+            IPFS_REQUIRE_PRIVATE_SWARM — "0" to allow public IPFS (default: "1")
+        """
+        return cls(
+            api_url=os.environ.get("IPFS_API_URL", "http://127.0.0.1:5001"),
+            gateway_url=os.environ.get("IPFS_GATEWAY_URL", "http://127.0.0.1:8080"),
+            timeout_seconds=int(os.environ.get("IPFS_TIMEOUT", "30")),
+            pin_by_default=os.environ.get("IPFS_PIN_BY_DEFAULT", "1") != "0",
+            require_private_swarm=os.environ.get("IPFS_REQUIRE_PRIVATE_SWARM", "1") != "0",
+        )
 
 
 class IPFSBackend:
