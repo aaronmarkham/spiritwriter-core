@@ -18,6 +18,7 @@ Read the relevant skill for your task:
 | **trace** | Log agent actions with hash-chained provenance | `skills/trace/SKILL.md` |
 | **entitlements** | Encrypt shards, grant scoped access tokens | `skills/entitlements/SKILL.md` |
 | **studio** | Package and run sub-agent jobs with budget tracking | `skills/studio/SKILL.md` |
+| **network** | Publish/resolve shards over IPFS, private swarm config | `skills/network/SKILL.md` |
 
 ## Module Map
 
@@ -28,7 +29,8 @@ spiritwriter/
   classify/    — Content classification
   ingest/      — Document ingestion
   llm/         — LLM provider abstraction
-  trace/       — Shards, store, emitter, crypto, entitlements, studio jobs
+  trace/       — Shards, store, emitter, crypto, entitlements, studio jobs, network resolver
+    backends/  — Network backends (IPFS/Kubo)
   stopwords.py — Centralized stopword list
 ```
 

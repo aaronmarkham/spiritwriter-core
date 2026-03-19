@@ -22,7 +22,7 @@ pip install -e /path/to/spiritwriter-core
 | **ShardAtom** | Smallest unit of knowledge. Has `text`, `kind`, optional `entity`/`key`/`value`. Content-addressed (SHA-256). |
 | **MemoryShard** | Bundle of atoms with scope, origin, decay class, tags. Immutable — edits create new shards. Content-addressed. |
 | **ShardRef** | Lightweight pointer (shard_id + scope + label). Pass these instead of full content. |
-| **ShardStore** | File-based content-addressed store. Git-style object layout (`ab/cd1234...json`). Named refs like git branches. |
+| **ShardStore** | File-based content-addressed store. Git-style object layout (`ab/cd1234...json`). Named refs like git branches. Optional network resolver for L2 fallback (see `skills/network/SKILL.md`). |
 | **Named Ref** | Human-readable pointer to a shard (e.g., `project-csp` → shard_id). Updated when shards are superseded. |
 
 ### Atom Kinds
@@ -186,12 +186,14 @@ shard-directory/
 
 - **Immutable**: Content changes produce a new shard with a new ID
 - **Content-addressed**: SHA-256 of (atoms + scope + origin). Same content = same ID. Dedup is free.
-- **File-based**: No database required. Git-style object layout. DHT-ready.
+- **File-based**: No database required. Git-style object layout.
+- **Network-ready**: Optional IPFS resolver for L2 fallback. See `skills/network/SKILL.md`.
 - **Pull-based**: Agents get refs (pointers), not content. They pull what they need.
 - **Scoped**: Every shard has a scope for access control boundaries.
 
 ## Source Files
 
 - `spiritwriter/trace/shard.py` — MemoryShard, ShardAtom, ShardRef, DecayClass, AtomKind
-- `spiritwriter/trace/store.py` — ShardStore (file-based content-addressed storage)
+- `spiritwriter/trace/store.py` — ShardStore (file-based content-addressed storage, optional network resolver)
 - `spiritwriter/trace/extract.py` — Knowledge extraction from text → atoms
+- `spiritwriter/trace/network.py` — NetworkResolver protocol, ShardLocation, ShardManifest
