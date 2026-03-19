@@ -25,6 +25,7 @@ from spiritwriter.trace.entitlement import (
     EntitlementToken, validate_capability, validate_scope,
     is_expired, get_shard_key, Capability,
 )
+from spiritwriter.trace.network import NetworkResolver
 
 
 class ShardStore:
@@ -34,11 +35,12 @@ class ShardStore:
     Designed to be wrapped by a DHT resolver for distributed access.
     """
 
-    def __init__(self, root: str | Path):
+    def __init__(self, root: str | Path, resolver: NetworkResolver | None = None):
         self.root = Path(root)
         self.shards_dir = self.root / "shards"
         self.refs_dir = self.root / "refs"
         self.index_path = self.root / "index.json"
+        self._resolver = resolver
         self.shards_dir.mkdir(parents=True, exist_ok=True)
         self.refs_dir.mkdir(parents=True, exist_ok=True)
 
@@ -79,11 +81,23 @@ class ShardStore:
         return shard.ref
 
     def get(self, shard_id: str) -> MemoryShard | None:
-        """Retrieve a shard by content address. Returns None if not found."""
+        """Retrieve a shard by content address. Returns None if not found.
+
+        L1: local file. L2: network fallback (if resolver configured).
+        """
+        # L1: local file
         path = self._shard_path(shard_id)
-        if not path.exists():
-            return None
-        return MemoryShard.from_json(path.read_text(encoding="utf-8"))
+        if path.exists():
+            return MemoryShard.from_json(path.read_text(encoding="utf-8"))
+
+        # L2: network fallback
+        if self._resolver:
+            shard = self._resolver.resolve(shard_id)
+            if shard:
+                self.put(shard)  # cache locally
+                return shard
+
+        return None
 
     def has(self, shard_id: str) -> bool:
         """Check if a shard exists locally."""
@@ -297,11 +311,18 @@ class ShardStore:
         return encrypted.shard_id
 
     def get_encrypted(self, shard_id: str) -> EncryptedShard | None:
-        """Retrieve an encrypted shard by id."""
+        """Retrieve an encrypted shard by id. Falls back to network."""
         path = self._encrypted_path(shard_id)
-        if not path.exists():
-            return None
-        return EncryptedShard.from_json(path.read_text(encoding="utf-8"))
+        if path.exists():
+            return EncryptedShard.from_json(path.read_text(encoding="utf-8"))
+
+        if self._resolver:
+            encrypted = self._resolver.resolve_encrypted(shard_id)
+            if encrypted:
+                self.put_encrypted(encrypted)  # cache locally
+                return encrypted
+
+        return None
 
     def has_encrypted(self, shard_id: str) -> bool:
         """Check if an encrypted shard exists."""
@@ -392,13 +413,21 @@ class ShardStore:
     def get_sealed(self, shard_id: str):
         """Retrieve a sealed shard by id. Returns SealedShard or None.
 
+        Falls back to network if resolver configured.
         Requires PyNaCl to be installed (for deserialization).
         """
         path = self._sealed_path(shard_id)
-        if not path.exists():
-            return None
-        from spiritwriter.trace.sealed import SealedShard
-        return SealedShard.from_json(path.read_text(encoding="utf-8"))
+        if path.exists():
+            from spiritwriter.trace.sealed import SealedShard
+            return SealedShard.from_json(path.read_text(encoding="utf-8"))
+
+        if self._resolver:
+            sealed = self._resolver.resolve_sealed(shard_id)
+            if sealed:
+                self.put_sealed(sealed)  # cache locally
+                return sealed
+
+        return None
 
     def has_sealed(self, shard_id: str) -> bool:
         """Check if a sealed shard exists."""

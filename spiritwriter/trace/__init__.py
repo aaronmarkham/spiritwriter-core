@@ -24,6 +24,11 @@ from spiritwriter.trace.studio_runner import (
     StudioRunnerError, JobContext, BudgetTracker,
     parse_job_block, hydrate_job, create_result_shard,
 )
+from spiritwriter.trace.network import (
+    NetworkResolver, ShardLocation, ShardManifest,
+    NetworkUnavailable, NetworkTimeout, IntegrityError,
+    SwarmMismatchError,
+)
 
 __all__ = [
     "MemoryShard",
@@ -56,4 +61,11 @@ __all__ = [
     "parse_job_block",
     "hydrate_job",
     "create_result_shard",
+    "NetworkResolver",
+    "ShardLocation",
+    "ShardManifest",
+    "NetworkUnavailable",
+    "NetworkTimeout",
+    "IntegrityError",
+    "SwarmMismatchError",
 ]
