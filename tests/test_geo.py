@@ -45,6 +45,16 @@ class TestGeoView:
         view = GeoView(zoom=5, center_lat=0, center_lng=0, annotation=long_text)
         assert len(view.annotation) == 280
 
+    def test_annotation_custom_max_length(self):
+        view = GeoView(zoom=5, center_lat=0, center_lng=0,
+                        annotation="x" * 100, max_annotation_length=50)
+        assert len(view.annotation) == 50
+
+    def test_annotation_unicode_preserved(self):
+        view = GeoView(zoom=5, center_lat=0, center_lng=0,
+                        annotation="Detention center")
+        assert view.annotation == "Detention center"
+
     def test_annotation_empty_becomes_none(self):
         view = GeoView(zoom=5, center_lat=0, center_lng=0, annotation="   ")
         assert view.annotation is None
