@@ -13,6 +13,9 @@ from spiritwriter.trace.sealed import (
     unseal_as_owner,
     seal_shard,
     unseal_shard,
+    generate_signing_keypair,
+    sign_data,
+    verify_signature,
     OwnerKeypair,
     SealedShard,
     UnsealError,
@@ -243,6 +246,69 @@ class TestStoreSealed:
         id1 = store.seal_and_store(shard, kp.public_key).shard_id
         id2 = store.seal_and_store(shard, kp.public_key).shard_id
         assert id1 == id2
+
+
+# === Ed25519 Signing ===
+
+class TestSigningKeypair:
+    def test_generate_keypair(self):
+        signing_key, verify_key = generate_signing_keypair()
+        assert len(signing_key) == 32
+        assert len(verify_key) == 32
+        assert signing_key != verify_key
+
+    def test_keypairs_are_unique(self):
+        sk1, vk1 = generate_signing_keypair()
+        sk2, vk2 = generate_signing_keypair()
+        assert sk1 != sk2
+        assert vk1 != vk2
+
+
+class TestSignVerify:
+    def test_roundtrip(self):
+        signing_key, verify_key = generate_signing_keypair()
+        data = b"sealed match result payload"
+        signature = sign_data(data, signing_key)
+        assert len(signature) == 64
+        assert verify_signature(data, signature, verify_key) is True
+
+    def test_tampered_data_fails(self):
+        signing_key, verify_key = generate_signing_keypair()
+        data = b"original data"
+        signature = sign_data(data, signing_key)
+        with pytest.raises(Exception):  # nacl.exceptions.BadSignatureError
+            verify_signature(b"tampered data", signature, verify_key)
+
+    def test_wrong_verify_key_fails(self):
+        sk1, vk1 = generate_signing_keypair()
+        _, vk2 = generate_signing_keypair()
+        data = b"signed by key 1"
+        signature = sign_data(data, sk1)
+        with pytest.raises(Exception):
+            verify_signature(data, signature, vk2)
+
+    def test_tampered_signature_fails(self):
+        signing_key, verify_key = generate_signing_keypair()
+        data = b"important data"
+        signature = sign_data(data, signing_key)
+        bad_sig = bytes([b ^ 0xFF for b in signature[:8]]) + signature[8:]
+        with pytest.raises(Exception):
+            verify_signature(data, bad_sig, verify_key)
+
+    def test_sign_sealed_box_output(self):
+        """Sign the output of seal_for_owner — the primary use case."""
+        owner_kp = generate_owner_keypair()
+        signing_key, verify_key = generate_signing_keypair()
+
+        plaintext = b'{"name": "martinez", "source": "Douglas County"}'
+        sealed = seal_for_owner(plaintext, owner_kp.public_key)
+
+        signature = sign_data(sealed, signing_key)
+        assert verify_signature(sealed, signature, verify_key) is True
+
+        # Verify first, then unseal — the intended order
+        result = unseal_as_owner(sealed, owner_kp.private_key)
+        assert result == plaintext
 
 
 # === Zero-Knowledge Property Verification ===
