@@ -213,8 +213,9 @@ def generate_signing_keypair() -> tuple[bytes, bytes]:
 def sign_data(data: bytes, signing_key: bytes) -> bytes:
     """Sign data with Ed25519. Returns 64-byte signature.
 
-    Used by the Frio daemon to sign sealed match results so requestors
-    can verify the result came from a legitimate daemon cycle.
+    Pairs with verify_signature() for integrity verification of sealed
+    payloads, results, or any data that must be attributable to a
+    specific keypair holder.
     """
     _require_nacl()
     from nacl.signing import SigningKey
@@ -225,8 +226,8 @@ def sign_data(data: bytes, signing_key: bytes) -> bytes:
 def verify_signature(data: bytes, signature: bytes, verify_key: bytes) -> bool:
     """Verify Ed25519 signature. Returns True or raises BadSignatureError.
 
-    Requestors call this with the daemon's verify key to confirm
-    a sealed result was produced by a legitimate Frio instance.
+    Use with the signer's verify key (public) to confirm data was
+    produced by the holder of the corresponding signing key.
     """
     _require_nacl()
     from nacl.signing import VerifyKey
