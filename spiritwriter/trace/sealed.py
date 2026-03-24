@@ -195,6 +195,46 @@ class UnsealError(Exception):
     pass
 
 
+# === Ed25519 Signing ===
+
+def generate_signing_keypair() -> tuple[bytes, bytes]:
+    """Generate Ed25519 signing keypair.
+
+    Returns (signing_key_bytes, verify_key_bytes) — both 32 bytes.
+    The signing key should be stored with restricted permissions (chmod 600).
+    The verify key is shareable so requestors can verify result integrity.
+    """
+    _require_nacl()
+    from nacl.signing import SigningKey
+    sk = SigningKey.generate()
+    return bytes(sk), bytes(sk.verify_key)
+
+
+def sign_data(data: bytes, signing_key: bytes) -> bytes:
+    """Sign data with Ed25519. Returns 64-byte signature.
+
+    Used by the Frio daemon to sign sealed match results so requestors
+    can verify the result came from a legitimate daemon cycle.
+    """
+    _require_nacl()
+    from nacl.signing import SigningKey
+    sk = SigningKey(signing_key)
+    return sk.sign(data).signature
+
+
+def verify_signature(data: bytes, signature: bytes, verify_key: bytes) -> bool:
+    """Verify Ed25519 signature. Returns True or raises BadSignatureError.
+
+    Requestors call this with the daemon's verify key to confirm
+    a sealed result was produced by a legitimate Frio instance.
+    """
+    _require_nacl()
+    from nacl.signing import VerifyKey
+    vk = VerifyKey(verify_key)
+    vk.verify(data, signature)  # raises nacl.exceptions.BadSignatureError on failure
+    return True
+
+
 def seal_shard(shard: MemoryShard, owner_pubkey: bytes) -> SealedShard:
     """Seal a shard so only the owner can read it.
 
