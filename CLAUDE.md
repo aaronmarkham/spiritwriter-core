@@ -19,6 +19,7 @@ Read the relevant skill for your task:
 | **entitlements** | Encrypt shards, grant scoped access tokens | `skills/entitlements/SKILL.md` |
 | **studio** | Package and run sub-agent jobs with budget tracking | `skills/studio/SKILL.md` |
 | **network** | Publish/resolve shards over IPFS, private swarm config | `skills/network/SKILL.md` |
+| **review** | Audit downstream projects for patterns to push into core | `skills/review/SKILL.md` |
 
 ## Module Map
 
