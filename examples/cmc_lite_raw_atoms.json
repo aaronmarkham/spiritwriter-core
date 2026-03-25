@@ -1,0 +1,3046 @@
+[
+  {
+    "text": "Aaron is a machine learning engineer specializing in agents, memory systems, and knowledge graphs, and is characterized as a chaotic creative who needs accountability.",
+    "kind": "entity",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "occupation",
+        "key_definition": "The professional field or job title of the entity",
+        "value": "ML Engineer",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "Aaron",
+        "domain": "profession"
+      },
+      {
+        "key": "specialties",
+        "key_definition": "Areas of technical focus and expertise",
+        "value": "agents, memory systems, knowledge graphs",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "Aaron",
+        "domain": "profession"
+      },
+      {
+        "key": "personality_trait",
+        "key_definition": "A core personality characteristic",
+        "value": "chaotic creative, needs accountability",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "Aaron",
+        "domain": "psychology"
+      }
+    ],
+    "source_file": "MEMORY.md"
+  },
+  {
+    "text": "Aaron resides in the America/Los_Angeles timezone and has a dog named Bear.",
+    "kind": "fact",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "timezone",
+        "key_definition": "The time zone where the person is located",
+        "value": "America/Los_Angeles",
+        "slot_type": "attribute",
+        "sense_type": "place",
+        "scoped_to": "Aaron",
+        "domain": "location"
+      },
+      {
+        "key": "pet",
+        "key_definition": "The name and type of animal companion",
+        "value": "Bear (dog)",
+        "slot_type": "entity",
+        "sense_type": "proper_name",
+        "scoped_to": "Aaron",
+        "domain": "relationship"
+      }
+    ],
+    "source_file": "MEMORY.md"
+  },
+  {
+    "text": "Aaron's interests include snowboarding, rap, dubstep, bass music, vinyl records, wine, cooking, politics, academic papers, and security.",
+    "kind": "fact",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "interests",
+        "key_definition": "Topics or activities the person enjoys or pursues",
+        "value": "snowboarding, rap, dubstep, bass, vinyl, wine, cooking, politics, papers, security",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "Aaron",
+        "domain": "hobbies"
+      }
+    ],
+    "source_file": "MEMORY.md"
+  },
+  {
+    "text": "The claude-studio-producer (CSP) project is version 0.7.0 and is focused on video production from papers. Its context is stored in the 'project-csp' shard.",
+    "kind": "entity",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "version",
+        "key_definition": "Software version identifier",
+        "value": "0.7.0",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "claude-studio-producer",
+        "domain": "software"
+      },
+      {
+        "key": "purpose",
+        "key_definition": "The main function or goal of the project",
+        "value": "video production from papers",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "claude-studio-producer",
+        "domain": "software"
+      },
+      {
+        "key": "shard_ref",
+        "key_definition": "Reference to memory shard for project context",
+        "value": "project-csp",
+        "slot_type": "relation",
+        "sense_type": "common_noun",
+        "scoped_to": "claude-studio-producer",
+        "domain": "data"
+      }
+    ],
+    "source_file": "MEMORY.md"
+  },
+  {
+    "text": "The spiritwriter-core project is version 0.1.0 and is a shared Python package for knowledge base, classification, ingestion, LLM, tracing, and shard management. Its context is stored in the 'project-spiritwriter' shard.",
+    "kind": "entity",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "version",
+        "key_definition": "Software version identifier",
+        "value": "0.1.0",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "spiritwriter-core",
+        "domain": "software"
+      },
+      {
+        "key": "purpose",
+        "key_definition": "The main function or goal of the project",
+        "value": "shared Python package for KB, classify, ingest, LLM, trace/shards",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "spiritwriter-core",
+        "domain": "software"
+      },
+      {
+        "key": "shard_ref",
+        "key_definition": "Reference to memory shard for project context",
+        "value": "project-spiritwriter",
+        "slot_type": "relation",
+        "sense_type": "common_noun",
+        "scoped_to": "spiritwriter-core",
+        "domain": "data"
+      }
+    ],
+    "source_file": "MEMORY.md"
+  },
+  {
+    "text": "The strands-trace project is a stealth provenance/audit tool for multi-agent workflows, with the EU AI Act Article 12 deadline on August 2, 2026.",
+    "kind": "entity",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "purpose",
+        "key_definition": "The main function or goal of the project",
+        "value": "provenance/audit for multi-agent workflows",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "strands-trace",
+        "domain": "software"
+      },
+      {
+        "key": "deadline",
+        "key_definition": "Key project compliance or delivery deadline",
+        "value": "2026-08-02",
+        "slot_type": "temporal",
+        "sense_type": "common_noun",
+        "scoped_to": "strands-trace",
+        "domain": "regulation"
+      },
+      {
+        "key": "reference",
+        "key_definition": "Associated regulation or article for project",
+        "value": "EU AI Act Article 12",
+        "slot_type": "relation",
+        "sense_type": "common_noun",
+        "scoped_to": "strands-trace",
+        "domain": "regulation"
+      }
+    ],
+    "source_file": "MEMORY.md"
+  },
+  {
+    "text": "The draw-to-deploy project is a private tool for converting whiteboard diagrams into infrastructure deployments, and is associated with Aaron's AWS patent.",
+    "kind": "entity",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "purpose",
+        "key_definition": "The main function or goal of the project",
+        "value": "whiteboard to infrastructure deployment",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "draw-to-deploy",
+        "domain": "software"
+      },
+      {
+        "key": "privacy_status",
+        "key_definition": "Confidentiality or sharing status",
+        "value": "private",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "draw-to-deploy",
+        "domain": "access"
+      },
+      {
+        "key": "reference",
+        "key_definition": "Relevant inventor, patent, or claim",
+        "value": "Aaron's AWS patent",
+        "slot_type": "relation",
+        "sense_type": "proper_name",
+        "scoped_to": "draw-to-deploy",
+        "domain": "intellectual_property"
+      }
+    ],
+    "source_file": "MEMORY.md"
+  },
+  {
+    "text": "The spiritwriter-geo project is a planned future project related to Google Maps APIs and GIS, extracted from the morel-maps application.",
+    "kind": "entity",
+    "confidence": 0.95,
+    "slots": [
+      {
+        "key": "purpose",
+        "key_definition": "The main function or goal of the project",
+        "value": "Google Maps APIs and GIS capabilities",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "spiritwriter-geo",
+        "domain": "software"
+      },
+      {
+        "key": "status",
+        "key_definition": "Stage or timeline of the project",
+        "value": "future",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "spiritwriter-geo",
+        "domain": "timeline"
+      },
+      {
+        "key": "source",
+        "key_definition": "Originating application or context",
+        "value": "morel-maps app",
+        "slot_type": "relation",
+        "sense_type": "common_noun",
+        "scoped_to": "spiritwriter-geo",
+        "domain": "software"
+      }
+    ],
+    "source_file": "MEMORY.md"
+  },
+  {
+    "text": "The memory shard system is active, specified in specs/memory-shards.md, and has core components built within the trace/ module of spiritwriter-core. There are five live shards in workspace/shards/. The vision is for agents to receive shard pointers and use pull-based hydration.",
+    "kind": "entity",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "status",
+        "key_definition": "Current operational state",
+        "value": "active",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "memory shard system",
+        "domain": "software"
+      },
+      {
+        "key": "spec_file",
+        "key_definition": "Specification document path",
+        "value": "specs/memory-shards.md",
+        "slot_type": "relation",
+        "sense_type": "common_noun",
+        "scoped_to": "memory shard system",
+        "domain": "documentation"
+      },
+      {
+        "key": "implementation_location",
+        "key_definition": "Where the core feature is implemented",
+        "value": "spiritwriter-core trace/ module",
+        "slot_type": "relation",
+        "sense_type": "common_noun",
+        "scoped_to": "memory shard system",
+        "domain": "software"
+      },
+      {
+        "key": "live_shards",
+        "key_definition": "Number and location of active shards",
+        "value": "5 in workspace/shards/",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "memory shard system",
+        "domain": "data"
+      },
+      {
+        "key": "vision",
+        "key_definition": "High-level conceptual outline or goal",
+        "value": "agents get shard pointers, not full context; pull-based hydration",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "memory shard system",
+        "domain": "design"
+      }
+    ],
+    "source_file": "MEMORY.md"
+  },
+  {
+    "text": "Content-addressed shards use SHA-256 and a file-based store and are designed to be DHT-ready.",
+    "kind": "decision",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "addressing_scheme",
+        "key_definition": "The cryptographic hash or method for addressing",
+        "value": "SHA-256",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "content-addressed shards",
+        "domain": "data"
+      },
+      {
+        "key": "storage_model",
+        "key_definition": "Primary medium of persistent storage",
+        "value": "file-based store",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "content-addressed shards",
+        "domain": "data"
+      },
+      {
+        "key": "dht_readiness",
+        "key_definition": "Preparedness for distributed hash table integration",
+        "value": "DHT-ready",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "content-addressed shards",
+        "domain": "design"
+      }
+    ],
+    "source_file": "MEMORY.md"
+  },
+  {
+    "text": "Namespace packages are used instead of git submodules.",
+    "kind": "decision",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "technology_choice",
+        "key_definition": "Preferred dependency management or packaging strategy",
+        "value": "namespace packages",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "project",
+        "domain": "software"
+      },
+      {
+        "key": "not_used",
+        "key_definition": "Technologies or methods that are no longer used or avoided",
+        "value": "git submodules",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "project",
+        "domain": "software"
+      }
+    ],
+    "source_file": "MEMORY.md"
+  },
+  {
+    "text": "The CSP assembler always uses the librarian path and never uses the legacy fallback.",
+    "kind": "decision",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "path_selection",
+        "key_definition": "Preferred logic path or code branch for execution",
+        "value": "always librarian, never legacy fallback",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "CSP assembler",
+        "domain": "software"
+      }
+    ],
+    "source_file": "MEMORY.md"
+  },
+  {
+    "text": "Mermaid is preferred for diagrams because AI diagram generators tend to hallucinate text.",
+    "kind": "preference",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "diagram_format",
+        "key_definition": "Preferred tool or format for creating diagrams",
+        "value": "Mermaid",
+        "slot_type": "attribute",
+        "sense_type": "brand",
+        "scoped_to": "project",
+        "domain": "documentation"
+      }
+    ],
+    "source_file": "MEMORY.md"
+  },
+  {
+    "text": "LanceDB is not used; OpenClaw's built-in vec0/FTS5 is preferred instead.",
+    "kind": "decision",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "not_used",
+        "key_definition": "Technologies or methods that are no longer used or avoided",
+        "value": "LanceDB",
+        "slot_type": "attribute",
+        "sense_type": "brand",
+        "scoped_to": "project",
+        "domain": "software"
+      },
+      {
+        "key": "preferred_technology",
+        "key_definition": "Technology or stack that is preferred for vector search/full-text search",
+        "value": "OpenClaw's built-in vec0/FTS5",
+        "slot_type": "attribute",
+        "sense_type": "brand",
+        "scoped_to": "project",
+        "domain": "software"
+      }
+    ],
+    "source_file": "MEMORY.md"
+  },
+  {
+    "text": "Lilit was created on February 9th, 2026, and is described as sharp, witty, and warm. Lilit's role is the accountability daemon.",
+    "kind": "entity",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "creation_date",
+        "key_definition": "Date the entity was created",
+        "value": "2026-02-09",
+        "slot_type": "temporal",
+        "sense_type": "common_noun",
+        "scoped_to": "Lilit",
+        "domain": "timeline"
+      },
+      {
+        "key": "description",
+        "key_definition": "Narrative description of personality or characteristics",
+        "value": "sharp, witty, warm",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "Lilit",
+        "domain": "psychology"
+      },
+      {
+        "key": "role",
+        "key_definition": "Primary designated function in the system or organization",
+        "value": "accountability daemon",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "Lilit",
+        "domain": "system"
+      }
+    ],
+    "source_file": "MEMORY.md"
+  },
+  {
+    "text": "The assistant was named Lilit, using the Lilith symbol (\u26b8), a choice made by Aaron.",
+    "kind": "fact",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "assistant_name",
+        "key_definition": "The assigned name of the assistant",
+        "value": "Lilit",
+        "slot_type": "entity",
+        "sense_type": "proper_name",
+        "scoped_to": "assistant",
+        "domain": "identity"
+      },
+      {
+        "key": "name_symbol",
+        "key_definition": "A symbolic representation associated with the name",
+        "value": "\u26b8",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "assistant_name",
+        "domain": "identity"
+      },
+      {
+        "key": "name_decider",
+        "key_definition": "Who decided the assistant's name",
+        "value": "Aaron",
+        "slot_type": "entity",
+        "sense_type": "proper_name",
+        "scoped_to": "assistant_name",
+        "domain": "identity"
+      }
+    ],
+    "source_file": "2026-02-09.md"
+  },
+  {
+    "text": "The Discord bot was added to the socialhour-thedisco server and allowlisted to the #openclaw channel.",
+    "kind": "fact",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "discord_server",
+        "key_definition": "The Discord server to which the bot was added",
+        "value": "socialhour-thedisco",
+        "slot_type": "entity",
+        "sense_type": "proper_name",
+        "scoped_to": "discord_bot",
+        "domain": "platform"
+      },
+      {
+        "key": "allowlisted_channel",
+        "key_definition": "The Discord channel where the bot is permitted",
+        "value": "#openclaw",
+        "slot_type": "entity",
+        "sense_type": "proper_name",
+        "scoped_to": "discord_bot",
+        "domain": "platform"
+      }
+    ],
+    "source_file": "2026-02-09.md"
+  },
+  {
+    "text": "The Discord bot API key was authenticated, and the bot was granted Message Content Intent after resolving an initial issue where message content was empty.",
+    "kind": "fact",
+    "confidence": 0.95,
+    "slots": [
+      {
+        "key": "discord_bot_identity",
+        "key_definition": "API authentication for the Discord bot",
+        "value": "API Key Authenticated",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "discord_bot",
+        "domain": "security"
+      },
+      {
+        "key": "message_content_intent",
+        "key_definition": "Permission to read message content in Discord",
+        "value": "enabled",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "discord_bot",
+        "domain": "permission"
+      }
+    ],
+    "source_file": "2026-02-09.md"
+  },
+  {
+    "text": "The bot is able to send and receive Discord DMs with Aaron, whose Discord user id is 354376792557223946.",
+    "kind": "fact",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "user_discord_id",
+        "key_definition": "Aaron's Discord user id",
+        "value": "354376792557223946",
+        "slot_type": "entity",
+        "sense_type": "proper_name",
+        "scoped_to": "Aaron",
+        "domain": "identity"
+      }
+    ],
+    "source_file": "2026-02-09.md"
+  },
+  {
+    "text": "The GitHub CLI (gh) is installed and authenticated for the user aaronmarkham, with scopes including gist, read:org, repo, and workflow.",
+    "kind": "fact",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "github_username",
+        "key_definition": "GitHub account username",
+        "value": "aaronmarkham",
+        "slot_type": "entity",
+        "sense_type": "proper_name",
+        "scoped_to": "GitHub CLI",
+        "domain": "identity"
+      },
+      {
+        "key": "github_scopes",
+        "key_definition": "OAuth scopes for GitHub CLI",
+        "value": "gist, read:org, repo, workflow",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "github_username",
+        "domain": "permission"
+      }
+    ],
+    "source_file": "2026-02-09.md"
+  },
+  {
+    "text": "The assistant's avatar was generated using nano-banana-pro with a dark purple, gold, and starlight mythic portrait featuring the \u26b8 symbol on the forehead, and saved as workspace/avatar-lilit.png.",
+    "kind": "fact",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "avatar_gen_tool",
+        "key_definition": "Tool used to generate avatar",
+        "value": "nano-banana-pro",
+        "slot_type": "entity",
+        "sense_type": "brand",
+        "scoped_to": "assistant_avatar",
+        "domain": "tool"
+      },
+      {
+        "key": "avatar_description",
+        "key_definition": "Description of the generated avatar\u2019s appearance",
+        "value": "dark purple/gold/starlight mythic portrait with \u26b8 symbol on forehead",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "assistant_avatar",
+        "domain": "identity"
+      },
+      {
+        "key": "avatar_file_path",
+        "key_definition": "File path of the avatar",
+        "value": "workspace/avatar-lilit.png",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "assistant_avatar",
+        "domain": "file"
+      }
+    ],
+    "source_file": "2026-02-09.md"
+  },
+  {
+    "text": "The GitHub repository aaronmarkham/claude-studio-producer is located at /Users/aaron/Documents/GitHub/claude-studio-producer.",
+    "kind": "fact",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "local_repo_path",
+        "key_definition": "Path to local clone of repository",
+        "value": "/Users/aaron/Documents/GitHub/claude-studio-producer",
+        "slot_type": "attribute",
+        "sense_type": "place",
+        "scoped_to": "claude-studio-producer",
+        "domain": "filesystem"
+      },
+      {
+        "key": "github_repo_url",
+        "key_definition": "URL of GitHub repository",
+        "value": "aaronmarkham/claude-studio-producer",
+        "slot_type": "entity",
+        "sense_type": "proper_name",
+        "scoped_to": "claude-studio-producer",
+        "domain": "software"
+      }
+    ],
+    "source_file": "2026-02-09.md"
+  },
+  {
+    "text": "As of February 7, the claude-studio-producer project has 116 tests and features content-aware document classification and JSON repair among other recent updates.",
+    "kind": "fact",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "test_count",
+        "key_definition": "Number of tests present in the project",
+        "value": "116",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "claude-studio-producer",
+        "domain": "software"
+      }
+    ],
+    "source_file": "2026-02-09.md"
+  },
+  {
+    "text": "The Mac mini hosts a project environment configured to use Homebrew Python 3.14, a venv at .venv within the project directory, and an alias 'csp' for quick project and virtual environment activation.",
+    "kind": "fact",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "python_version",
+        "key_definition": "Version of Python installed via Homebrew",
+        "value": "3.14",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "Mac mini",
+        "domain": "software"
+      },
+      {
+        "key": "virtual_env_path",
+        "key_definition": "Location of the Python virtual environment",
+        "value": ".venv",
+        "slot_type": "attribute",
+        "sense_type": "place",
+        "scoped_to": "Mac mini",
+        "domain": "filesystem"
+      },
+      {
+        "key": "alias_name",
+        "key_definition": "zsh alias to activate project environment",
+        "value": "csp",
+        "slot_type": "entity",
+        "sense_type": "common_noun",
+        "scoped_to": "Mac mini",
+        "domain": "zsh"
+      }
+    ],
+    "source_file": "2026-02-09.md"
+  },
+  {
+    "text": "The paper 'Hallucination Stations: On Some Basic Limitations of Transformer-Based Language Models', authored by Varin Sikka and Vishal Sikka, analyzes the computational limitations of LLMs and is stored as /Users/aaron/Documents/papers/2507.07505v3.pdf.",
+    "kind": "fact",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "paper_file_path",
+        "key_definition": "Filesystem location of the paper PDF",
+        "value": "/Users/aaron/Documents/papers/2507.07505v3.pdf",
+        "slot_type": "attribute",
+        "sense_type": "place",
+        "scoped_to": "Hallucination Stations Paper",
+        "domain": "filesystem"
+      },
+      {
+        "key": "paper_authors",
+        "key_definition": "Authors of the paper",
+        "value": "Varin Sikka, Vishal Sikka",
+        "slot_type": "entity",
+        "sense_type": "proper_name",
+        "scoped_to": "Hallucination Stations Paper",
+        "domain": "author"
+      }
+    ],
+    "source_file": "2026-02-09.md"
+  },
+  {
+    "text": "The project kb_09373c740689 is a knowledge base about a colleague paper, containing 66 atoms, 7 pages, and 22 citations.",
+    "kind": "fact",
+    "confidence": 0.95,
+    "slots": [
+      {
+        "key": "kb_id",
+        "key_definition": "Identifier of the knowledge base project",
+        "value": "kb_09373c740689",
+        "slot_type": "entity",
+        "sense_type": "common_noun",
+        "scoped_to": "knowledge_base",
+        "domain": "project"
+      },
+      {
+        "key": "atom_count",
+        "key_definition": "Count of atoms in the KB",
+        "value": "66",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "kb_09373c740689",
+        "domain": "project"
+      },
+      {
+        "key": "page_count",
+        "key_definition": "Page count of the paper in the KB",
+        "value": "7",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "kb_09373c740689",
+        "domain": "project"
+      }
+    ],
+    "source_file": "2026-02-09.md"
+  },
+  {
+    "text": "The content-aware classifier for topics achieved a quality rating of 100/100 in the knowledge base project.",
+    "kind": "fact",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "content_aware_quality",
+        "key_definition": "Quality rating of the classifier",
+        "value": "100/100",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "content_aware_classifier",
+        "domain": "software"
+      }
+    ],
+    "source_file": "2026-02-09.md"
+  },
+  {
+    "text": "Aaron has enabled the following assistant skills: Google Places (goplaces + local-places), Image generation (nano-banana-pro), text-to-speech (sag / ElevenLabs), and GitHub (gh CLI).",
+    "kind": "fact",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "skills_list",
+        "key_definition": "List of available assistant skills",
+        "value": "Google Places (goplaces + local-places), Image gen (nano-banana-pro), TTS (sag / ElevenLabs), GitHub (gh CLI)",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "assistant",
+        "domain": "skills"
+      }
+    ],
+    "source_file": "2026-02-09.md"
+  },
+  {
+    "text": "Aaron decided that the strands-trace project should be a standalone library in stealth mode, not tied to his employer, and built on his own time.",
+    "kind": "decision",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "project_name",
+        "key_definition": "The name of the software project to which this decision applies",
+        "value": "strands-trace",
+        "slot_type": "entity",
+        "sense_type": "proper_name",
+        "scoped_to": null,
+        "domain": "software_project"
+      },
+      {
+        "key": "employment_relationship",
+        "key_definition": "Whether the project is officially associated with Aaron's employer",
+        "value": "not tied to employer",
+        "slot_type": "attribute"
+      },
+      {
+        "key": "development_context",
+        "key_definition": "The circumstances or setting in which the development occurred",
+        "value": "built on Aaron's own time",
+        "slot_type": "attribute"
+      }
+    ],
+    "source_file": "2026-02-11.md"
+  },
+  {
+    "text": "Aaron's vision for his agent platform is a local-first, peer-to-peer capable multi-agent system where agents collaborate with shared, multi-level memory and verifiable behaviors.",
+    "kind": "preference",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "platform_architecture",
+        "key_definition": "The fundamental design approach for the agent platform",
+        "value": "local-first, peer-to-peer optional, centralized optional",
+        "slot_type": "attribute"
+      },
+      {
+        "key": "memory_design",
+        "key_definition": "The structure of memory in the multi-agent system",
+        "value": "multi-level (agent, class, shared)",
+        "slot_type": "attribute"
+      },
+      {
+        "key": "goal",
+        "key_definition": "The long-term objective of the platform",
+        "value": "cooperative, trustworthy, evolving agents",
+        "slot_type": "attribute"
+      }
+    ],
+    "source_file": "2026-02-11.md"
+  },
+  {
+    "text": "The strands-trace library is intended for cryptographic provenance and audit trails in multi-agent AI workflows, featuring components such as TraceEmitter, Beacon, and spawn certificates, and is designed to be W3C PROV compatible.",
+    "kind": "fact",
+    "confidence": 0.95,
+    "slots": [
+      {
+        "key": "library_name",
+        "key_definition": "The name of the library discussed",
+        "value": "strands-trace",
+        "slot_type": "entity",
+        "sense_type": "proper_name",
+        "scoped_to": null,
+        "domain": "software_project"
+      },
+      {
+        "key": "primary_purpose",
+        "key_definition": "The main intended use of the library",
+        "value": "cryptographic provenance and audit trails for multi-agent AI workflows",
+        "slot_type": "attribute"
+      },
+      {
+        "key": "components",
+        "key_definition": "Named major components of the library",
+        "value": "TraceEmitter, Beacon, spawn certificates, MCP wrapper, HTML visualizer",
+        "slot_type": "attribute"
+      },
+      {
+        "key": "standards_compatibility",
+        "key_definition": "Compliance with external standards",
+        "value": "W3C PROV",
+        "slot_type": "attribute"
+      }
+    ],
+    "source_file": "2026-02-11.md"
+  },
+  {
+    "text": "Aaron's monetization direction for the strands-trace project is open source for the core trace library with a paid beacon infrastructure and compliance tooling, aiming to meet the EU AI Act Article 12 high-risk logging mandate by August 2, 2026.",
+    "kind": "decision",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "project_name",
+        "key_definition": "Project to which the monetization strategy applies",
+        "value": "strands-trace",
+        "slot_type": "entity",
+        "sense_type": "proper_name",
+        "scoped_to": null,
+        "domain": "software_project"
+      },
+      {
+        "key": "monetization_strategy",
+        "key_definition": "How revenue is intended to be generated",
+        "value": "open core (trace library), paid beacon infrastructure and compliance tooling",
+        "slot_type": "attribute"
+      },
+      {
+        "key": "compliance_deadline",
+        "key_definition": "External regulatory deadline influencing project development",
+        "value": "EU AI Act Article 12, August 2, 2026",
+        "slot_type": "temporal"
+      }
+    ],
+    "source_file": "2026-02-11.md"
+  },
+  {
+    "text": "The OpenClaw sub-agent configuration uses Claude Sonnet 4 for implementation and testing tasks, reserving Claude Opus for architecture, decisions, and review.",
+    "kind": "convention",
+    "confidence": 0.95,
+    "slots": [
+      {
+        "key": "tool_usage_pattern",
+        "key_definition": "The convention for which model is used for which type of tasks in sub-agent configuration",
+        "value": "Sonnet for implementation/testing, Opus for architecture/decisions/review",
+        "slot_type": "attribute"
+      },
+      {
+        "key": "default_implementation_model",
+        "key_definition": "The default model assigned to sub-agents for implementation tasks",
+        "value": "anthropic/claude-sonnet-4",
+        "slot_type": "attribute"
+      },
+      {
+        "key": "default_main_model",
+        "key_definition": "The main agent's model reserved for high-level decisions",
+        "value": "anthropic/claude-opus-4",
+        "slot_type": "attribute"
+      }
+    ],
+    "source_file": "2026-02-11.md"
+  },
+  {
+    "text": "Aaron prefers to offload code and test execution loops to specialist sub-agents to conserve Claude Opus capacity for higher-level reasoning.",
+    "kind": "preference",
+    "confidence": 0.9,
+    "slots": [
+      {
+        "key": "capacity_preservation_method",
+        "key_definition": "The method for preserving capacity of a powerful base model",
+        "value": "offload repetitive tasks (code/test loops) to specialists",
+        "slot_type": "attribute"
+      },
+      {
+        "key": "conserved_resource",
+        "key_definition": "The resource being preserved",
+        "value": "Claude Opus capacity",
+        "slot_type": "attribute"
+      }
+    ],
+    "source_file": "2026-02-11.md"
+  },
+  {
+    "text": "Aaron's key insight for video pipeline priorities is to focus on making text presentation excellent and only add media once pipelines improve.",
+    "kind": "preference",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "video_pipeline_priority",
+        "key_definition": "What aspect is prioritized in the video production pipeline",
+        "value": "excellent text presentation, media sprinkled in later",
+        "slot_type": "attribute"
+      }
+    ],
+    "source_file": "2026-02-11.md"
+  },
+  {
+    "text": "In the OpenClaw ecosystem, sub-agent model override for same-provider models (Anthropic) is ignored but works correctly for cross-provider configurations (e.g., OpenAI).",
+    "kind": "fact",
+    "confidence": 0.9,
+    "slots": [
+      {
+        "key": "model_override_behavior",
+        "key_definition": "How the sub-agent model override behaves in provider-specific cases",
+        "value": "ignored for same-provider, works for cross-provider",
+        "slot_type": "attribute"
+      },
+      {
+        "key": "system_affected",
+        "key_definition": "Name of the system where this behavior was observed",
+        "value": "OpenClaw sub-agents",
+        "slot_type": "entity",
+        "sense_type": "proper_name",
+        "scoped_to": null,
+        "domain": "software"
+      },
+      {
+        "key": "provider_examples",
+        "key_definition": "Provider names where override worked or not",
+        "value": "Anthropic (ignored), OpenAI (works)",
+        "slot_type": "attribute"
+      }
+    ],
+    "source_file": "2026-02-11.md"
+  },
+  {
+    "text": "The default display mode for narration segments in video assembly is now a transcript overlay with OpenDyslexic font, larger line and letter spacing, pixel-measured word wrap, and double-draw drop shadow.",
+    "kind": "convention",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "display_mode",
+        "key_definition": "The chosen style/display feature for narration segments",
+        "value": "transcript overlay with OpenDyslexic font and enhanced typographic features",
+        "slot_type": "attribute"
+      },
+      {
+        "key": "typography",
+        "key_definition": "The font and spacing settings used for rendering transcript overlays",
+        "value": "OpenDyslexic font, font size 48, line spacing 1.8x, letter spacing +3px",
+        "slot_type": "attribute"
+      }
+    ],
+    "source_file": "2026-02-11.md"
+  },
+  {
+    "text": "Ken Burns motion is now applied only to AI-generated 'dall_e' images in videos, while all other display modes use static holds at 1920x1080 resolution without motion.",
+    "kind": "convention",
+    "confidence": 0.95,
+    "slots": [
+      {
+        "key": "ken_burns_behavior",
+        "key_definition": "Policy for when Ken Burns zoom is used",
+        "value": "only on dall_e mode; others static 1920x1080, no motion",
+        "slot_type": "attribute"
+      }
+    ],
+    "source_file": "2026-02-11.md"
+  },
+  {
+    "text": "Aaron captured a journal entry on February 14, 2026, by dictating 13 voice memos, which were archived and transcribed, discussing advanced memory models and metaphysical concepts.",
+    "kind": "fact",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "person_name",
+        "key_definition": "The full name of the person who created the journal entry",
+        "value": "Aaron",
+        "slot_type": "entity",
+        "sense_type": "proper_name",
+        "scoped_to": "",
+        "domain": "person"
+      },
+      {
+        "key": "journal_entry_topic",
+        "key_definition": "Topics explored in the journal entry",
+        "value": "multi-tier memory, forgetting as a feature, holographic storage, Aboriginal songlines, DNA memory, soul as memory fabric, agent lineage, spherical memory model",
+        "slot_type": "attribute",
+        "sense_type": "",
+        "scoped_to": "",
+        "domain": ""
+      },
+      {
+        "key": "transcription_location",
+        "key_definition": "Path where the full transcription was saved",
+        "value": "journal/2026-02-14.md",
+        "slot_type": "attribute",
+        "sense_type": "",
+        "scoped_to": "",
+        "domain": ""
+      }
+    ],
+    "source_file": "2026-02-14.md"
+  },
+  {
+    "text": "Aaron introduced the idea that a 'soul' could be conceptualized as the fabric in which memory is woven, analogous to agent spawn certificates as a shared identity.",
+    "kind": "insight",
+    "confidence": 0.95,
+    "slots": [
+      {
+        "key": "concept_name",
+        "key_definition": "Name of the central metaphysical concept",
+        "value": "soul as memory fabric",
+        "slot_type": "attribute",
+        "sense_type": "",
+        "scoped_to": "",
+        "domain": ""
+      },
+      {
+        "key": "agent_spawn_certificate_mapping",
+        "key_definition": "How agent spawn certificates relate to metaphysical concepts",
+        "value": "maps to shared soul/identity",
+        "slot_type": "relation",
+        "sense_type": "",
+        "scoped_to": "",
+        "domain": ""
+      }
+    ],
+    "source_file": "2026-02-14.md"
+  },
+  {
+    "text": "The spherical memory model described by Aaron proposes a 'core nugget' of memory surrounded by layers with increasing retrieval costs, analogous to hot/warm/cold storage with associated API cost contracts.",
+    "kind": "fact",
+    "confidence": 0.9,
+    "slots": [
+      {
+        "key": "memory_architecture",
+        "key_definition": "Type of memory storage structure",
+        "value": "spherical memory model",
+        "slot_type": "entity",
+        "sense_type": "common_noun",
+        "scoped_to": "",
+        "domain": "software_architecture"
+      },
+      {
+        "key": "cost_model",
+        "key_definition": "How retrieval energy or cost is represented in the model",
+        "value": "valence/energy cost, hot/warm/cold storage, API cost contracts",
+        "slot_type": "attribute",
+        "sense_type": "",
+        "scoped_to": "",
+        "domain": ""
+      }
+    ],
+    "source_file": "2026-02-14.md"
+  },
+  {
+    "text": "Aaron outlined that memory entitlement for sub-agents is managed via spawn certificates, where sub-agents directly query the memory fabric using their key, and access is decided by agent lineage.",
+    "kind": "fact",
+    "confidence": 0.95,
+    "slots": [
+      {
+        "key": "memory_entitlement_mechanism",
+        "key_definition": "The method by which sub-agent memory access is controlled",
+        "value": "spawn certificate and lineage-based key query",
+        "slot_type": "attribute",
+        "sense_type": "",
+        "scoped_to": "",
+        "domain": "agent_architecture"
+      }
+    ],
+    "source_file": "2026-02-14.md"
+  },
+  {
+    "text": "Aaron prefers that future podcasts adopt a humorous tone, similar to John Oliver or Jon Stewart, and that visual meme accidents should be embraced rather than polished.",
+    "kind": "preference",
+    "confidence": 0.95,
+    "slots": [
+      {
+        "key": "podcast_style_preference",
+        "key_definition": "Aaron's preferred tone and approach for podcast production",
+        "value": "humorous, embrace meme accidents",
+        "slot_type": "attribute",
+        "sense_type": "",
+        "scoped_to": "",
+        "domain": "media_production"
+      }
+    ],
+    "source_file": "2026-02-14.md"
+  },
+  {
+    "text": "Aaron uses YouTube primarily as a personal hosting and streaming platform, and prefers to publish the manifest (script, timeline, media assets) of each video alongside the video to enable web-side karaoke rendering.",
+    "kind": "preference",
+    "confidence": 0.9,
+    "slots": [
+      {
+        "key": "youtube_use_case",
+        "key_definition": "Primary purpose for using YouTube",
+        "value": "personal hosting and streaming",
+        "slot_type": "attribute",
+        "sense_type": "",
+        "scoped_to": "",
+        "domain": "media_platform"
+      },
+      {
+        "key": "video_manifest_publication",
+        "key_definition": "Aaron's convention to publish full video manifests for integration with web rendering",
+        "value": "publish manifests alongside video",
+        "slot_type": "convention",
+        "sense_type": "",
+        "scoped_to": "",
+        "domain": "media_production"
+      }
+    ],
+    "source_file": "2026-02-14.md"
+  },
+  {
+    "text": "Aaron uploaded his first YouTube video on February 14, 2026, titled 'Hallucination Stations,' with a full pipeline producing video from PDF to YouTube.",
+    "kind": "fact",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "video_title",
+        "key_definition": "Title of the uploaded YouTube video",
+        "value": "Hallucination Stations",
+        "slot_type": "attribute",
+        "sense_type": "",
+        "scoped_to": "",
+        "domain": "media_production"
+      },
+      {
+        "key": "youtube_video_url",
+        "key_definition": "Direct link to the uploaded video",
+        "value": "https://youtu.be/R9OucxBTnYs",
+        "slot_type": "attribute",
+        "sense_type": "",
+        "scoped_to": "",
+        "domain": "media_production"
+      },
+      {
+        "key": "upload_date",
+        "key_definition": "Date when the video was uploaded",
+        "value": "2026-02-14",
+        "slot_type": "temporal",
+        "sense_type": "",
+        "scoped_to": "",
+        "domain": ""
+      }
+    ],
+    "source_file": "2026-02-14.md"
+  },
+  {
+    "text": "Aaron noticed a bug where karaoke text was rendered backwards and timing was slow, leading him to file issue #9 for a fix that uses Whisper word timestamps.",
+    "kind": "decision",
+    "confidence": 0.9,
+    "slots": [
+      {
+        "key": "issue_description",
+        "key_definition": "The nature of the software issue filed",
+        "value": "karaoke text backwards, slow timing",
+        "slot_type": "attribute",
+        "sense_type": "",
+        "scoped_to": "",
+        "domain": "software_project"
+      },
+      {
+        "key": "issue_number",
+        "key_definition": "Tracking number of the filed issue",
+        "value": "9",
+        "slot_type": "attribute",
+        "sense_type": "",
+        "scoped_to": "",
+        "domain": "software_project"
+      }
+    ],
+    "source_file": "2026-02-14.md"
+  },
+  {
+    "text": "Aaron refactored the YouTube uploader to source credentials from the keychain, supporting YOUTUBE_CLIENT_ID and YOUTUBE_CLIENT_SECRET, and fixed a CLI bug affecting key name suffix handling.",
+    "kind": "decision",
+    "confidence": 0.95,
+    "slots": [
+      {
+        "key": "codebase_change",
+        "key_definition": "Description of the refactoring or bugfix",
+        "value": "YouTube uploader uses keychain for credentials; suffix handling bug fixed",
+        "slot_type": "attribute",
+        "sense_type": "",
+        "scoped_to": "",
+        "domain": "software_project"
+      }
+    ],
+    "source_file": "2026-02-14.md"
+  },
+  {
+    "text": "Aaron set up a Google Cloud OAuth Desktop app for YouTube uploading and completed the authorization flow.",
+    "kind": "fact",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "oauth_platform",
+        "key_definition": "The service for which OAuth was set up",
+        "value": "Google Cloud Desktop",
+        "slot_type": "entity",
+        "sense_type": "brand",
+        "scoped_to": "",
+        "domain": "cloud_platform"
+      }
+    ],
+    "source_file": "2026-02-14.md"
+  },
+  {
+    "text": "Aaron's production run for the Memory Architectures podcast only completed 3 out of 11 audio clips before reaching the ElevenLabs quota limit, demonstrating a need for quota reset or upgrade.",
+    "kind": "fact",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "production_topic",
+        "key_definition": "Subject of the audio/video production run",
+        "value": "Memory Architectures podcast",
+        "slot_type": "attribute",
+        "sense_type": "",
+        "scoped_to": "",
+        "domain": "media_production"
+      },
+      {
+        "key": "segments_completed",
+        "key_definition": "Number of production segments completed before failure",
+        "value": "3/11",
+        "slot_type": "attribute",
+        "sense_type": "",
+        "scoped_to": "",
+        "domain": "media_production"
+      },
+      {
+        "key": "api_quota_used",
+        "key_definition": "Number of credits remaining after partial production run",
+        "value": "285",
+        "slot_type": "attribute",
+        "sense_type": "",
+        "scoped_to": "",
+        "domain": "api_usage"
+      }
+    ],
+    "source_file": "2026-02-14.md"
+  },
+  {
+    "text": "Aaron uses a production pipeline that converts PDF knowledge bases into scripts, audio, and video, and integrates with YouTube, as evidenced by the successful February 14, 2026 run.",
+    "kind": "fact",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "production_pipeline_flow",
+        "key_definition": "Sequential steps in Aaron's content creation pipeline",
+        "value": "PDF \u2192 KB \u2192 Script \u2192 Audio \u2192 Video \u2192 YouTube",
+        "slot_type": "attribute",
+        "sense_type": "",
+        "scoped_to": "",
+        "domain": "media_production"
+      }
+    ],
+    "source_file": "2026-02-14.md"
+  },
+  {
+    "text": "Aaron requires that reportlab be used to ingest knowledge bases from markdown by converting them to PDF, due to current ingestion limitations.",
+    "kind": "convention",
+    "confidence": 0.9,
+    "slots": [
+      {
+        "key": "kb_ingestion_requirement",
+        "key_definition": "Tool or process required for non-PDF knowledge base ingestion",
+        "value": "use reportlab to convert markdown to PDF",
+        "slot_type": "convention",
+        "sense_type": "",
+        "scoped_to": "",
+        "domain": "software_project"
+      }
+    ],
+    "source_file": "2026-02-14.md"
+  },
+  {
+    "text": "Aaron prefers that all serious production runs for `cs produce-video` default to dry run mode unless explicitly passed the --live flag.",
+    "kind": "convention",
+    "confidence": 0.85,
+    "slots": [
+      {
+        "key": "production_run_mode",
+        "key_definition": "Default operational mode for main video production command",
+        "value": "mock (dry run) unless --live specified",
+        "slot_type": "convention",
+        "sense_type": "",
+        "scoped_to": "",
+        "domain": "software_project"
+      }
+    ],
+    "source_file": "2026-02-14.md"
+  },
+  {
+    "text": "Aaron tracks active YouTube channel status, updates spiritwriter memory entitlement concepts, and maintains the spherical memory model in the MEMORY.md file.",
+    "kind": "convention",
+    "confidence": 0.9,
+    "slots": [
+      {
+        "key": "memory_tracking_update",
+        "key_definition": "Which core artifacts or concepts Aaron updates in long-term memory",
+        "value": "YouTube channel status, spiritwriter memory entitlement, spherical memory/valence model",
+        "slot_type": "convention",
+        "sense_type": "",
+        "scoped_to": "",
+        "domain": "personal_knowledge"
+      }
+    ],
+    "source_file": "2026-02-14.md"
+  },
+  {
+    "text": "The OpenAI TTS integration was activated as a fallback in the video production pipeline when ElevenLabs credits were insufficient, providing 20x cheaper narration with the 'onyx' voice, using the tts-1-hd model at $0.030 per 1,000 characters.",
+    "kind": "fact",
+    "confidence": 0.98,
+    "slots": [
+      {
+        "key": "tts_provider",
+        "key_definition": "The text-to-speech provider used for narration",
+        "value": "OpenAI",
+        "slot_type": "entity",
+        "sense_type": "brand",
+        "scoped_to": "video production pipeline",
+        "domain": "audio"
+      },
+      {
+        "key": "fallback_trigger",
+        "key_definition": "The condition that caused the fallback to OpenAI TTS",
+        "value": "ElevenLabs credits insufficient",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "OpenAI TTS integration",
+        "domain": "audio"
+      },
+      {
+        "key": "voice",
+        "key_definition": "The specific synthetic voice used for narration",
+        "value": "onyx",
+        "slot_type": "entity",
+        "sense_type": "proper_name",
+        "scoped_to": "OpenAI TTS",
+        "domain": "audio"
+      },
+      {
+        "key": "cost_per_1k_chars",
+        "key_definition": "The price for generating 1,000 characters of narration",
+        "value": "$0.030",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "OpenAI TTS",
+        "domain": "audio"
+      }
+    ],
+    "source_file": "2026-02-14-b.md"
+  },
+  {
+    "text": "In cli/produce_video.py, setting the environment variable TTS_PROVIDER to 'openai' forces narration to use OpenAI TTS and bypasses ElevenLabs.",
+    "kind": "instruction",
+    "confidence": 0.95,
+    "slots": [
+      {
+        "key": "environment_variable",
+        "key_definition": "Environment variable that controls text-to-speech provider selection",
+        "value": "TTS_PROVIDER",
+        "slot_type": "entity",
+        "sense_type": "common_noun",
+        "scoped_to": "cli/produce_video.py",
+        "domain": "audio"
+      }
+    ],
+    "source_file": "2026-02-14-b.md"
+  },
+  {
+    "text": "The text-to-speech production cost for the 2026-02-14 Memory Architectures video was $0.15 for 11 segments (4,909 characters), compared to an estimated $3 for the same using ElevenLabs.",
+    "kind": "fact",
+    "confidence": 0.98,
+    "slots": [
+      {
+        "key": "production_cost",
+        "key_definition": "Total cost for generating audio narration for the video",
+        "value": "$0.15",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "Memory Architectures Video #2",
+        "domain": "finance"
+      }
+    ],
+    "source_file": "2026-02-14-b.md"
+  },
+  {
+    "text": "In core/audio_utils.py, support was added for handling OpenAI TTS provider's output of a file path ('audio_path') instead of byte data ('audio_data').",
+    "kind": "fact",
+    "confidence": 0.9,
+    "slots": [
+      {
+        "key": "bugfix",
+        "key_definition": "The specific correction in code to support new output formats",
+        "value": "Handle audio_path as well as audio_data",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "core/audio_utils.py",
+        "domain": "code"
+      }
+    ],
+    "source_file": "2026-02-14-b.md"
+  },
+  {
+    "text": "Memory Architectures Video #2 was produced with a script using a Jon Stewart/John Oliver humor style prompt, is 5.1 minutes long, and consists of 11 segments.",
+    "kind": "fact",
+    "confidence": 0.92,
+    "slots": [
+      {
+        "key": "script_style",
+        "key_definition": "Description of the writing style or tone of the script",
+        "value": "Jon Stewart/John Oliver humor style",
+        "slot_type": "attribute",
+        "sense_type": "proper_name",
+        "scoped_to": "Memory Architectures Video #2",
+        "domain": "media"
+      },
+      {
+        "key": "duration_minutes",
+        "key_definition": "The total length of the video in minutes",
+        "value": "5.1",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "Memory Architectures Video #2",
+        "domain": "media"
+      }
+    ],
+    "source_file": "2026-02-14-b.md"
+  },
+  {
+    "text": "The Memory Architectures Video #2 was uploaded to YouTube as an unlisted video titled 'Memory Architectures: From Songlines to Silicon' on February 14, 2026.",
+    "kind": "fact",
+    "confidence": 0.9,
+    "slots": [
+      {
+        "key": "youtube_status",
+        "key_definition": "Visibility setting of the YouTube video",
+        "value": "unlisted",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "Memory Architectures Video #2",
+        "domain": "media"
+      },
+      {
+        "key": "publication_date",
+        "key_definition": "Date the video was uploaded",
+        "value": "2026-02-14",
+        "slot_type": "temporal",
+        "sense_type": "common_noun",
+        "scoped_to": "Memory Architectures Video #2",
+        "domain": "media"
+      }
+    ],
+    "source_file": "2026-02-14-b.md"
+  },
+  {
+    "text": "The Memory Architectures Video #2 was based on a synthesized research brief and used informal references, not a single academic paper.",
+    "kind": "fact",
+    "confidence": 0.86,
+    "slots": [
+      {
+        "key": "reference_style",
+        "key_definition": "How references are presented in the video",
+        "value": "informal, based on synthesized brief",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "Memory Architectures Video #2",
+        "domain": "media"
+      }
+    ],
+    "source_file": "2026-02-14-b.md"
+  },
+  {
+    "text": "A CLI command, cs upload youtube-update VIDEO_ID, was implemented using GPT-4.1 to update YouTube video metadata including title, description, tags, privacy, and category.",
+    "kind": "fact",
+    "confidence": 0.88,
+    "slots": [
+      {
+        "key": "command_name",
+        "key_definition": "The specific command for updating YouTube video metadata",
+        "value": "cs upload youtube-update VIDEO_ID",
+        "slot_type": "entity",
+        "sense_type": "common_noun",
+        "scoped_to": "CLI tool",
+        "domain": "software"
+      },
+      {
+        "key": "implementation_agent",
+        "key_definition": "AI agent or worker which implemented the command",
+        "value": "GPT-4.1 worker",
+        "slot_type": "entity",
+        "sense_type": "proper_name",
+        "scoped_to": "command implementation",
+        "domain": "software"
+      }
+    ],
+    "source_file": "2026-02-14-b.md"
+  },
+  {
+    "text": "YouTube OAuth scopes for the uploader CLI were broadened from youtube.upload to youtube (full access), requiring the user to re-run cs upload youtube-auth.",
+    "kind": "fact",
+    "confidence": 0.93,
+    "slots": [
+      {
+        "key": "oauth_scope",
+        "key_definition": "The permissions required by the uploader tool",
+        "value": "youtube (full access)",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "youtube uploader CLI",
+        "domain": "software"
+      }
+    ],
+    "source_file": "2026-02-14-b.md"
+  },
+  {
+    "text": "GPT-4.1 workers performing file operations must be given explicit absolute paths in their instructions, as they cannot reliably find files at relative paths.",
+    "kind": "instruction",
+    "confidence": 0.95,
+    "slots": [
+      {
+        "key": "path_type_requirement",
+        "key_definition": "Whether to use absolute or relative paths in instructions",
+        "value": "absolute paths required",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "GPT-4.1 worker file operations",
+        "domain": "software"
+      }
+    ],
+    "source_file": "2026-02-14-b.md"
+  },
+  {
+    "text": "A bug in OpenAI TTS integration caused an accidental early return in the voice mapping if-block, leading to partial results; it was resolved after four debugging attempts.",
+    "kind": "fact",
+    "confidence": 0.8,
+    "slots": [
+      {
+        "key": "bugfix",
+        "key_definition": "Resolution of the early return in voice mapping",
+        "value": "removed accidental return audio_paths in if-block",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "OpenAI TTS integration",
+        "domain": "code"
+      }
+    ],
+    "source_file": "2026-02-14-b.md"
+  },
+  {
+    "text": "Production workflows involving GPT-4.1 benefit from step-by-step guidance and explicit, concrete instructions rather than high-level planning.",
+    "kind": "preference",
+    "confidence": 0.9,
+    "slots": [
+      {
+        "key": "workflow_guidance_style",
+        "key_definition": "Preferred style for directing AI worker tasks",
+        "value": "step-by-step, explicit instructions",
+        "slot_type": "preference",
+        "sense_type": "common_noun",
+        "scoped_to": "GPT-4.1 worker tasks",
+        "domain": "workflow"
+      }
+    ],
+    "source_file": "2026-02-14-b.md"
+  },
+  {
+    "text": "The claude-studio-producer repository located at /Users/aaron/Documents/GitHub/claude-studio-producer has had two features committed and pushed to main: a TTS provider fallback (ElevenLabs to OpenAI TTS, selectable by TTS_PROVIDER environment variable) and a youtube-update command for post-upload metadata edits.",
+    "kind": "fact",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "feature",
+        "key_definition": "a functional enhancement added to software",
+        "value": "TTS provider fallback (ElevenLabs \u2192 OpenAI TTS)",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "claude-studio-producer repository",
+        "domain": "software"
+      },
+      {
+        "key": "feature",
+        "key_definition": "a functional enhancement added to software",
+        "value": "youtube-update command for post-upload metadata edits",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "claude-studio-producer repository",
+        "domain": "software"
+      }
+    ],
+    "source_file": "2026-02-15.md"
+  },
+  {
+    "text": "The current version of the claude-studio-producer repository is 0.6.0, but an update to 0.7.0 has been discussed and agreed upon as the next task.",
+    "kind": "decision",
+    "confidence": 0.9,
+    "slots": [
+      {
+        "key": "current_version",
+        "key_definition": "the present version number of the software",
+        "value": "0.6.0",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "claude-studio-producer repository",
+        "domain": "software"
+      },
+      {
+        "key": "next_version",
+        "key_definition": "the next planned version number of the software",
+        "value": "0.7.0",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "claude-studio-producer repository",
+        "domain": "software"
+      }
+    ],
+    "source_file": "2026-02-15.md"
+  },
+  {
+    "text": "The preferred git workflow for Aaron when pulling his journal updates before committing to the repository is to use the stash and pop flow with git pull --rebase.",
+    "kind": "convention",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "git_workflow",
+        "key_definition": "preferred method for synchronizing and committing changes in git",
+        "value": "stash/pop with git pull --rebase",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "Aaron",
+        "domain": "software_development"
+      }
+    ],
+    "source_file": "2026-02-15.md"
+  },
+  {
+    "text": "A comprehensive CLI reference documentation was developed in PR #11 on the docs/cli-reference branch, consisting of 13 markdown files covering over 20 commands and 4600+ lines, with work contributed by both a sub-agent and the main agent.",
+    "kind": "fact",
+    "confidence": 0.9,
+    "slots": [
+      {
+        "key": "pull_request",
+        "key_definition": "a submitted request to merge code/documentation changes in a repository",
+        "value": "PR #11: docs/cli-reference branch",
+        "slot_type": "entity",
+        "sense_type": "proper_name",
+        "scoped_to": "claude-studio-producer repository",
+        "domain": "software"
+      }
+    ],
+    "source_file": "2026-02-15.md"
+  },
+  {
+    "text": "A lesson from the CLI documentation effort is that sub-agent token burn remains an issue; tight scoping for sub-agents helps manage token limits.",
+    "kind": "lesson",
+    "confidence": 0.8,
+    "slots": [
+      {
+        "key": "token_limit",
+        "key_definition": "the constraint related to the amount of data a sub-agent can process before running out of tokens",
+        "value": "tight task scoping is beneficial",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "sub-agent tasks",
+        "domain": "AI_operations"
+      }
+    ],
+    "source_file": "2026-02-15.md"
+  },
+  {
+    "text": "For the WebUI rewrite of the claude-studio-producer project, Aaron and the agent agree that a design specification is required before handing it to the codex, and identifying specific dashboard pain points is necessary before scoping.",
+    "kind": "decision",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "requirement",
+        "key_definition": "precondition to begin a project phase",
+        "value": "design specification before codex handoff",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "WebUI rewrite",
+        "domain": "software_project"
+      },
+      {
+        "key": "pain_points_identified",
+        "key_definition": "necessity to clarify issues before scoping a project",
+        "value": "required",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "WebUI rewrite",
+        "domain": "software_project"
+      }
+    ],
+    "source_file": "2026-02-15.md"
+  },
+  {
+    "text": "Aaron referenced a third video at https://youtu.be/eToEeH0yz4o, which he considers solid and noted contains paper metadata and key topics.",
+    "kind": "fact",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "youtube_video",
+        "key_definition": "a video referenced by URL as relevant to project activities",
+        "value": "https://youtu.be/eToEeH0yz4o",
+        "slot_type": "entity",
+        "sense_type": "proper_name",
+        "scoped_to": "Aaron",
+        "domain": "media"
+      },
+      {
+        "key": "video_order",
+        "key_definition": "ordinal position of the video among related content",
+        "value": "third (after Hallucination Stations, Memory Architectures)",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "Aaron's project media",
+        "domain": "media"
+      }
+    ],
+    "source_file": "2026-02-15.md"
+  },
+  {
+    "text": "For embedding YouTube videos on GitHub Pages, the standard is to use an iframe with the youtube.com/embed/ID src.",
+    "kind": "convention",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "embed_method",
+        "key_definition": "standard way to include YouTube video players in web pages",
+        "value": "iframe with youtube.com/embed/ID src",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "GitHub Pages",
+        "domain": "web_development"
+      }
+    ],
+    "source_file": "2026-02-15.md"
+  },
+  {
+    "text": "Draw to Deploy is a new private repository on Aaron's GitHub, related to AWS work and separate from personal projects due to work intellectual property ownership.",
+    "kind": "entity",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "project_name",
+        "key_definition": "The designated name of the project",
+        "value": "Draw to Deploy",
+        "slot_type": "entity",
+        "sense_type": "proper_name",
+        "scoped_to": null,
+        "domain": "project"
+      },
+      {
+        "key": "repository_visibility",
+        "key_definition": "Describes whether the repository is public or private",
+        "value": "private",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "Draw to Deploy",
+        "domain": "repository"
+      },
+      {
+        "key": "hosting_platform",
+        "key_definition": "Platform where the repository is hosted",
+        "value": "Aaron's GitHub",
+        "slot_type": "relation",
+        "sense_type": "proper_name",
+        "scoped_to": "Draw to Deploy",
+        "domain": "repository"
+      },
+      {
+        "key": "ownership",
+        "key_definition": "IP ownership or rights relating to the project",
+        "value": "work IP",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "Draw to Deploy",
+        "domain": "legal"
+      }
+    ],
+    "source_file": "2026-02-16.md"
+  },
+  {
+    "text": "The git identity for Lilit is set to 'Lilit \u26b8 (AI)' with email lilit-ai@users.noreply.github.com, configured at the repository level for claude-studio-producer.",
+    "kind": "fact",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "git_identity_name",
+        "key_definition": "The display name configured for commits",
+        "value": "Lilit \u26b8 (AI)",
+        "slot_type": "attribute",
+        "sense_type": "proper_name",
+        "scoped_to": "Lilit",
+        "domain": "user"
+      },
+      {
+        "key": "git_identity_email",
+        "key_definition": "The email address associated with this git identity",
+        "value": "lilit-ai@users.noreply.github.com",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "Lilit",
+        "domain": "user"
+      },
+      {
+        "key": "scope",
+        "key_definition": "Scope of the git identity setting",
+        "value": "repo-local",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "Lilit",
+        "domain": "user"
+      }
+    ],
+    "source_file": "2026-02-16.md"
+  },
+  {
+    "text": "The avatar for Lilit is stored at docs/avatar-lilit.png within the claude-studio-producer repository.",
+    "kind": "fact",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "avatar_path",
+        "key_definition": "File path to the avatar image",
+        "value": "docs/avatar-lilit.png",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "Lilit",
+        "domain": "user"
+      },
+      {
+        "key": "repository",
+        "key_definition": "Repository where the avatar is located",
+        "value": "claude-studio-producer",
+        "slot_type": "attribute",
+        "sense_type": "proper_name",
+        "scoped_to": "Lilit",
+        "domain": "repository"
+      }
+    ],
+    "source_file": "2026-02-16.md"
+  },
+  {
+    "text": "Issues #12, #13, and #14 were filed for claude-studio-producer: KB examples, provider documentation, and security page, respectively.",
+    "kind": "fact",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "issue_numbers",
+        "key_definition": "Corresponding issue numbers filed",
+        "value": "#12, #13, #14",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "claude-studio-producer",
+        "domain": "repository"
+      },
+      {
+        "key": "issues_summary",
+        "key_definition": "Short descriptions of the issues",
+        "value": "KB examples, provider docs, security page",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "claude-studio-producer",
+        "domain": "repository"
+      }
+    ],
+    "source_file": "2026-02-16.md"
+  },
+  {
+    "text": "The version bump to 0.7.0 for claude-studio-producer is still pending as of 2026-02-16.",
+    "kind": "fact",
+    "confidence": 0.9,
+    "slots": [
+      {
+        "key": "pending_version",
+        "key_definition": "Next intended version number",
+        "value": "0.7.0",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "claude-studio-producer",
+        "domain": "repository"
+      },
+      {
+        "key": "pending_action",
+        "key_definition": "The pending action related to the version",
+        "value": "version bump",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "claude-studio-producer",
+        "domain": "repository"
+      }
+    ],
+    "source_file": "2026-02-16.md"
+  },
+  {
+    "text": "The Spiritwriter Core project is scaffolded at /Users/aaron/Documents/GitHub/spiritwriter-core/ with an initial commit by Lilit (commit d06bb4b) and is currently local only.",
+    "kind": "entity",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "project_name",
+        "key_definition": "Name of the project",
+        "value": "Spiritwriter Core",
+        "slot_type": "entity",
+        "sense_type": "proper_name",
+        "scoped_to": null,
+        "domain": "project"
+      },
+      {
+        "key": "filesystem_path",
+        "key_definition": "Local path to the project folder",
+        "value": "/Users/aaron/Documents/GitHub/spiritwriter-core/",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "Spiritwriter Core",
+        "domain": "filesystem"
+      },
+      {
+        "key": "commit_hash",
+        "key_definition": "Identifier for the initial commit",
+        "value": "d06bb4b",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "Spiritwriter Core",
+        "domain": "git"
+      },
+      {
+        "key": "author",
+        "key_definition": "Author of the initial commit",
+        "value": "Lilit",
+        "slot_type": "entity",
+        "sense_type": "proper_name",
+        "scoped_to": "Spiritwriter Core",
+        "domain": "user"
+      }
+    ],
+    "source_file": "2026-02-16.md"
+  },
+  {
+    "text": "The design decision for Spiritwriter Core regarding making the LLM provider pluggable (e.g., using Bedrock for Draw to Deploy) is still pending.",
+    "kind": "decision",
+    "confidence": 0.95,
+    "slots": [
+      {
+        "key": "design_decision_pending",
+        "key_definition": "Design decision still pending for the project",
+        "value": "pluggable LLM provider",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "Spiritwriter Core",
+        "domain": "design"
+      },
+      {
+        "key": "potential_provider",
+        "key_definition": "Possible provider to integrate",
+        "value": "Bedrock",
+        "slot_type": "entity",
+        "sense_type": "brand",
+        "scoped_to": "Spiritwriter Core",
+        "domain": "provider"
+      }
+    ],
+    "source_file": "2026-02-16.md"
+  },
+  {
+    "text": "The atomization and knowledge base logic from claude-studio-producer is the key differentiator for Aaron's Draw to Deploy project.",
+    "kind": "fact",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "differentiator",
+        "key_definition": "The competitive or technical differentiator",
+        "value": "atomization/KB logic from claude-studio-producer",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "Draw to Deploy",
+        "domain": "project"
+      }
+    ],
+    "source_file": "2026-02-16.md"
+  },
+  {
+    "text": "Aaron owns an AWS patent from approximately 2020 for whiteboard diagram to infrastructure deployment, which is the core idea behind Draw to Deploy.",
+    "kind": "fact",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "patent_ownership",
+        "key_definition": "Whether Aaron owns a patent relevant to this idea",
+        "value": "true",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "Aaron",
+        "domain": "legal"
+      },
+      {
+        "key": "patent_topic",
+        "key_definition": "Subject or innovation covered by the patent",
+        "value": "whiteboard diagram to infrastructure deployment",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "Aaron",
+        "domain": "legal"
+      },
+      {
+        "key": "year_issued",
+        "key_definition": "Approximate year the patent was issued",
+        "value": "2020",
+        "slot_type": "temporal",
+        "sense_type": "common_noun",
+        "scoped_to": "Aaron",
+        "domain": "time"
+      }
+    ],
+    "source_file": "2026-02-16.md"
+  },
+  {
+    "text": "In spiritwriter-core, the cleanup pass is complete: stopwords have already been migrated, DEFAULT_KB_DIR has been removed, and there are no dead imports.",
+    "kind": "fact",
+    "confidence": 0.95,
+    "slots": [
+      {
+        "key": "project",
+        "key_definition": "The project to which the statement refers",
+        "value": "spiritwriter-core",
+        "slot_type": "entity",
+        "sense_type": "proper_name",
+        "scoped_to": "",
+        "domain": "software_project"
+      }
+    ],
+    "source_file": "2026-02-17.md"
+  },
+  {
+    "text": "In spiritwriter-core, the build-backend for pyproject.toml was fixed to setuptools.build_meta, since legacy does not exist in Python 3.14.",
+    "kind": "fact",
+    "confidence": 0.95,
+    "slots": [
+      {
+        "key": "project",
+        "key_definition": "The project to which the statement refers",
+        "value": "spiritwriter-core",
+        "slot_type": "entity",
+        "sense_type": "proper_name",
+        "scoped_to": "",
+        "domain": "software_project"
+      }
+    ],
+    "source_file": "2026-02-17.md"
+  },
+  {
+    "text": "spiritwriter-core now has a test suite with 54 tests across 5 files: test_stopwords, test_secrets, test_models, test_classify, and test_kb; all tests are passing.",
+    "kind": "fact",
+    "confidence": 0.95,
+    "slots": [
+      {
+        "key": "project",
+        "key_definition": "The project to which the statement refers",
+        "value": "spiritwriter-core",
+        "slot_type": "entity",
+        "sense_type": "proper_name",
+        "scoped_to": "",
+        "domain": "software_project"
+      }
+    ],
+    "source_file": "2026-02-17.md"
+  },
+  {
+    "text": "Commit 5e60314 was pushed to the main branch of spiritwriter-core.",
+    "kind": "fact",
+    "confidence": 0.95,
+    "slots": [
+      {
+        "key": "project",
+        "key_definition": "The project to which the commit refers",
+        "value": "spiritwriter-core",
+        "slot_type": "entity",
+        "sense_type": "proper_name",
+        "scoped_to": "",
+        "domain": "software_project"
+      }
+    ],
+    "source_file": "2026-02-17.md"
+  },
+  {
+    "text": "pip install -e '.[dev]' works for spiritwriter-core, but required the --break-system-packages flag on the Mac mini's system Python 3.14.",
+    "kind": "fact",
+    "confidence": 0.9,
+    "slots": [
+      {
+        "key": "project",
+        "key_definition": "The project to which the installation refers",
+        "value": "spiritwriter-core",
+        "slot_type": "entity",
+        "sense_type": "proper_name",
+        "scoped_to": "",
+        "domain": "software_project"
+      }
+    ],
+    "source_file": "2026-02-17.md"
+  },
+  {
+    "text": "In the CSP project, core/secrets.py is now a thin wrapper around spiritwriter.secrets and maintains the service name 'claude-studio'.",
+    "kind": "fact",
+    "confidence": 0.95,
+    "slots": [
+      {
+        "key": "project",
+        "key_definition": "The project to which the file refers",
+        "value": "CSP",
+        "slot_type": "entity",
+        "sense_type": "proper_name",
+        "scoped_to": "",
+        "domain": "software_project"
+      }
+    ],
+    "source_file": "2026-02-17.md"
+  },
+  {
+    "text": "In CSP, core/content_classifier.py now re-exports from spiritwriter.classify.",
+    "kind": "fact",
+    "confidence": 0.95,
+    "slots": [
+      {
+        "key": "project",
+        "key_definition": "The project to which the file refers",
+        "value": "CSP",
+        "slot_type": "entity",
+        "sense_type": "proper_name",
+        "scoped_to": "",
+        "domain": "software_project"
+      }
+    ],
+    "source_file": "2026-02-17.md"
+  },
+  {
+    "text": "spiritwriter-core was added as a git dependency in the CSP project's pyproject.toml.",
+    "kind": "fact",
+    "confidence": 0.95,
+    "slots": [
+      {
+        "key": "project",
+        "key_definition": "The dependent project",
+        "value": "CSP",
+        "slot_type": "entity",
+        "sense_type": "proper_name",
+        "scoped_to": "",
+        "domain": "software_project"
+      }
+    ],
+    "source_file": "2026-02-17.md"
+  },
+  {
+    "text": "The CSP project fixed a stale version test from 0.6.0 to 0.7.0.",
+    "kind": "fact",
+    "confidence": 0.9,
+    "slots": [
+      {
+        "key": "project",
+        "key_definition": "The project where the version was fixed",
+        "value": "CSP",
+        "slot_type": "entity",
+        "sense_type": "proper_name",
+        "scoped_to": "",
+        "domain": "software_project"
+      }
+    ],
+    "source_file": "2026-02-17.md"
+  },
+  {
+    "text": "All 835 tests are passing in the CSP project, and 612 lines of duplicated code were removed.",
+    "kind": "fact",
+    "confidence": 0.95,
+    "slots": [
+      {
+        "key": "project",
+        "key_definition": "The project where tests were run",
+        "value": "CSP",
+        "slot_type": "entity",
+        "sense_type": "proper_name",
+        "scoped_to": "",
+        "domain": "software_project"
+      }
+    ],
+    "source_file": "2026-02-17.md"
+  },
+  {
+    "text": "Commit e73793b was pushed to the CSP main branch.",
+    "kind": "fact",
+    "confidence": 0.95,
+    "slots": [
+      {
+        "key": "project",
+        "key_definition": "Project of the commit",
+        "value": "CSP",
+        "slot_type": "entity",
+        "sense_type": "proper_name",
+        "scoped_to": "",
+        "domain": "software_project"
+      }
+    ],
+    "source_file": "2026-02-17.md"
+  },
+  {
+    "text": "Aaron cloned the draw-to-deploy (d2d) repository to the GitHub folder and gave the agent access.",
+    "kind": "fact",
+    "confidence": 0.9,
+    "slots": [
+      {
+        "key": "project",
+        "key_definition": "Relevant project",
+        "value": "draw-to-deploy",
+        "slot_type": "entity",
+        "sense_type": "proper_name",
+        "scoped_to": "",
+        "domain": "software_project"
+      }
+    ],
+    "source_file": "2026-02-17.md"
+  },
+  {
+    "text": "A whiteboard sketch for draw-to-deploy was saved as docs/sketches/pdf-extractor-lambda-v1.jpg.",
+    "kind": "fact",
+    "confidence": 0.9,
+    "slots": [
+      {
+        "key": "project",
+        "key_definition": "Relevant project",
+        "value": "draw-to-deploy",
+        "slot_type": "entity",
+        "sense_type": "proper_name",
+        "scoped_to": "",
+        "domain": "software_project"
+      }
+    ],
+    "source_file": "2026-02-17.md"
+  },
+  {
+    "text": "Commit e868e86 was pushed to the draw-to-deploy project.",
+    "kind": "fact",
+    "confidence": 0.95,
+    "slots": [
+      {
+        "key": "project",
+        "key_definition": "Relevant project",
+        "value": "draw-to-deploy",
+        "slot_type": "entity",
+        "sense_type": "proper_name",
+        "scoped_to": "",
+        "domain": "software_project"
+      }
+    ],
+    "source_file": "2026-02-17.md"
+  },
+  {
+    "text": "A shingle extraction paper was written, converted to PDF, and ingested into the knowledge base as 34 knowledge atoms.",
+    "kind": "fact",
+    "confidence": 0.9,
+    "slots": [
+      {
+        "key": "artifact",
+        "key_definition": "The created document",
+        "value": "shingle extraction paper",
+        "slot_type": "entity",
+        "sense_type": "common_noun",
+        "scoped_to": "",
+        "domain": "documentation"
+      }
+    ],
+    "source_file": "2026-02-17.md"
+  },
+  {
+    "text": "A script of 13 segments in an educational style was generated for the shingle extraction video, resulting in a 5-minute video.",
+    "kind": "fact",
+    "confidence": 0.9,
+    "slots": [
+      {
+        "key": "artifact",
+        "key_definition": "The created video",
+        "value": "shingle extraction video",
+        "slot_type": "entity",
+        "sense_type": "common_noun",
+        "scoped_to": "",
+        "domain": "media"
+      }
+    ],
+    "source_file": "2026-02-17.md"
+  },
+  {
+    "text": "The shingle extraction video cost $1.56 to synthesize with ElevenLabs TTS and nothing for images.",
+    "kind": "fact",
+    "confidence": 0.8,
+    "slots": [
+      {
+        "key": "vendor",
+        "key_definition": "TTS vendor used",
+        "value": "ElevenLabs",
+        "slot_type": "entity",
+        "sense_type": "brand",
+        "scoped_to": "",
+        "domain": "service_provider"
+      }
+    ],
+    "source_file": "2026-02-17.md"
+  },
+  {
+    "text": "A compressed version of the shingle extraction video was sent to Aaron on Discord.",
+    "kind": "fact",
+    "confidence": 0.8,
+    "slots": [
+      {
+        "key": "artifact",
+        "key_definition": "The sent file",
+        "value": "compressed shingle extraction video",
+        "slot_type": "entity",
+        "sense_type": "common_noun",
+        "scoped_to": "",
+        "domain": "media"
+      }
+    ],
+    "source_file": "2026-02-17.md"
+  },
+  {
+    "text": "The root cause of shingle extraction video V1 issues was manual editing of content_library.json with an invalid AssetSource enum, causing fallback to a legacy mechanism.",
+    "kind": "fact",
+    "confidence": 0.95,
+    "slots": [
+      {
+        "key": "artifact",
+        "key_definition": "The affected project component",
+        "value": "shingle extraction video",
+        "slot_type": "entity",
+        "sense_type": "common_noun",
+        "scoped_to": "",
+        "domain": "media"
+      }
+    ],
+    "source_file": "2026-02-17.md"
+  },
+  {
+    "text": "The lesson learned for the shingle extraction workflow is to always use the librarian path and never patch the legacy fallback.",
+    "kind": "instruction",
+    "confidence": 0.95,
+    "slots": [
+      {
+        "key": "project",
+        "key_definition": "Project context",
+        "value": "shingle extraction",
+        "slot_type": "entity",
+        "sense_type": "common_noun",
+        "scoped_to": "",
+        "domain": "software_project"
+      }
+    ],
+    "source_file": "2026-02-17.md"
+  },
+  {
+    "text": "A CLI called 'cs figures' was built to inject, list, or remove figure assets, making figure swaps a one-liner operation.",
+    "kind": "fact",
+    "confidence": 0.95,
+    "slots": [
+      {
+        "key": "tool",
+        "key_definition": "Relevant CLI tool",
+        "value": "cs figures",
+        "slot_type": "entity",
+        "sense_type": "common_noun",
+        "scoped_to": "",
+        "domain": "software_tool"
+      }
+    ],
+    "source_file": "2026-02-17.md"
+  },
+  {
+    "text": "The legacy fallback has been removed from the assembler and now throws a clear error if used.",
+    "kind": "fact",
+    "confidence": 0.95,
+    "slots": [
+      {
+        "key": "component",
+        "key_definition": "Relevant system component",
+        "value": "assembler",
+        "slot_type": "entity",
+        "sense_type": "common_noun",
+        "scoped_to": "",
+        "domain": "software_system"
+      }
+    ],
+    "source_file": "2026-02-17.md"
+  },
+  {
+    "text": "The final shingle extraction video was uploaded as an unlisted YouTube video at https://youtu.be/hKbejuyv5ag.",
+    "kind": "fact",
+    "confidence": 0.95,
+    "slots": [
+      {
+        "key": "artifact",
+        "key_definition": "The uploaded video",
+        "value": "shingle extraction video",
+        "slot_type": "entity",
+        "sense_type": "common_noun",
+        "scoped_to": "",
+        "domain": "media"
+      }
+    ],
+    "source_file": "2026-02-17.md"
+  },
+  {
+    "text": "The claude-studio-producer project is being rebranded to spiritwriter-studio, with a target date of March 1.",
+    "kind": "decision",
+    "confidence": 0.95,
+    "slots": [
+      {
+        "key": "project",
+        "key_definition": "The affected project",
+        "value": "claude-studio-producer",
+        "slot_type": "entity",
+        "sense_type": "proper_name",
+        "scoped_to": "",
+        "domain": "software_project"
+      }
+    ],
+    "source_file": "2026-02-17.md"
+  },
+  {
+    "text": "The CLI for spiritwriter-studio will continue to use 'cs' as the command name because 'ss' has a negative connotation.",
+    "kind": "preference",
+    "confidence": 0.9,
+    "slots": [
+      {
+        "key": "project",
+        "key_definition": "Affected project",
+        "value": "spiritwriter-studio",
+        "slot_type": "entity",
+        "sense_type": "proper_name",
+        "scoped_to": "",
+        "domain": "software_project"
+      }
+    ],
+    "source_file": "2026-02-17.md"
+  },
+  {
+    "text": "podcasts.spiritwriter.ai will be relaunched as a showcase after the rebranding.",
+    "kind": "decision",
+    "confidence": 0.85,
+    "slots": [
+      {
+        "key": "website",
+        "key_definition": "The affected website",
+        "value": "podcasts.spiritwriter.ai",
+        "slot_type": "entity",
+        "sense_type": "place",
+        "scoped_to": "",
+        "domain": "web_service"
+      }
+    ],
+    "source_file": "2026-02-17.md"
+  },
+  {
+    "text": "After relaunch, spiritwriter-studio will be packaged as a clawhub skill.",
+    "kind": "decision",
+    "confidence": 0.85,
+    "slots": [
+      {
+        "key": "project",
+        "key_definition": "Affected project",
+        "value": "spiritwriter-studio",
+        "slot_type": "entity",
+        "sense_type": "proper_name",
+        "scoped_to": "",
+        "domain": "software_project"
+      }
+    ],
+    "source_file": "2026-02-17.md"
+  },
+  {
+    "text": "Aaron switched to using the Discord channel and accessed it from a mobile device.",
+    "kind": "fact",
+    "confidence": 0.8,
+    "slots": [
+      {
+        "key": "person",
+        "key_definition": "User who made the switch",
+        "value": "Aaron",
+        "slot_type": "entity",
+        "sense_type": "proper_name",
+        "scoped_to": "",
+        "domain": "person"
+      }
+    ],
+    "source_file": "2026-02-17.md"
+  },
+  {
+    "text": "Aaron's Discord DM channelId is 1470670169100648663.",
+    "kind": "fact",
+    "confidence": 0.9,
+    "slots": [
+      {
+        "key": "person",
+        "key_definition": "User's Discord identity",
+        "value": "Aaron",
+        "slot_type": "entity",
+        "sense_type": "proper_name",
+        "scoped_to": "",
+        "domain": "person"
+      }
+    ],
+    "source_file": "2026-02-17.md"
+  },
+  {
+    "text": "Aaron decided not to cherry-pick from the clawdboss.ai blog post on hybrid memory (SQLite+FTS5+LanceDB plugin) because the spiritwriter-core architecture is fundamentally different.",
+    "kind": "decision",
+    "confidence": 0.95,
+    "slots": [
+      {
+        "key": "decision_maker",
+        "key_definition": "Person or agent making the decision",
+        "value": "Aaron",
+        "slot_type": "entity",
+        "sense_type": "proper_name",
+        "scoped_to": "Aaron",
+        "domain": "person"
+      },
+      {
+        "key": "reason",
+        "key_definition": "Justification for decision",
+        "value": "architecture is fundamentally different",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "spiritwriter-core",
+        "domain": "technology"
+      },
+      {
+        "key": "source_material",
+        "key_definition": "Material considered but not adopted",
+        "value": "clawdboss.ai blog post on hybrid memory",
+        "slot_type": "entity",
+        "sense_type": "brand",
+        "scoped_to": "memory architecture",
+        "domain": "blog_post"
+      }
+    ],
+    "source_file": "2026-02-19.md"
+  },
+  {
+    "text": "The content-addressed memory shard system was built into spiritwriter-core, specifically in the spiritwriter/trace directory with supporting modules for sharding, storage, emitting, and extraction.",
+    "kind": "fact",
+    "confidence": 0.98,
+    "slots": [
+      {
+        "key": "location",
+        "key_definition": "File path or module location",
+        "value": "spiritwriter-core/spiritwriter/trace/",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "memory shard system",
+        "domain": "technology"
+      }
+    ],
+    "source_file": "2026-02-19.md"
+  },
+  {
+    "text": "The shard system uses pull-based hydration by sending shard references to sub-agents, resolving only what is needed and achieving an estimated 85% context savings.",
+    "kind": "fact",
+    "confidence": 0.95,
+    "slots": [
+      {
+        "key": "saving_percentage",
+        "key_definition": "Estimated percent of context tokens saved",
+        "value": "85%",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "shard system",
+        "domain": "efficiency"
+      }
+    ],
+    "source_file": "2026-02-19.md"
+  },
+  {
+    "text": "Aaron envisions a shared memory system using a Distributed Hash Table (DHT) for multi-agent shared memory, beginning as local files and scaling to a network.",
+    "kind": "preference",
+    "confidence": 0.95,
+    "slots": [
+      {
+        "key": "preferred_architecture",
+        "key_definition": "Target architecture for shared memory",
+        "value": "Distributed Hash Table (DHT)",
+        "slot_type": "entity",
+        "sense_type": "common_noun",
+        "scoped_to": "shared memory system",
+        "domain": "technology"
+      }
+    ],
+    "source_file": "2026-02-19.md"
+  },
+  {
+    "text": "The Morel Maps project is a morel mushroom foraging tool built by Aaron, which cross-references fire data with maps to find post-fire morel sites.",
+    "kind": "entity",
+    "confidence": 0.98,
+    "slots": [
+      {
+        "key": "creator",
+        "key_definition": "Person who created the project",
+        "value": "Aaron",
+        "slot_type": "entity",
+        "sense_type": "proper_name",
+        "scoped_to": "Morel Maps",
+        "domain": "person"
+      },
+      {
+        "key": "project_url",
+        "key_definition": "URL of the project",
+        "value": "https://morel-maps.replit.app",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "Morel Maps",
+        "domain": "technology"
+      }
+    ],
+    "source_file": "2026-02-19.md"
+  },
+  {
+    "text": "The spiritwriter-geo package is planned to extract backend modules from Morel Maps, using Google Maps APIs and government GIS data feeds, for future development.",
+    "kind": "decision",
+    "confidence": 0.9,
+    "slots": [
+      {
+        "key": "module_source",
+        "key_definition": "Source system for extracted modules",
+        "value": "Morel Maps",
+        "slot_type": "entity",
+        "sense_type": "common_noun",
+        "scoped_to": "spiritwriter-geo",
+        "domain": "technology"
+      }
+    ],
+    "source_file": "2026-02-19.md"
+  },
+  {
+    "text": "Aaron conceived an app idea for an interactive, location-aware tour guide agent powered by spiritwriter-geo, supporting multimedia and natural conversational flow.",
+    "kind": "preference",
+    "confidence": 0.93,
+    "slots": [
+      {
+        "key": "app_feature",
+        "key_definition": "Supported features in the app concept",
+        "value": "location awareness, multimedia, natural conversation",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "spiritwriter-geo powered app",
+        "domain": "feature"
+      }
+    ],
+    "source_file": "2026-02-19.md"
+  },
+  {
+    "text": "The first shard-aware sub-agent, verify-assetrecord-fields, successfully verified AssetRecord fields for the figures CLI without mismatches, using context from a shard reference.",
+    "kind": "fact",
+    "confidence": 0.97,
+    "slots": [
+      {
+        "key": "verification_result",
+        "key_definition": "Result of field validation",
+        "value": "no mismatches",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "AssetRecord field verification",
+        "domain": "result"
+      }
+    ],
+    "source_file": "2026-02-19.md"
+  },
+  {
+    "text": "The primary cost driver in the current system is context accumulation before compaction, which can reach over 150,000 tokens and increase costs by a factor of four compared to compaction under 50,000 tokens.",
+    "kind": "fact",
+    "confidence": 0.93,
+    "slots": [
+      {
+        "key": "cost_factor",
+        "key_definition": "Relative cost multiplier due to excessive context length",
+        "value": "4x",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "system token usage",
+        "domain": "cost"
+      }
+    ],
+    "source_file": "2026-02-19.md"
+  },
+  {
+    "text": "The MEMORY.md file was reduced from 1,749 tokens to 416 tokens, achieving a 76% reduction.",
+    "kind": "fact",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "document",
+        "key_definition": "The file being discussed",
+        "value": "MEMORY.md",
+        "slot_type": "entity",
+        "sense_type": "common_noun",
+        "scoped_to": "workspace",
+        "domain": "file"
+      },
+      {
+        "key": "token_count_reduction",
+        "key_definition": "The reduction in tokens",
+        "value": "1,749 to 416",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "MEMORY.md",
+        "domain": "text"
+      }
+    ],
+    "source_file": "2026-02-20.md"
+  },
+  {
+    "text": "The total workspace files were slimmed from 5,160 tokens to 3,428 tokens, a 34% reduction.",
+    "kind": "fact",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "workspace_files",
+        "key_definition": "All files in the project workspace",
+        "value": "workspace",
+        "slot_type": "entity",
+        "sense_type": "common_noun",
+        "scoped_to": "workspace",
+        "domain": "file"
+      },
+      {
+        "key": "token_count_reduction",
+        "key_definition": "The reduction in tokens",
+        "value": "5,160 to 3,428",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "workspace_files",
+        "domain": "text"
+      }
+    ],
+    "source_file": "2026-02-20.md"
+  },
+  {
+    "text": "The estimated savings from slimming workspace files were about $4.84 per 10 days, representing 3.2% of the baseline cost.",
+    "kind": "fact",
+    "confidence": 0.95,
+    "slots": [
+      {
+        "key": "estimated_savings",
+        "key_definition": "Estimated financial cost saving",
+        "value": "$4.84/10 days",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "workspace_files",
+        "domain": "finance"
+      },
+      {
+        "key": "baseline_percentage",
+        "key_definition": "Percent of baseline cost saved",
+        "value": "3.2%",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "workspace_files",
+        "domain": "finance"
+      }
+    ],
+    "source_file": "2026-02-20.md"
+  },
+  {
+    "text": "The real cost driver is conversation history accumulation, which frequently grows to 150,000 or more tokens.",
+    "kind": "fact",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "cost_driver",
+        "key_definition": "The main source of cost",
+        "value": "conversation history accumulation",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "workspace",
+        "domain": "finance"
+      }
+    ],
+    "source_file": "2026-02-20.md"
+  },
+  {
+    "text": "Applying earlier and more aggressive compaction and pruning of conversation context could save an estimated $7-8 per day if average context stays under 80k tokens.",
+    "kind": "decision",
+    "confidence": 0.9,
+    "slots": [
+      {
+        "key": "compaction_pruning_config",
+        "key_definition": "Proposed configuration for compaction and pruning",
+        "value": "earlier compaction, contextPruning.mode: cache-ttl, keepLastAssistants: 3, softTrimRatio: 0.6, hardClearRatio: 0.8",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "workspace",
+        "domain": "configuration"
+      },
+      {
+        "key": "estimated_savings",
+        "key_definition": "Estimated financial cost saving",
+        "value": "$7-8/day",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "workspace",
+        "domain": "finance"
+      }
+    ],
+    "source_file": "2026-02-20.md"
+  },
+  {
+    "text": "Aaron has not yet approved the proposed compaction and pruning configuration.",
+    "kind": "fact",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "pending_approval",
+        "key_definition": "Status of configuration approval",
+        "value": "not approved",
+        "slot_type": "attribute",
+        "sense_type": "proper_name",
+        "scoped_to": "Aaron",
+        "domain": "configuration"
+      }
+    ],
+    "source_file": "2026-02-20.md"
+  },
+  {
+    "text": "A permanent convention is to avoid long-running synchronous scripts and instead execute one short command per iteration, checking the result before proceeding to the next.",
+    "kind": "convention",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "exec_pattern",
+        "key_definition": "Pattern for running execution commands",
+        "value": "drive loops yourself; one call per exec, checkpoint on each iteration",
+        "slot_type": "relation",
+        "sense_type": "common_noun",
+        "scoped_to": "workspace",
+        "domain": "execution"
+      }
+    ],
+    "source_file": "2026-02-20.md"
+  },
+  {
+    "text": "The convention to avoid long-running synchronous scripts and drive loops manually was added to TOOLS.md.",
+    "kind": "fact",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "convention_reference",
+        "key_definition": "Location where convention is documented",
+        "value": "TOOLS.md",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "exec_pattern",
+        "domain": "documentation"
+      }
+    ],
+    "source_file": "2026-02-20.md"
+  },
+  {
+    "text": "Aaron wrote a full specification for Consensus Memory Canonicalization (CMC) in specs/cmc-spec-v0.1.md.",
+    "kind": "fact",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "author",
+        "key_definition": "Person who created the spec",
+        "value": "Aaron",
+        "slot_type": "entity",
+        "sense_type": "proper_name",
+        "scoped_to": "cmc-spec-v0.1.md",
+        "domain": "person"
+      },
+      {
+        "key": "spec_document",
+        "key_definition": "Name of specification file",
+        "value": "specs/cmc-spec-v0.1.md",
+        "slot_type": "entity",
+        "sense_type": "common_noun",
+        "scoped_to": "CMC",
+        "domain": "documentation"
+      }
+    ],
+    "source_file": "2026-02-20.md"
+  },
+  {
+    "text": "The CMC-Lite approach was agreed upon, consisting of three core insights and using existing tooling.",
+    "kind": "decision",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "approach",
+        "key_definition": "Selected approach or version",
+        "value": "CMC-Lite",
+        "slot_type": "entity",
+        "sense_type": "common_noun",
+        "scoped_to": "CMC",
+        "domain": "methodology"
+      }
+    ],
+    "source_file": "2026-02-20.md"
+  },
+  {
+    "text": "The full CMC specification calling for Neo4j, FAISS, and pgvector is preserved as a possible migration target but is considered too heavy for current constraints.",
+    "kind": "fact",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "full_spec_components",
+        "key_definition": "Technologies required by the full spec",
+        "value": "Neo4j, FAISS, pgvector",
+        "slot_type": "attribute",
+        "sense_type": "brand",
+        "scoped_to": "full CMC spec",
+        "domain": "technology"
+      },
+      {
+        "key": "migration_target",
+        "key_definition": "Preservation status as possible future target",
+        "value": "preserved as migration target",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "full CMC spec",
+        "domain": "methodology"
+      }
+    ],
+    "source_file": "2026-02-20.md"
+  },
+  {
+    "text": "Aaron stated that memories are imperfect and that reification is something that can be improved later.",
+    "kind": "preference",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "philosophy",
+        "key_definition": "Aaron's principle or attitude",
+        "value": "memories are imperfect; reification can be improved later",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "CMC-Lite",
+        "domain": "philosophy"
+      }
+    ],
+    "source_file": "2026-02-20.md"
+  },
+  {
+    "text": "Aaron mentioned running low on credits, which prompted the token cost optimization sprint.",
+    "kind": "fact",
+    "confidence": 1.0,
+    "slots": [
+      {
+        "key": "resource_constraint",
+        "key_definition": "Cause of initiating optimization effort",
+        "value": "low credits",
+        "slot_type": "attribute",
+        "sense_type": "common_noun",
+        "scoped_to": "Aaron",
+        "domain": "finance"
+      }
+    ],
+    "source_file": "2026-02-20.md"
+  }
+]
