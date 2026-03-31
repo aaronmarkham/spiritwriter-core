@@ -276,3 +276,43 @@ class TraceEmitter:
             rationale=rationale,
             **kwargs,
         )
+
+    def get_events(self) -> list[dict[str, Any]]:
+        """Read all emitted events from the JSONL output file.
+
+        Returns an empty list if the file does not exist yet.
+        """
+        try:
+            with open(self.out_path, "r", encoding="utf-8") as f:
+                return [json.loads(line) for line in f if line.strip()]
+        except FileNotFoundError:
+            return []
+
+
+def verify_chain(events: list[dict[str, Any]]) -> bool:
+    """Verify the hash chain of a list of trace events.
+
+    Checks that each event's hash is correctly computed and that
+    prev_event_hash links form a valid chain.
+
+    Returns True if the chain is valid (or empty), False otherwise.
+    """
+    if not events:
+        return True
+
+    for i, evt in enumerate(events):
+        # Recompute hash from all fields except hash and sig
+        hashable = {k: v for k, v in evt.items() if k not in ("hash", "sig")}
+        expected_hash = _sha256(_canonical_json(hashable))
+        if evt.get("hash") != expected_hash:
+            return False
+
+        # Check chain linkage
+        if i == 0:
+            if evt.get("prev_event_hash") is not None:
+                return False
+        else:
+            if evt.get("prev_event_hash") != events[i - 1].get("hash"):
+                return False
+
+    return True

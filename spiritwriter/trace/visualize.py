@@ -302,6 +302,30 @@ def render_multi_agent(events: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
+# === Convenience wrapper ===
+
+def render_trace(
+    events: list[dict[str, Any]],
+    diagram_type: str = "workflow",
+) -> str:
+    """Convenience wrapper — render events with a named diagram type.
+
+    diagram_type: "workflow", "genealogy", or "multi-agent"
+    """
+    renderers = {
+        "workflow": render_simple_workflow,
+        "genealogy": render_shard_genealogy,
+        "multi-agent": render_multi_agent,
+    }
+    renderer = renderers.get(diagram_type)
+    if renderer is None:
+        raise ValueError(
+            f"Unknown diagram type {diagram_type!r}. "
+            f"Choose from: {', '.join(renderers)}"
+        )
+    return renderer(events)
+
+
 # === Main: Generate all diagrams from a trace file ===
 
 def generate_all(trace_path: str | Path, output_dir: str | Path) -> dict[str, str]:
