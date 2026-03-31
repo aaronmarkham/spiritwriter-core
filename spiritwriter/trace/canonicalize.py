@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from spiritwriter.trace.shard import _canonical_json, _sha256, _now_iso
+from spiritwriter.trace.emitter import TraceEmitter
 
 
 # ── Normalization utilities ──────────────────────────────────────────
@@ -201,6 +202,9 @@ class CanonicalSchema:
     # Fields used for contextual resolution (T4 / tiebreaking)
     context_fields: list[str] = field(default_factory=list)
 
+    # Fields stored on the entity but NOT used in resolution or schema_hash
+    metadata_fields: list[str] = field(default_factory=list)
+
     # Optional: age bucketing for when DOB is unavailable
     age_bucket_size: int = 2                 # ±N years counts as same bucket
 
@@ -275,7 +279,7 @@ class CanonicalRegistry:
     Storage: SQLite (WAL mode), one DB per registry.
     """
 
-    def __init__(self, db_path: str | Path, schema: CanonicalSchema):
+    def __init__(self, db_path: str | Path, schema: CanonicalSchema, *, emitter: TraceEmitter | None = None):
         """Open or create a registry.
 
         Creates tables on first run. Schema is stored in DB metadata
@@ -283,6 +287,7 @@ class CanonicalRegistry:
         """
         self.db_path = Path(db_path).expanduser()
         self.schema = schema
+        self._emitter = emitter
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
 
         self._conn = sqlite3.connect(str(self.db_path))
@@ -346,34 +351,64 @@ class CanonicalRegistry:
         existing = self.find_by_ess(ess)
         if existing:
             entity = existing[0]
-            return ResolutionResult(
+            result = ResolutionResult(
                 tier=ResolutionTier.T1_EXACT,
                 confidence=ResolutionTier.T1_EXACT.confidence,
                 canonical_id=entity["canonical_id"],
                 field_matches={f: True for f in self.schema.ess_fields},
                 notes="Exact ESS match",
             )
+            if self._emitter is not None:
+                self._emitter.emit(
+                    "candidate_resolved",
+                    tier=result.tier.value,
+                    confidence=result.confidence,
+                    canonical_id=result.canonical_id,
+                )
+            return result
 
         # T2/T3: fuzzy matching on fuzzy_fields
         if self.schema.fuzzy_fields:
-            best_result = self._fuzzy_resolve(candidate, ess)
-            if best_result is not None:
-                return best_result
+            result = self._fuzzy_resolve(candidate, ess)
+            if result is not None:
+                if self._emitter is not None:
+                    self._emitter.emit(
+                        "candidate_resolved",
+                        tier=result.tier.value,
+                        confidence=result.confidence,
+                        canonical_id=result.canonical_id,
+                    )
+                return result
 
         # T4: context field overlap
         if self.schema.context_fields:
-            ctx_result = self._context_resolve(candidate, ess)
-            if ctx_result is not None:
-                return ctx_result
+            result = self._context_resolve(candidate, ess)
+            if result is not None:
+                if self._emitter is not None:
+                    self._emitter.emit(
+                        "candidate_resolved",
+                        tier=result.tier.value,
+                        confidence=result.confidence,
+                        canonical_id=result.canonical_id,
+                    )
+                return result
 
         # No match
-        return ResolutionResult(
+        result = ResolutionResult(
             tier=ResolutionTier.NO_MATCH,
             confidence=0.0,
             canonical_id=None,
             field_matches={},
             notes="No matching entity found",
         )
+        if self._emitter is not None:
+            self._emitter.emit(
+                "candidate_resolved",
+                tier=result.tier.value,
+                confidence=result.confidence,
+                canonical_id=result.canonical_id,
+            )
+        return result
 
     def _fuzzy_resolve(
         self, candidate: dict[str, Any], candidate_ess: EntitySenseSig
@@ -568,6 +603,11 @@ class CanonicalRegistry:
             if f in candidate and candidate[f] is not None:
                 ess_fields_dict[f] = str(candidate[f])
 
+        # Store metadata fields (informational only, not used in resolution)
+        for f in self.schema.metadata_fields:
+            if f in candidate and candidate[f] is not None:
+                ess_fields_dict[f] = str(candidate[f])
+
         self._conn.execute(
             "INSERT INTO entities "
             "(canonical_id, ess_digest, ess_fields, first_seen, last_seen) "
@@ -631,6 +671,15 @@ class CanonicalRegistry:
         )
 
         self._conn.commit()
+
+        if self._emitter is not None:
+            self._emitter.emit(
+                "entity_merged",
+                keep_id=keep_id,
+                discard_id=discard_id,
+                tier="manual",
+                reason=reason,
+            )
 
     def get_entity(self, canonical_id: str) -> dict[str, Any] | None:
         """Fetch canonical entity with all sightings."""

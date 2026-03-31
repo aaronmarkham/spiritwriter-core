@@ -6,7 +6,7 @@ provenance tracking, and scoped entitlements.
 
 from spiritwriter.trace.shard import MemoryShard, ShardAtom, ShardRef
 from spiritwriter.trace.store import ShardStore
-from spiritwriter.trace.emitter import TraceEmitter
+from spiritwriter.trace.emitter import TraceEmitter, verify_chain
 from spiritwriter.trace.crypto import (
     EncryptedShard, DecryptionError,
     generate_job_key, encrypt_shard, decrypt_shard,
@@ -29,6 +29,7 @@ from spiritwriter.trace.network import (
     NetworkUnavailable, NetworkTimeout, IntegrityError,
     SwarmMismatchError,
 )
+from spiritwriter.trace.visualize import render_trace
 from spiritwriter.trace.canonicalize import (
     EntitySenseSig,
     ResolutionTier,
@@ -86,4 +87,6 @@ __all__ = [
     "canonicalize_batch",
     "normalize_name",
     "fuzzy_score",
+    "verify_chain",
+    "render_trace",
 ]
