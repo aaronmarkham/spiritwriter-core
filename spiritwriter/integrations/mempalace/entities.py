@@ -80,6 +80,17 @@ class EntityBridge:
         person_schema: CanonicalSchema | None = None,
         project_schema: CanonicalSchema | None = None,
     ):
+        """Initialize entity registries.
+
+        Args:
+            db_path: Base path for SQLite databases. Two databases are
+                created using the stem as a prefix:
+                  db_path="~/.mempalace/entities.db"
+                  -> ~/.mempalace/entities_persons.db
+                  -> ~/.mempalace/entities_projects.db
+            person_schema: Custom CanonicalSchema for person resolution.
+            project_schema: Custom CanonicalSchema for project resolution.
+        """
         db_path = Path(db_path).expanduser()
 
         self._person_registry = CanonicalRegistry(
