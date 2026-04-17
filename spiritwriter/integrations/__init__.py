@@ -31,14 +31,20 @@ _discovered = False
 
 
 def _discover() -> None:
-    """Probe for installed memory providers. Safe to call multiple times."""
+    """Probe for installed memory providers. Safe to call multiple times.
+
+    Checks whether the third-party package is importable (not just the
+    spiritwriter integration module, which ships with spiritwriter-core).
+    A provider is only registered if its backing package is installed.
+    """
     global _discovered
     if _discovered:
         return
     _discovered = True
 
-    # MemPalace
+    # MemPalace — only register if the mempalace package is installed
     try:
+        import mempalace  # noqa: F401 — probe only
         from spiritwriter.integrations.mempalace import MemPalaceProvider
         _providers["mempalace"] = MemPalaceProvider()
     except ImportError:

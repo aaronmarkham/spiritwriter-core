@@ -18,6 +18,7 @@ Usage:
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any
 
 from spiritwriter.integrations.base import (
@@ -39,7 +40,7 @@ _mempalace = None
 _mempalace_checked = False
 
 
-def _ensure_mempalace():
+def _ensure_mempalace() -> bool:
     """Lazy-import mempalace. Returns True if available."""
     global _mempalace, _mempalace_checked
     if _mempalace_checked:
@@ -78,7 +79,7 @@ class MemPalaceProvider(RetrievalProvider, StorageProvider, EntityProvider):
             try:
                 from mempalace.version import __version__
                 version = __version__
-            except Exception:
+            except (ImportError, AttributeError):
                 pass
 
         caps = []
@@ -97,9 +98,11 @@ class MemPalaceProvider(RetrievalProvider, StorageProvider, EntityProvider):
         return ProviderInfo(
             name="mempalace",
             version=version,
-            description="Local AI memory with semantic search, temporal "
-                        "knowledge graph, and palace architecture. "
-                        "96.6%% recall on LongMemEval, zero API keys.",
+            description=(
+                "Local AI memory with semantic search, temporal "
+                "knowledge graph, and palace architecture. "
+                "96.6% recall on LongMemEval, zero API keys."
+            ),
             capabilities=caps,
             requires_api_key=False,
             requires_gpu=False,
@@ -115,7 +118,7 @@ class MemPalaceProvider(RetrievalProvider, StorageProvider, EntityProvider):
             palace_path = self._palace_path or self._default_palace_path()
             col = get_collection(palace_path=palace_path)
             return col is not None and col.count() > 0
-        except Exception:
+        except (ImportError, OSError, RuntimeError):
             return False
 
     def _default_palace_path(self) -> str:
@@ -123,8 +126,7 @@ class MemPalaceProvider(RetrievalProvider, StorageProvider, EntityProvider):
         try:
             from mempalace.config import MempalaceConfig
             return MempalaceConfig().palace_path
-        except Exception:
-            import os
+        except (ImportError, OSError, AttributeError):
             return os.path.join(os.path.expanduser("~"), ".mempalace", "palace")
 
     def _get_collection(self):
@@ -141,8 +143,8 @@ class MemPalaceProvider(RetrievalProvider, StorageProvider, EntityProvider):
             try:
                 from mempalace.knowledge_graph import KnowledgeGraph
                 self._kg = KnowledgeGraph()
-            except Exception:
-                pass
+            except (ImportError, OSError) as e:
+                logger.debug("MemPalace knowledge graph unavailable: %s", e)
         return self._kg
 
     # === RetrievalProvider ===
@@ -152,7 +154,8 @@ class MemPalaceProvider(RetrievalProvider, StorageProvider, EntityProvider):
 
         Uses MemPalace's BM25 + vector hybrid search. Results are
         returned as provider-agnostic SearchResult objects with
-        scores normalized to 0.0-1.0 (higher = better).
+        scores normalized to 0.0-1.0 (higher = better, converted
+        from ChromaDB's cosine distance where lower = better).
         """
         if not _ensure_mempalace():
             return []
@@ -160,7 +163,6 @@ class MemPalaceProvider(RetrievalProvider, StorageProvider, EntityProvider):
         try:
             from mempalace.searcher import search as mp_search
         except ImportError:
-            # Fall back to direct ChromaDB query
             return self._search_direct(query)
 
         try:
@@ -174,14 +176,17 @@ class MemPalaceProvider(RetrievalProvider, StorageProvider, EntityProvider):
             )
             return self._convert_results(results, query)
         except TypeError as e:
-            logger.warning("MemPalace searcher API mismatch, falling back to direct: %s", e)
+            logger.warning("MemPalace searcher API mismatch: %s", e)
             return self._search_direct(query)
-        except Exception as e:
-            logger.debug("MemPalace search fell back to direct: %s", e)
+        except (OSError, RuntimeError) as e:
+            logger.debug("MemPalace searcher unavailable, using direct: %s", e)
             return self._search_direct(query)
 
     def _search_direct(self, query: SearchQuery) -> list[SearchResult]:
-        """Direct ChromaDB query when MemPalace searcher isn't available."""
+        """Direct ChromaDB query when MemPalace searcher isn't available.
+
+        Applies the same wing/room filters as the primary search path.
+        """
         col = self._get_collection()
         if col is None:
             return []
@@ -189,6 +194,8 @@ class MemPalaceProvider(RetrievalProvider, StorageProvider, EntityProvider):
         where_filter = {}
         if query.filters.get("wing"):
             where_filter["wing"] = query.filters["wing"]
+        if query.filters.get("room"):
+            where_filter["room"] = query.filters["room"]
 
         kwargs: dict[str, Any] = {
             "query_texts": [query.text],
@@ -210,8 +217,6 @@ class MemPalaceProvider(RetrievalProvider, StorageProvider, EntityProvider):
         if isinstance(results, list):
             for i, r in enumerate(results):
                 if isinstance(r, dict):
-                    # Normalize score: MemPalace uses distance (lower=better)
-                    # Convert to similarity (higher=better)
                     distance = r.get("distance", r.get("score", 0.5))
                     score = max(0.0, 1.0 - float(distance))
                     out.append(SearchResult(
@@ -283,7 +288,8 @@ class MemPalaceProvider(RetrievalProvider, StorageProvider, EntityProvider):
         try:
             col.delete(ids=[document_id])
             return True
-        except Exception:
+        except (RuntimeError, ValueError) as e:
+            logger.warning("Failed to delete drawer %s: %s", document_id, e)
             return False
 
     def count(self) -> int:
@@ -291,18 +297,11 @@ class MemPalaceProvider(RetrievalProvider, StorageProvider, EntityProvider):
         return col.count() if col else 0
 
     def check_duplicate(self, text: str, threshold: float = 0.9) -> str | None:
-        """Check for near-duplicate using MemPalace's dedup."""
-        if not _ensure_mempalace():
-            return None
-        try:
-            from mempalace.dedup import check_duplicate as mp_check
-            return mp_check(text, threshold=threshold)
-        except (ImportError, Exception):
-            # Fall back to direct similarity check
-            results = self.search(SearchQuery(text=text, top_k=1))
-            if results and results[0].score >= threshold:
-                return results[0].document_id
-            return None
+        """Check for near-duplicate via similarity search."""
+        results = self.search(SearchQuery(text=text, top_k=1))
+        if results and results[0].score >= threshold:
+            return results[0].document_id
+        return None
 
     # === EntityProvider ===
 
@@ -348,7 +347,8 @@ class MemPalaceProvider(RetrievalProvider, StorageProvider, EntityProvider):
         try:
             kg.invalidate(subject, predicate, obj, ended=ended)
             return True
-        except Exception:
+        except (RuntimeError, ValueError) as e:
+            logger.warning("Failed to invalidate triple: %s", e)
             return False
 
     def entity_stats(self) -> dict[str, int]:
@@ -357,5 +357,5 @@ class MemPalaceProvider(RetrievalProvider, StorageProvider, EntityProvider):
             return {}
         try:
             return kg.stats()
-        except Exception:
+        except (RuntimeError, AttributeError):
             return {}

@@ -28,15 +28,18 @@ What MemPalace keeps:
 from __future__ import annotations
 
 import json
-import hashlib
 import logging
 from pathlib import Path
 from typing import Any
 
 from spiritwriter.trace.shard import MemoryShard, ShardAtom, AtomKind, DecayClass
 from spiritwriter.trace.store import ShardStore
+from spiritwriter.trace.crypto import DecryptionError
 
 logger = logging.getLogger(__name__)
+
+# Sidecar index filename for persistent drawer_id → shard_id mapping
+_INDEX_FILENAME = "drawer_index.json"
 
 
 class ShardBackend:
@@ -48,6 +51,9 @@ class ShardBackend:
 
     Optionally wraps a ChromaDB collection for vector search — the shard
     store handles persistence and trust, ChromaDB handles embeddings.
+
+    The drawer_id to shard_id mapping is persisted as a sidecar JSON
+    index alongside the shard store, so encrypted stores survive restarts.
     """
 
     def __init__(
@@ -69,21 +75,47 @@ class ShardBackend:
             scope_prefix: Shard scope prefix (default "palace").
             tracer: Optional TraceEmitter for provenance logging.
         """
-        self._store = ShardStore(Path(store_path).expanduser())
+        self._root = Path(store_path).expanduser()
+        self._store = ShardStore(self._root)
         self._chroma = chroma_collection
         self._encryption_key = encryption_key
         self._scope_prefix = scope_prefix
         self._tracer = tracer
-        # drawer_id → shard_id mapping
+        # drawer_id → shard_id mapping (persisted to disk)
         self._id_map: dict[str, str] = {}
-        self._rebuild_id_map()
+        self._index_path = self._root / _INDEX_FILENAME
+        self._load_id_map()
 
-    def _rebuild_id_map(self) -> None:
-        """Rebuild drawer_id → shard_id mapping from store."""
+    def _load_id_map(self) -> None:
+        """Load drawer_id → shard_id mapping from persistent index.
+
+        Falls back to scanning plaintext shards if no index exists
+        (first run or migration from unencrypted store).
+        """
+        if self._index_path.exists():
+            try:
+                self._id_map = json.loads(
+                    self._index_path.read_text(encoding="utf-8")
+                )
+                return
+            except (json.JSONDecodeError, OSError) as e:
+                logger.warning("Failed to load drawer index, rebuilding: %s", e)
+
+        # Fallback: scan plaintext shards (won't find encrypted ones,
+        # but handles migration from a pre-index store)
         for shard in self._store.iter_all():
             drawer_id = shard.meta.get("drawer_id")
             if drawer_id:
                 self._id_map[drawer_id] = shard.shard_id
+        self._save_id_map()
+
+    def _save_id_map(self) -> None:
+        """Persist drawer_id → shard_id mapping to disk."""
+        self._index_path.parent.mkdir(parents=True, exist_ok=True)
+        self._index_path.write_text(
+            json.dumps(self._id_map, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
 
     def _drawer_to_shard(
         self, text: str, drawer_id: str, metadata: dict[str, Any] | None = None
@@ -153,6 +185,16 @@ class ShardBackend:
 
         return shard_id
 
+    def _resolve_shard(self, shard_id: str) -> MemoryShard | None:
+        """Retrieve a shard, decrypting if needed."""
+        if self._encryption_key:
+            try:
+                return self._store.decrypt_and_get(shard_id, self._encryption_key)
+            except (DecryptionError, KeyError) as e:
+                logger.warning("Failed to decrypt shard %s: %s", shard_id[:12], e)
+                return None
+        return self._store.get(shard_id)
+
     # === BaseCollection interface ===
 
     def add(
@@ -169,6 +211,8 @@ class ShardBackend:
             shard = self._drawer_to_shard(text, drawer_id, meta)
             shard_id = self._store_shard(shard)
             self._id_map[drawer_id] = shard_id
+
+        self._save_id_map()
 
         # Also index in ChromaDB for vector search
         if self._chroma is not None:
@@ -203,11 +247,18 @@ class ShardBackend:
             shard_id = self._store_shard(shard)
             self._id_map[drawer_id] = shard_id
 
+        self._save_id_map()
+
         if self._chroma is not None:
             self._chroma.upsert(documents=documents, ids=ids, metadatas=metas)
 
     def update(self, **kwargs: Any) -> None:
-        """Update existing drawers."""
+        """Update existing drawers.
+
+        With documents: full content upsert (creates new shard with lineage).
+        Metadata-only: creates a new shard with updated meta and links to
+        the previous version via parent_shard_id (shards are immutable).
+        """
         ids = kwargs.get("ids", [])
         documents = kwargs.get("documents")
         metadatas = kwargs.get("metadatas")
@@ -216,12 +267,27 @@ class ShardBackend:
             metas = metadatas or [{}] * len(ids)
             self.upsert(documents=documents, ids=ids, metadatas=metas)
         elif metadatas:
-            # Metadata-only update — update shard meta without new content
-            for drawer_id, meta in zip(ids, metadatas):
-                if drawer_id in self._id_map:
-                    shard = self._store.get(self._id_map[drawer_id])
-                    if shard:
-                        shard.meta.update(meta)
+            # Metadata-only update. Shards are content-addressed so
+            # changing only meta (which is excluded from shard_id) won't
+            # produce a new ID. We force-write the updated JSON to the
+            # same path, preserving the content address guarantee while
+            # allowing mutable metadata on the shard envelope.
+            for drawer_id, new_meta in zip(ids, metadatas):
+                if drawer_id not in self._id_map:
+                    raise KeyError(f"Drawer {drawer_id} not found")
+                shard_id = self._id_map[drawer_id]
+                shard = self._resolve_shard(shard_id)
+                if shard is None:
+                    raise KeyError(f"Shard {shard_id[:12]} not found for drawer {drawer_id}")
+
+                # Merge new metadata and force-write
+                shard.meta.update(new_meta)
+                shard.meta["drawer_id"] = drawer_id
+                path = self._store._shard_path(shard_id)
+                if self._encryption_key:
+                    self._store.encrypt_and_store(shard, self._encryption_key)
+                else:
+                    path.write_text(shard.to_json(), encoding="utf-8")
 
         if self._chroma is not None:
             self._chroma.update(**kwargs)
@@ -229,7 +295,9 @@ class ShardBackend:
     def query(self, **kwargs: Any) -> dict[str, Any]:
         """Query via ChromaDB (vector search) with shard-backed results.
 
-        If ChromaDB isn't configured, falls back to metadata scan.
+        If ChromaDB isn't configured, falls back to metadata scan with
+        keyword overlap scoring. Supports wing and room filtering via
+        the 'where' parameter.
         """
         if self._chroma is not None:
             return self._chroma.query(**kwargs)
@@ -237,6 +305,7 @@ class ShardBackend:
         # Fallback: basic text matching on shard atoms
         query_texts = kwargs.get("query_texts", [])
         n_results = kwargs.get("n_results", 10)
+        where = kwargs.get("where", {})
 
         if not query_texts:
             return {"documents": [[]], "ids": [[]], "distances": [[]], "metadatas": [[]]}
@@ -248,6 +317,16 @@ class ShardBackend:
             drawer_id = shard.meta.get("drawer_id")
             if not drawer_id:
                 continue
+
+            # Apply where filters (wing, room, etc.)
+            skip = False
+            for filter_key, filter_val in where.items():
+                if shard.meta.get(filter_key) != filter_val:
+                    skip = True
+                    break
+            if skip:
+                continue
+
             text = shard.atoms[0].text if shard.atoms else ""
             # Simple keyword overlap score
             words = set(query_lower.split())
@@ -275,14 +354,7 @@ class ShardBackend:
         for drawer_id in ids:
             shard_id = self._id_map.get(drawer_id)
             if shard_id:
-                if self._encryption_key:
-                    try:
-                        shard = self._store.decrypt_and_get(shard_id, self._encryption_key)
-                    except Exception:
-                        continue
-                else:
-                    shard = self._store.get(shard_id)
-
+                shard = self._resolve_shard(shard_id)
                 if shard:
                     text = shard.atoms[0].text if shard.atoms else ""
                     documents.append(text)
@@ -301,6 +373,8 @@ class ShardBackend:
             shard_id = self._id_map.pop(drawer_id, None)
             if shard_id:
                 self._store.delete(shard_id)
+
+        self._save_id_map()
 
         if self._chroma is not None:
             self._chroma.delete(**kwargs)
@@ -329,7 +403,7 @@ class ShardBackend:
         history = []
         current_id = shard_id
         while current_id:
-            shard = self._store.get(current_id)
+            shard = self._resolve_shard(current_id)
             if shard is None:
                 break
             history.append(shard)
