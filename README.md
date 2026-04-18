@@ -74,7 +74,7 @@ sealed = seal_shard(shard, keypair.public_key)
 decrypted = unseal_shard(sealed, keypair.private_key)
 ```
 
-## Entity Resolution
+## Entity Resolution (Phalanx)
 
 ```python
 from spiritwriter.trace.canonicalize import CanonicalRegistry, CanonicalSchema
@@ -85,9 +85,10 @@ schema = CanonicalSchema(
     fuzzy_fields={"last_name": 0.90, "first_name": 0.80},
 )
 
+candidate = {"last_name": "Smith", "first_name": "John", "dob": "1990-05-12"}
 with CanonicalRegistry("/tmp/people.db", schema) as registry:
-    result = registry.resolve({"last_name": "Smith", "first_name": "John", "dob": "1990-05-12"})
-    cid = registry.upsert(result_dict, result, "source_a", "001")
+    result = registry.resolve(candidate)
+    cid = registry.upsert(candidate, result, "source_a", "001")
 ```
 
 ## Documentation

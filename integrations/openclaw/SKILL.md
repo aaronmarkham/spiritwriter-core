@@ -3,7 +3,7 @@ name: spiritwriter
 description: "Local-first agent memory — content-addressed shards, encryption, entity resolution, provenance. No third-party services. Your intents and memories stay on your machine."
 version: 0.1.0
 homepage: https://github.com/aaronmarkham/spiritwriter-core
-user-invocable: true
+user-invocable: false
 metadata:
   openclaw:
     emoji: "\U0001F9E0"
@@ -33,13 +33,30 @@ metadata:
 
 spiritwriter-core was built because agent memory shouldn't cost $100/day in token burn, and your intents shouldn't flow through third-party services. It gives your agent structured, encrypted, content-addressed memory — stored locally, recalled efficiently, with a full provenance chain.
 
-Built by and for OpenClaw agents. Lilit (Aaron's OpenClaw agent) has been the primary user since February 2026.
+Battle-tested in production since February 2026 with OpenClaw agents.
 
 ## Why This Exists
 
 Most AI memory systems store raw conversation text and replay it into context. That's expensive (hundreds of tokens per recall) and sends your intents through external services. spiritwriter stores **structured atoms** — entity/key/value triples — so your agent recalls only what it needs. A 500-token conversation chunk becomes a 50-token shard with the same information.
 
-No API keys. No cloud services. No telemetry. Your memory, your machine.
+No API keys. No cloud services. No telemetry. Your memory, your machine. IPFS distribution is opt-in for multi-agent sharing; core memory is always local.
+
+## Getting Started with OpenClaw
+
+spiritwriter is a Python library, not a CLI tool. Your agent uses it via Python API calls — typically in hooks or agent code that runs alongside your OpenClaw session.
+
+```bash
+# Install
+pip install spiritwriter-core
+
+# From your agent code or hooks:
+from spiritwriter.trace.shard import MemoryShard, ShardAtom, AtomKind
+from spiritwriter.trace.store import ShardStore
+
+store = ShardStore("~/.openclaw/shards")
+```
+
+spiritwriter works with whatever vector DB your OpenClaw agent already uses. If you also install MemPalace, spiritwriter auto-discovers it and adds semantic search over shards — see the `mempalace` integration skill.
 
 ## What Your Agent Gets
 
@@ -65,7 +82,7 @@ shard = MemoryShard(
                   key="session_backend", value="postgresql"),
     ],
     scope="project:myproject",
-    origin="lilit",
+    origin="my-agent",
     decay_class=DecayClass.STABLE,
 )
 
@@ -95,7 +112,7 @@ latest = store.resolve_ref("project-myproject")
 ### Encryption (your memory, not theirs)
 
 ```python
-from spiritwriter.trace.crypto import generate_job_key, encrypt_shard
+from spiritwriter.trace.crypto import generate_job_key
 
 # AES-256-GCM — encrypt at rest
 key = generate_job_key()
@@ -121,10 +138,12 @@ schema = CanonicalSchema(
 
 with CanonicalRegistry("~/.openclaw/entities.db", schema) as registry:
     # Session 1: "my son Max had a swim meet"
-    r1 = registry.resolve({"name": "Max", "relationship": "son"})
+    result = registry.resolve({"name": "Max", "relationship": "son"})
+    registry.upsert({"name": "Max", "relationship": "son"},
+                     result, source_name="chat", source_id="session-1")
 
     # Session 47: "Max's chess tournament is Saturday"
-    r2 = registry.resolve({"name": "Max", "relationship": "son"})
+    result = registry.resolve({"name": "Max", "relationship": "son"})
     # T1 exact match — same canonical entity across conversations
 ```
 
@@ -133,7 +152,7 @@ with CanonicalRegistry("~/.openclaw/entities.db", schema) as registry:
 ```python
 from spiritwriter.trace.emitter import TraceEmitter, verify_chain
 
-tracer = TraceEmitter(run_id="session-42", agent_id="lilit",
+tracer = TraceEmitter(run_id="session-42", agent_id="my-agent",
                       out_path="~/.openclaw/trace.jsonl")
 tracer.shard_created(shard.shard_id, shard.scope, len(shard.atoms))
 
@@ -143,7 +162,7 @@ assert verify_chain(tracer.get_events())
 
 ## With MemPalace
 
-If [MemPalace](https://github.com/MemPalace/mempalace) is also installed, spiritwriter auto-discovers it and adds semantic search over your shards. MemPalace handles retrieval (vector search, BM25 reranking), spiritwriter handles trust (encryption, provenance, entity resolution). See the `spiritwriter-mempalace` integration skill for details.
+If [MemPalace](https://github.com/MemPalace/mempalace) is also installed, spiritwriter auto-discovers it and adds semantic search over your shards. MemPalace handles retrieval (vector search, BM25 reranking), spiritwriter handles trust (encryption, provenance, entity resolution). See the `mempalace` integration skill for details.
 
 ```bash
 pip install spiritwriter-core[mempalace]
