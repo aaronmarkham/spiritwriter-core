@@ -505,6 +505,41 @@ class TestFalseMerge:
             f"Empty role should fuzzy-match, got {r2.tier.value}"
         )
 
+    def test_case_insensitive_no_contradiction(self, tmp_path):
+        """'Founder' vs 'FOUNDER' must not contradict."""
+        schema = CanonicalSchema(
+            name="person",
+            ess_fields=["name", "role"],
+            fuzzy_fields={"name": 0.85},
+        )
+        registry = CanonicalRegistry(tmp_path / "test.db", schema)
+
+        c1 = {"name": "Aaron", "role": "Founder"}
+        r1 = registry.resolve(c1)
+        registry.upsert(c1, r1, "test", "s1")
+
+        c2 = {"name": "Aaron", "role": "FOUNDER"}
+        r2 = registry.resolve(c2)
+        assert r2.tier == ResolutionTier.T1_EXACT
+
+    def test_whitespace_only_no_contradiction(self, tmp_path):
+        """Whitespace-only role must not contradict a real role."""
+        schema = CanonicalSchema(
+            name="person",
+            ess_fields=["name", "role"],
+            fuzzy_fields={"name": 0.85},
+        )
+        registry = CanonicalRegistry(tmp_path / "test.db", schema)
+
+        c1 = {"name": "Aaron", "role": "founder"}
+        r1 = registry.resolve(c1)
+        registry.upsert(c1, r1, "test", "s1")
+
+        c2 = {"name": "Aaron", "role": "   "}
+        r2 = registry.resolve(c2)
+        # Whitespace-only = effectively empty, should not contradict
+        assert r2.tier != ResolutionTier.NO_MATCH
+
     def test_same_name_same_role_t1(self, tmp_path):
         """Same name + same role = T1 exact."""
         schema = CanonicalSchema(

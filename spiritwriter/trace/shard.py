@@ -289,7 +289,8 @@ class MemoryShard:
         """Render this shard as minimal key=value pairs.
 
         No XML wrapper, no atom kind labels. Just the facts.
-        Typically 2-5x fewer tokens than hydrate_context().
+        Roughly 40-60% fewer characters than hydrate_context(),
+        depending on atom structure.
 
         Use this in token-constrained contexts where every token
         counts (large context assembly, budget-limited agents).
@@ -303,5 +304,7 @@ class MemoryShard:
             elif atom.key:
                 lines.append(f"{atom.key}: {atom.text}")
             else:
+                # Freeform text — entity (if any) is intentionally dropped
+                # since there's no key to anchor it. The text alone is the content.
                 lines.append(atom.text)
         return "\n".join(lines)
