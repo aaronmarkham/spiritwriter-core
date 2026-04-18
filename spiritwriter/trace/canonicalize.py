@@ -450,6 +450,27 @@ class CanonicalRegistry:
             })
             overlap = candidate_ess.overlap(stored_ess)
 
+            # Check for explicit disagreement on non-fuzzy ESS fields.
+            # If an ESS field is present in both candidate and stored
+            # entity but has a different value, that's a strong signal
+            # they're different entities — reject the match.
+            non_fuzzy_ess = [
+                f for f in self.schema.ess_fields
+                if f not in self.schema.fuzzy_fields
+            ]
+            has_contradiction = False
+            for nf in non_fuzzy_ess:
+                cand_val = candidate.get(nf)
+                stored_val = stored_fields.get(nf)
+                if (cand_val is not None and stored_val is not None
+                        and cand_val != "" and stored_val != ""
+                        and str(cand_val).strip().lower() != str(stored_val).strip().lower()):
+                    has_contradiction = True
+                    break
+
+            if has_contradiction:
+                continue  # skip — explicit field disagreement
+
             # Combined score: fuzzy match quality + field overlap
             combined = (avg_score + overlap) / 2
 

@@ -15,6 +15,7 @@ authors = [
 ]
 dependencies = [
     "anthropic>=0.40.0",
+    "cryptography>=41.0.0",
     "keyring>=25.0.0",
     "pymupdf>=1.24.0",
 ]

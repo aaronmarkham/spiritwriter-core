@@ -263,8 +263,10 @@ class MemoryShard:
     def hydrate_context(self) -> str:
         """Render this shard as injectable agent context.
 
-        This is what gets prepended to the agent's prompt when
-        a shard ref is resolved.
+        Full XML-tagged format with atom kind labels. Use this when
+        the consuming agent parses structured context.
+
+        For token-constrained scenarios, use hydrate_compact() instead.
         """
         lines = []
         for atom in self.atoms:
@@ -273,7 +275,7 @@ class MemoryShard:
                 if atom.key:
                     lines.append(f"- **{atom.key}**: {atom.text}")
                 else:
-                    lines.append(f"- ⚡ {atom.text}")
+                    lines.append(f"- {atom.text}")
             elif atom.entity and atom.key and atom.value:
                 lines.append(f"- [{atom.kind.value}] {atom.entity}.{atom.key} = {atom.value}")
             elif atom.entity and atom.key:
@@ -282,3 +284,24 @@ class MemoryShard:
                 lines.append(f"- [{atom.kind.value}] {atom.text}")
         scope_label = self.tags[0] if self.tags else self.scope
         return f"<shard scope=\"{self.scope}\" label=\"{scope_label}\">\n" + "\n".join(lines) + "\n</shard>"
+
+    def hydrate_compact(self) -> str:
+        """Render this shard as minimal key=value pairs.
+
+        No XML wrapper, no atom kind labels. Just the facts.
+        Typically 2-5x fewer tokens than hydrate_context().
+
+        Use this in token-constrained contexts where every token
+        counts (large context assembly, budget-limited agents).
+        """
+        lines = []
+        for atom in self.atoms:
+            if atom.entity and atom.key and atom.value:
+                lines.append(f"{atom.entity}.{atom.key}={atom.value}")
+            elif atom.key and atom.value:
+                lines.append(f"{atom.key}={atom.value}")
+            elif atom.key:
+                lines.append(f"{atom.key}: {atom.text}")
+            else:
+                lines.append(atom.text)
+        return "\n".join(lines)
