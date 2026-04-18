@@ -21,8 +21,12 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Iterator
 
+import logging
+
 from spiritwriter.trace.shard import _canonical_json, _sha256, _now_iso
 from spiritwriter.trace.emitter import TraceEmitter
+
+logger = logging.getLogger(__name__)
 
 
 # ── Normalization utilities ──────────────────────────────────────────
@@ -418,6 +422,13 @@ class CanonicalRegistry:
             "SELECT canonical_id, ess_digest, ess_fields FROM entities"
         ).fetchall()
 
+        # ESS fields not covered by fuzzy matching — these must not
+        # contradict between candidate and stored entity.
+        non_fuzzy_ess = [
+            f for f in self.schema.ess_fields
+            if f not in self.schema.fuzzy_fields
+        ]
+
         best_score = 0.0
         best_entity = None
         best_field_matches: dict[str, bool] = {}
@@ -449,6 +460,29 @@ class CanonicalRegistry:
                 if k in self.schema.ess_fields
             })
             overlap = candidate_ess.overlap(stored_ess)
+
+            # Check for explicit disagreement on non-fuzzy ESS fields.
+            # If an ESS field is present in both candidate and stored
+            # entity but has a different value, that's a strong signal
+            # they're different entities — reject the match.
+            has_contradiction = False
+            for nf in non_fuzzy_ess:
+                cand_raw = candidate.get(nf)
+                stored_raw = stored_fields.get(nf)
+                if cand_raw is None or stored_raw is None:
+                    continue
+                cand_norm = str(cand_raw).strip().lower()
+                stored_norm = str(stored_raw).strip().lower()
+                if cand_norm and stored_norm and cand_norm != stored_norm:
+                    has_contradiction = True
+                    logger.debug(
+                        "skip %s: %s mismatch %r vs %r",
+                        row["canonical_id"][:12], nf, cand_norm, stored_norm,
+                    )
+                    break
+
+            if has_contradiction:
+                continue  # skip — explicit field disagreement
 
             # Combined score: fuzzy match quality + field overlap
             combined = (avg_score + overlap) / 2

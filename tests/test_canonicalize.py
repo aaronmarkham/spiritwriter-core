@@ -233,20 +233,29 @@ class TestResolution:
         assert result.canonical_id is not None
 
     def test_resolution_t3_fuzzy(self, registry):
-        """Fuzzy name + demographics → T3."""
+        """Fuzzy name + same DOB → T3. Different DOB → NO_MATCH."""
         self._seed(registry,
             last_name="Hernandez", first_name="Maria",
             dob="1990-06-20", gender="F", source_id="s1",
         )
+        # Same DOB, misspelled name → fuzzy match
         result = registry.resolve({
             "last_name": "Hernandz",  # misspelling
+            "first_name": "Maria",
+            "dob": "1990-06-20",  # same DOB
+            "gender": "F",
+        })
+        assert result.tier in (ResolutionTier.T3_FUZZY, ResolutionTier.T2_STRONG)
+        assert result.canonical_id is not None
+
+        # Different DOB → non-fuzzy ESS field contradicts → NO_MATCH
+        result2 = registry.resolve({
+            "last_name": "Hernandz",
             "first_name": "Maria",
             "dob": "1990-07-20",  # different DOB
             "gender": "F",
         })
-        # Should match at T3 due to fuzzy name match
-        assert result.tier in (ResolutionTier.T3_FUZZY, ResolutionTier.T2_STRONG)
-        assert result.canonical_id is not None
+        assert result2.tier == ResolutionTier.NO_MATCH
 
     def test_resolution_t4_weak(self, registry):
         """Partial signal only → T4."""
@@ -441,6 +450,113 @@ class TestBatch:
 
 
 # ── Bear Problem Test ────────────────────────────────────────────────
+
+class TestFalseMerge:
+    """Regression: same name, different non-fuzzy ESS fields must NOT merge."""
+
+    def test_same_name_different_role_no_merge(self, tmp_path):
+        """Two people named Aaron with different roles must stay separate."""
+        schema = CanonicalSchema(
+            name="person",
+            ess_fields=["name", "role"],
+            fuzzy_fields={"name": 0.85},
+            context_fields=["project"],
+        )
+        registry = CanonicalRegistry(tmp_path / "test.db", schema)
+
+        # Person 1: Aaron the founder
+        c1 = {"name": "Aaron", "role": "founder", "project": "spiritwriter"}
+        r1 = registry.resolve(c1)
+        assert r1.tier == ResolutionTier.NO_MATCH
+        cid1 = registry.upsert(c1, r1, "test", "s1")
+
+        # Person 2: Aaron the engineer — MUST NOT merge
+        c2 = {"name": "Aaron", "role": "engineer", "project": "mempalace"}
+        r2 = registry.resolve(c2)
+        assert r2.tier == ResolutionTier.NO_MATCH, (
+            f"Expected NO_MATCH for different role, got {r2.tier.value}"
+        )
+        cid2 = registry.upsert(c2, r2, "test", "s2")
+        assert cid1 != cid2
+
+        # Same founder again — MUST match T1
+        r3 = registry.resolve(c1)
+        assert r3.tier == ResolutionTier.T1_EXACT
+
+        assert registry.stats()["entities"] == 2
+
+    def test_same_name_empty_role_fuzzy_ok(self, tmp_path):
+        """Empty role should still fuzzy-match (no contradiction)."""
+        schema = CanonicalSchema(
+            name="person",
+            ess_fields=["name", "role"],
+            fuzzy_fields={"name": 0.85},
+        )
+        registry = CanonicalRegistry(tmp_path / "test.db", schema)
+
+        c1 = {"name": "Aaron", "role": "founder"}
+        r1 = registry.resolve(c1)
+        registry.upsert(c1, r1, "test", "s1")
+
+        # Empty role — no contradiction, fuzzy match is acceptable
+        c2 = {"name": "Aaron", "role": ""}
+        r2 = registry.resolve(c2)
+        assert r2.tier in (ResolutionTier.T2_STRONG, ResolutionTier.T3_FUZZY), (
+            f"Empty role should fuzzy-match, got {r2.tier.value}"
+        )
+
+    def test_case_insensitive_no_contradiction(self, tmp_path):
+        """'Founder' vs 'FOUNDER' must not contradict."""
+        schema = CanonicalSchema(
+            name="person",
+            ess_fields=["name", "role"],
+            fuzzy_fields={"name": 0.85},
+        )
+        registry = CanonicalRegistry(tmp_path / "test.db", schema)
+
+        c1 = {"name": "Aaron", "role": "Founder"}
+        r1 = registry.resolve(c1)
+        registry.upsert(c1, r1, "test", "s1")
+
+        c2 = {"name": "Aaron", "role": "FOUNDER"}
+        r2 = registry.resolve(c2)
+        assert r2.tier == ResolutionTier.T1_EXACT
+
+    def test_whitespace_only_no_contradiction(self, tmp_path):
+        """Whitespace-only role must not contradict a real role."""
+        schema = CanonicalSchema(
+            name="person",
+            ess_fields=["name", "role"],
+            fuzzy_fields={"name": 0.85},
+        )
+        registry = CanonicalRegistry(tmp_path / "test.db", schema)
+
+        c1 = {"name": "Aaron", "role": "founder"}
+        r1 = registry.resolve(c1)
+        registry.upsert(c1, r1, "test", "s1")
+
+        c2 = {"name": "Aaron", "role": "   "}
+        r2 = registry.resolve(c2)
+        # Whitespace-only = effectively empty, should not contradict
+        assert r2.tier != ResolutionTier.NO_MATCH
+
+    def test_same_name_same_role_t1(self, tmp_path):
+        """Same name + same role = T1 exact."""
+        schema = CanonicalSchema(
+            name="person",
+            ess_fields=["name", "role"],
+            fuzzy_fields={"name": 0.85},
+        )
+        registry = CanonicalRegistry(tmp_path / "test.db", schema)
+
+        c1 = {"name": "Max", "role": "son"}
+        r1 = registry.resolve(c1)
+        registry.upsert(c1, r1, "test", "s1")
+
+        c2 = {"name": "Max", "role": "son"}
+        r2 = registry.resolve(c2)
+        assert r2.tier == ResolutionTier.T1_EXACT
+
 
 class TestBearProblem:
     def test_bear_problem(self):

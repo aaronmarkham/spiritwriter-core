@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "spiritwriter-core"
-version = "0.4.0"
+version = "0.4.1"
 description = "Shared foundation for AI content pipelines — knowledge base, document ingestion, secrets, LLM abstraction"
 readme = "README.md"
 license = {text = "Apache-2.0"}
@@ -15,6 +15,7 @@ authors = [
 ]
 dependencies = [
     "anthropic>=0.40.0",
+    "cryptography>=41.0.0",
     "keyring>=25.0.0",
     "pymupdf>=1.24.0",
 ]

@@ -172,8 +172,48 @@ class TestMemoryShard:
         )
         ctx = shard.hydrate_context()
         assert "**inject figure**:" in ctx  # keyed instruction
-        assert "⚡ Generic instruction" in ctx  # unkeyed instruction
+        assert "Generic instruction" in ctx  # unkeyed instruction
         assert "[fact]" in ctx  # regular fact unchanged
+
+    def test_hydrate_compact(self):
+        shard = MemoryShard(
+            atoms=[
+                ShardAtom(text="Project uses FastAPI", kind=AtomKind.FACT,
+                          entity="myproject", key="framework", value="FastAPI"),
+                ShardAtom(text="No Friday deploys", kind=AtomKind.CONVENTION,
+                          entity="team", key="deploy_policy", value="no-friday"),
+                ShardAtom(text="Some context", kind=AtomKind.CONTEXT),
+            ],
+            scope="project:test",
+            origin="agent:test",
+        )
+        compact = shard.hydrate_compact()
+        # No XML tags
+        assert "<shard" not in compact
+        assert "</shard>" not in compact
+        # No atom kind labels
+        assert "[fact]" not in compact
+        assert "[convention]" not in compact
+        # Key=value pairs present
+        assert "myproject.framework=FastAPI" in compact
+        assert "team.deploy_policy=no-friday" in compact
+        # Freeform text included as-is
+        assert "Some context" in compact
+
+    def test_hydrate_compact_fewer_tokens(self):
+        shard = MemoryShard(
+            atoms=[
+                ShardAtom(text="A", kind=AtomKind.FACT,
+                          entity="e", key="k1", value="v1"),
+                ShardAtom(text="B", kind=AtomKind.FACT,
+                          entity="e", key="k2", value="v2"),
+            ],
+            scope="test",
+            origin="test",
+        )
+        full = shard.hydrate_context()
+        compact = shard.hydrate_compact()
+        assert len(compact) < len(full)
 
     def test_parent_shard_tracking(self):
         s1 = self._make_shard()
