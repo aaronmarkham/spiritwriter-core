@@ -11,3 +11,10 @@ venv/
 .mypy_cache/
 *.so
 .DS_Store
+
+# MemPalace artifacts (created by mempalace init/mine)
+entities.json
+mempalace.yaml
+
+# Claude Code
+.claude/
