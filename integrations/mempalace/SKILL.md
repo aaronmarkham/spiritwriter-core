@@ -1,6 +1,6 @@
 ---
-name: spiritwriter
-description: "spiritwriter-core — Content-addressed agent memory with encryption, entity resolution, provenance, and distribution. Trust layer for AI memory systems."
+name: mempalace
+description: "spiritwriter + MemPalace integration — adds content addressing, encryption, entity resolution (Phalanx), and provenance to MemPalace drawers. Install both, they find each other."
 version: 0.4.0
 homepage: https://github.com/aaronmarkham/spiritwriter-core
 user-invocable: true
