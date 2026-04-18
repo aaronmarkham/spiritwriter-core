@@ -136,9 +136,9 @@ spiritwriter/
 
 ## Used By
 
-- **[frio](https://github.com/aaronmarkham/frio)** — Zero-knowledge jail roster monitoring (encrypted search shards, fuzzy name matching)
-- **[perseus-news](https://github.com/aaronmarkham/perseus-news)** — Dual-perspective news analysis with cross-consumer shard sharing
-- **[claude-studio-producer](https://github.com/aaronmarkham/claude-studio-producer)** — Multi-agent video production with hierarchical memory
+- **[frio](https://frio.help)** — Zero-knowledge jail roster monitoring (encrypted search shards, fuzzy name matching)
+- **[texascrime.org](https://texascrime.org)** — Dual-perspective enforcement news with cross-consumer shard sharing
+- **[podcasts.spiritwriter.ai](https://podcasts.spiritwriter.ai)** — AI-generated podcasts from multi-agent video production
 
 ## Tests
 

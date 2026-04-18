@@ -1,12 +1,12 @@
 ---
-name: mempalace
-description: "spiritwriter + MemPalace integration — adds content addressing, encryption, entity resolution (Phalanx), and provenance to MemPalace drawers. Install both, they find each other."
-version: 0.4.0
+name: spiritwriter-mempalace
+description: "Bridge between spiritwriter and MemPalace — content addressing, encryption, and entity resolution for MemPalace drawers; semantic search for spiritwriter shards. Install both, they find each other."
+version: 0.1.0
 homepage: https://github.com/aaronmarkham/spiritwriter-core
 user-invocable: true
 metadata:
   openclaw:
-    emoji: "\U0001F9E0"
+    emoji: "\U0001F517"
     os:
       - darwin
       - linux
@@ -15,76 +15,111 @@ metadata:
       anyBins:
         - python3
     install:
-      - id: spiritwriter-pip
-        kind: pip
-        label: "Install spiritwriter-core (memory shards, encryption, entity resolution)"
-        package: spiritwriter-core
-      - id: spiritwriter-sealed
-        kind: pip
-        label: "Install with sealed-box encryption (NaCl)"
-        package: "spiritwriter-core[sealed]"
       - id: spiritwriter-mempalace
         kind: pip
-        label: "Install with MemPalace integration"
+        label: "Install spiritwriter-core + MemPalace"
         package: "spiritwriter-core[mempalace]"
-      - id: spiritwriter-full
-        kind: pip
-        label: "Install everything (sealed + network + mempalace)"
-        package: "spiritwriter-core[sealed,network,mempalace]"
 ---
 
-# spiritwriter-core — Trust Layer for AI Memory
+# spiritwriter + MemPalace
 
-Content-addressed agent memory with encryption, entity resolution, hash-chained provenance, and IPFS distribution. Designed to complement retrieval systems like MemPalace, Mem0, and Zep.
+Two systems, complementary strengths, zero overlap:
 
-## What spiritwriter-core adds to your memory system
-
-| Capability | What it does |
+| MemPalace owns | spiritwriter owns |
 |---|---|
-| **Content addressing** | SHA-256 hashes — tamper detection, free dedup, immutable history |
-| **AES-256-GCM encryption** | Encrypt memory at rest, share via entitlement tokens |
-| **NaCl sealed boxes** | Zero-knowledge storage — operator can't read the data |
-| **Entity resolution (CMC-Lite)** | Deduplicate people/entities across conversations with tiered confidence |
-| **Hash-chained provenance** | Tamper-evident audit trail of every memory read/write |
-| **Entitlements** | Scoped access tokens with capability checks and budget tracking |
-| **IPFS distribution** | Share memory across nodes via private swarm |
-| **Decay lifecycle** | Automatic TTL management (permanent/stable/active/session) |
+| Semantic search (ChromaDB embeddings) | Content-addressed storage (SHA-256) |
+| BM25 keyword reranking | AES-256-GCM / NaCl encryption |
+| Palace navigation (wings/rooms/drawers) | Entitlements & scoped access control |
+| AAAK compression dialect | Entity resolution (Phalanx / CMC-Lite) |
+| L0-L3 memory wake-up stack | Hash-chained provenance |
+| Knowledge graph (SQLite) | IPFS distribution |
 
-## With MemPalace
+Install both and they discover each other automatically. Install order doesn't matter.
 
-If MemPalace is installed, spiritwriter auto-discovers it and enables:
+```bash
+pip install spiritwriter-core mempalace
+# or: pip install spiritwriter-core[mempalace]
+```
 
-### Shard-backed drawers (content addressing for every memory)
+## What Changes When Both Are Installed
+
+### MemPalace gains
+
+**Content addressing** — every drawer gets a SHA-256 content address. Tamper detection and free deduplication without embedding comparisons.
+
+**Encryption at rest** — AES-256-GCM or NaCl sealed boxes for the entire palace. Same MemPalace API, encrypted on disk.
+
+**Entity resolution across conversations** — MemPalace's entity_registry.py does regex disambiguation ("is 'Max' a person or a word?"). Phalanx adds tiered confidence matching so "Max" in session 1 and "Max" in session 47 are linked as the same canonical entity.
+
+**Revision history** — upserts create lineage chains via parent_shard_id. Walk the full edit history of any drawer.
+
+**Provenance** — hash-chained JSONL audit trail of every memory read/write.
+
+### spiritwriter gains
+
+**Semantic search** — shards are retrievable by natural language query, not just content address or scope. MemPalace's hybrid BM25 + vector search finds relevant shards without knowing their IDs.
+
+**Knowledge graph** — MemPalace's temporal entity-relationship graph (subject/predicate/object with valid_from/valid_to) is accessible through spiritwriter's EntityProvider protocol.
+
+## Usage
+
+### Auto-discovery
+
+```python
+from spiritwriter.integrations import available_providers, get_provider
+
+# Both installed — MemPalace auto-discovered
+providers = available_providers()  # {"mempalace": <MemPalaceProvider>}
+
+mp = get_provider("mempalace")
+print(mp.is_available())  # True if a palace exists with drawers
+print(mp.count())         # number of drawers
+```
+
+### Semantic search over shards
+
+```python
+from spiritwriter.integrations.base import SearchQuery
+
+results = mp.search(SearchQuery(text="database migration", top_k=5))
+for r in results:
+    print(f"{r.score:.3f} | {r.text[:80]}...")
+```
+
+### Shard-backed drawers
 
 ```python
 from spiritwriter.integrations.mempalace import ShardBackend
 
-# Use as MemPalace storage backend — every drawer gets a content address
 backend = ShardBackend("~/.mempalace/shards")
+
 backend.add(
-    documents=["Max had his first swim meet today. He was nervous but did great."],
+    documents=["Max had his first swim meet today."],
     ids=["drawer_001"],
-    metadatas=[{"wing": "wing_alice", "room": "swimming"}],
+    metadatas=[{"wing": "family", "room": "swimming"}],
 )
 
-# Check drawer provenance
-shard_id = backend.get_shard_id("drawer_001")
-print(shard_id)  # SHA-256 content address
+# Content address
+print(backend.get_shard_id("drawer_001"))  # SHA-256
 
-# Get revision history
+# Revision history
+backend.upsert(
+    documents=["Max won his second swim meet — backstroke PB!"],
+    ids=["drawer_001"],
+    metadatas=[{"wing": "family", "room": "swimming"}],
+)
 history = backend.get_drawer_history("drawer_001")
+# [latest, original] — linked via parent_shard_id
 ```
 
-### Encrypted palaces (zero-knowledge memory)
+### Encrypted palace
 
 ```python
 from spiritwriter.trace.crypto import generate_job_key
 
 key = generate_job_key()
-backend = ShardBackend(
-    "~/.mempalace/shards",
-    encryption_key=key,  # all drawers encrypted at rest
-)
+backend = ShardBackend("~/.mempalace/shards", encryption_key=key)
+# Same API. Encrypted on disk. Survives restarts.
 ```
 
 ### Cross-conversation entity resolution
@@ -92,70 +127,41 @@ backend = ShardBackend(
 ```python
 from spiritwriter.integrations.mempalace import EntityBridge
 
-bridge = EntityBridge()
+bridge = EntityBridge("~/.mempalace/entities.db")
 
-# Session 1: "my son Max had a swim meet"
-r1 = bridge.resolve_person("Max", context={"relationship": "son", "wing": "wing_alice"})
+# Session 1
+r1 = bridge.resolve_person("Max", context={
+    "wing": "family", "relationship": "son",
+}, source_id="session_01")
 
-# Session 47: "Max's chess tournament is Saturday"
-r2 = bridge.resolve_person("Max", context={"relationship": "son", "wing": "wing_alice"})
+# Session 47 — same person, different room
+r2 = bridge.resolve_person("Max", context={
+    "wing": "family", "relationship": "son",
+}, source_id="session_47")
 
-# Same canonical entity — linked across conversations
-assert r1.canonical_id == r2.canonical_id  # True (T1 exact match)
+print(r2.tier)        # T1_EXACT
+print(r2.confidence)  # 0.95
 ```
 
-### Semantic search over shards
+## Overhead
 
-```python
-from spiritwriter.integrations import get_provider
+Benchmarked with the provider harness (`benchmarks/bench_providers.py`):
 
-mp = get_provider("mempalace")
-if mp and mp.is_available():
-    results = mp.search(SearchQuery(text="Max's swimming"))
-    for r in results:
-        print(r.text, r.score)
-```
+| Operation | Overhead |
+|---|---|
+| Content addressing per drawer | ~9ms |
+| Encryption per drawer | +0.2ms |
+| Drawer retrieval | 0.6ms avg |
+| Entity resolution (known) | 0.022ms |
 
-## Without MemPalace (standalone)
+MemPalace's 96.6% recall is unchanged. spiritwriter adds the trust layer for ~9ms per write.
 
-spiritwriter-core works independently as a memory shard system:
+## Token Efficiency
 
-```python
-from spiritwriter.trace.shard import MemoryShard, ShardAtom, AtomKind
-from spiritwriter.trace.store import ShardStore
+MemPalace stores verbatim text and returns full conversation chunks (~500 tokens per hit). spiritwriter stores structured atoms and hydrates only what's needed (~50 tokens per shard). When used together, you get MemPalace's retrieval quality with spiritwriter's context efficiency — same recall, fewer tokens burned.
 
-store = ShardStore("~/.myapp/shards")
-shard = MemoryShard(
-    atoms=[ShardAtom(text="Project uses FastAPI", kind=AtomKind.FACT,
-                     entity="myproject", key="framework", value="FastAPI")],
-    scope="project:myapp",
-    origin="dev-agent",
-)
-ref = store.put(shard)
-```
-
-## Provider Protocol
-
-Any memory system can integrate with spiritwriter by implementing the provider protocol:
-
-```python
-from spiritwriter.integrations.base import RetrievalProvider, SearchQuery, SearchResult
-
-class MyMemoryProvider(RetrievalProvider):
-    def info(self):
-        return ProviderInfo(name="mymemory", version="1.0", ...)
-
-    def search(self, query: SearchQuery) -> list[SearchResult]:
-        # Your retrieval logic here
-        ...
-```
-
-Register it:
-```python
-from spiritwriter.integrations import register_provider
-register_provider("mymemory", MyMemoryProvider())
-```
+Benchmarks for token savings are in progress.
 
 ## License
 
-Apache 2.0
+spiritwriter-core: Apache 2.0. MemPalace: MIT. Fully compatible.
