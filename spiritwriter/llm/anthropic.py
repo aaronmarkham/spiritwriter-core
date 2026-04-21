@@ -12,7 +12,7 @@ from spiritwriter.secrets import get_api_key
 from .base import LLMProvider
 
 
-DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-20250514"
+DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-6"
 
 
 class AnthropicProvider(LLMProvider):

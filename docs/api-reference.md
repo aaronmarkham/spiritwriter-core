@@ -611,7 +611,7 @@ LLM provider abstraction with automatic SDK fallback.
 
 ### `AnthropicProvider(debug=False, model=None)`
 
-Concrete Anthropic/Claude implementation. Tries Claude Agent SDK first, falls back to Anthropic SDK. `model` defaults to `DEFAULT_ANTHROPIC_MODEL` (currently `claude-sonnet-4-20250514`). Individual calls can override by passing `model=` in `**kwargs`.
+Concrete Anthropic/Claude implementation. Tries Claude Agent SDK first, falls back to Anthropic SDK. `model` defaults to `DEFAULT_ANTHROPIC_MODEL` (currently `claude-sonnet-4-6`). Individual calls can override by passing `model=` in `**kwargs`.
 
 - `async query(prompt, system_prompt=None, return_usage=False, model=None) -> str | tuple[str, dict]` — Text query (max_tokens: 16384)
 - `async query_with_image(prompt, image_data, system_prompt=None, return_usage=False, model=None) -> str | tuple[str, dict]` — Vision query (supports JPEG, PNG, GIF, WebP; max_tokens: 4096)
