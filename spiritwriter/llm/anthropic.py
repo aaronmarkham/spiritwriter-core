@@ -12,14 +12,18 @@ from spiritwriter.secrets import get_api_key
 from .base import LLMProvider
 
 
+DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-6"
+
+
 class AnthropicProvider(LLMProvider):
     """
     Anthropic Claude LLM provider that implements the LLMProvider interface
     Handles all the message object parsing internally
     """
-    
-    def __init__(self, debug: bool = False):
+
+    def __init__(self, debug: bool = False, model: Optional[str] = None):
         self.debug = debug
+        self.model = model or DEFAULT_ANTHROPIC_MODEL
         
     async def query(
         self,
@@ -35,7 +39,8 @@ class AnthropicProvider(LLMProvider):
             prompt: The user prompt
             system_prompt: Optional system prompt (not supported in simple query API)
             return_usage: If True, return (response, usage_dict); if False, return just response
-            **kwargs: Additional provider-specific options
+            **kwargs: Additional provider-specific options. Recognized:
+                - model (str): Override the instance's default model for this call.
 
         Returns:
             If return_usage=False (default): Just the response text string
@@ -54,16 +59,18 @@ class AnthropicProvider(LLMProvider):
         else:
             full_prompt = prompt
 
+        selected_model = kwargs.get("model") or self.model
         response_text = ""
         usage = None
 
         if self.debug:
-            print(f"\n[DEBUG] Sending prompt ({len(full_prompt)} chars)")
+            print(f"\n[DEBUG] Sending prompt ({len(full_prompt)} chars) with model={selected_model}")
 
         # Try Claude Agent SDK first
         try:
-            from claude_agent_sdk import query
-            async for message in query(prompt=full_prompt):
+            from claude_agent_sdk import query, ClaudeAgentOptions
+            options = ClaudeAgentOptions(model=selected_model)
+            async for message in query(prompt=full_prompt, options=options):
                 text = self._extract_text_from_message(message)
                 if text:
                     response_text += text
@@ -90,7 +97,7 @@ class AnthropicProvider(LLMProvider):
 
                 client = anthropic.Anthropic(api_key=api_key)
                 response = client.messages.create(
-                    model="claude-sonnet-4-20250514",
+                    model=selected_model,
                     max_tokens=16384,
                     messages=[{"role": "user", "content": full_prompt}]
                 )
@@ -140,7 +147,8 @@ class AnthropicProvider(LLMProvider):
             image_data: Raw image bytes
             system_prompt: Optional system prompt
             return_usage: If True, return (response, usage_dict)
-            **kwargs: Additional provider-specific options
+            **kwargs: Additional provider-specific options. Recognized:
+                - model (str): Override the instance's default model for this call.
 
         Returns:
             If return_usage=False: Clean text response from Claude
@@ -203,7 +211,7 @@ class AnthropicProvider(LLMProvider):
 
             # Create message with vision
             create_kwargs = {
-                "model": "claude-sonnet-4-20250514",  # Supports vision
+                "model": kwargs.get("model") or self.model,
                 "max_tokens": 4096,
                 "messages": [{"role": "user", "content": message_content}],
             }

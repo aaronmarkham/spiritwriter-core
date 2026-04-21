@@ -609,12 +609,12 @@ LLM provider abstraction with automatic SDK fallback.
 - `async query(prompt, *, return_usage=False, **kwargs) -> str | tuple[str, dict]` — Send prompt, get response
 - `async query_with_image(prompt, image_data, *, return_usage=False, **kwargs) -> str | tuple[str, dict]` — Vision query
 
-### `AnthropicProvider(debug=False)`
+### `AnthropicProvider(debug=False, model=None)`
 
-Concrete Anthropic/Claude implementation. Tries Claude Agent SDK first, falls back to Anthropic SDK.
+Concrete Anthropic/Claude implementation. Tries Claude Agent SDK first, falls back to Anthropic SDK. `model` defaults to `DEFAULT_ANTHROPIC_MODEL` (currently `claude-sonnet-4-6`). Individual calls can override by passing `model=` in `**kwargs`.
 
-- `async query(prompt, system_prompt=None, return_usage=False) -> str | tuple[str, dict]` — Text query (model: claude-sonnet-4-20250514, max_tokens: 16384)
-- `async query_with_image(prompt, image_data, system_prompt=None, return_usage=False) -> str | tuple[str, dict]` — Vision query (supports JPEG, PNG, GIF, WebP)
+- `async query(prompt, system_prompt=None, return_usage=False, model=None) -> str | tuple[str, dict]` — Text query (max_tokens: 16384)
+- `async query_with_image(prompt, image_data, system_prompt=None, return_usage=False, model=None) -> str | tuple[str, dict]` — Vision query (supports JPEG, PNG, GIF, WebP; max_tokens: 4096)
 
 **Usage dict:** `{"input_tokens": int, "output_tokens": int, "total_tokens": int}`
 
