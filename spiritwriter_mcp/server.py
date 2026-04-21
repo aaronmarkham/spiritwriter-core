@@ -27,14 +27,14 @@ from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
 
-from spiritwriter.trace.shard import (
+from spiritwriter.fabric.shard import (
     AtomKind,
     DecayClass,
     MemoryShard,
     ShardAtom,
 )
-from spiritwriter.trace.store import ShardStore
-from spiritwriter.trace.emitter import TraceEmitter
+from spiritwriter.fabric.store import ShardStore
+from spiritwriter.fabric.emitter import TraceEmitter
 
 
 # === Globals (set in main) ===

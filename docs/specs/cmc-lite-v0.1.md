@@ -294,7 +294,7 @@ checkpointed after every chunk so interruptions lose at most one chunk of work.
 - Test on one file, inspect output quality
 
 ### Step 2: Add entity sense fields to ShardAtom (1 hour)
-- Extend `spiritwriter/trace/shard.py` with optional slot fields
+- Extend `spiritwriter/fabric/shard.py` with optional slot fields
 - Or: create new `SlottedAtom` class alongside existing `ShardAtom`
 - Backward compatible — existing shards still work
 

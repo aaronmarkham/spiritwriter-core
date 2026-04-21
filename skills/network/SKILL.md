@@ -45,7 +45,7 @@ ShardStore is L1 (local cache). Network is L2 (fallback on miss). Publishing is 
 ### Set up the backend
 
 ```python
-from spiritwriter.trace.backends.ipfs import IPFSBackend, IPFSConfig
+from spiritwriter.fabric.backends.ipfs import IPFSBackend, IPFSConfig
 
 # Default (localhost Kubo, private swarm required)
 backend = IPFSBackend(store_root="/path/to/shards")
@@ -66,7 +66,7 @@ backend = IPFSBackend(store_root="/path/to/shards", config=config)
 ### Wire into ShardStore
 
 ```python
-from spiritwriter.trace.store import ShardStore
+from spiritwriter.fabric.store import ShardStore
 
 store = ShardStore("/path/to/shards", resolver=backend)
 
@@ -108,7 +108,7 @@ encrypted = backend.resolve_encrypted(shard_id)
 ### Publish and resolve manifests
 
 ```python
-from spiritwriter.trace.network import ShardManifest
+from spiritwriter.fabric.network import ShardManifest
 
 # Publisher side
 manifest = ShardManifest(
@@ -206,6 +206,6 @@ store_root/
 
 ## Source Files
 
-- `spiritwriter/trace/network.py` — NetworkResolver protocol, ShardLocation, ShardManifest, exceptions
-- `spiritwriter/trace/backends/ipfs.py` — IPFSBackend (Kubo HTTP client), IPFSConfig
-- `spiritwriter/trace/store.py` — ShardStore with optional resolver injection
+- `spiritwriter/fabric/network.py` — NetworkResolver protocol, ShardLocation, ShardManifest, exceptions
+- `spiritwriter/fabric/backends/ipfs.py` — IPFSBackend (Kubo HTTP client), IPFSConfig
+- `spiritwriter/fabric/store.py` — ShardStore with optional resolver injection

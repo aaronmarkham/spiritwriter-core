@@ -37,7 +37,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from spiritwriter.trace.canonicalize import (
+from spiritwriter.fabric.canonicalize import (
     CanonicalRegistry,
     CanonicalSchema,
     ResolutionResult,

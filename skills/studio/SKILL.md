@@ -29,7 +29,7 @@ pip install -e /path/to/spiritwriter-core
 ### Package a job
 
 ```python
-from spiritwriter.trace.studio_job import StudioJobSpec, package_job
+from spiritwriter.fabric.studio_job import StudioJobSpec, package_job
 
 spec = StudioJobSpec(
     task="Analyze this paper and extract key findings",
@@ -48,7 +48,7 @@ packaged = package_job(spec, store, issuer="lilit")
 ### Run a job (sub-agent side)
 
 ```python
-from spiritwriter.trace.studio_runner import parse_job_block, hydrate_job, BudgetTracker
+from spiritwriter.fabric.studio_runner import parse_job_block, hydrate_job, BudgetTracker
 
 # Parse the job block from task text
 job_block = parse_job_block(task_text)
@@ -66,7 +66,7 @@ tracker.spend(30, "llm_call_2")
 ### Return results
 
 ```python
-from spiritwriter.trace.studio_runner import create_result_shard
+from spiritwriter.fabric.studio_runner import create_result_shard
 
 result = create_result_shard(
     atoms=[...],            # extracted knowledge
@@ -97,5 +97,5 @@ Every transition is hash-chained via TraceEmitter. Full provenance from packagin
 
 ## Source Files
 
-- `spiritwriter/trace/studio_job.py` — StudioJobSpec, PackagedJob, package_job()
-- `spiritwriter/trace/studio_runner.py` — parse_job_block(), hydrate_job(), BudgetTracker, create_result_shard()
+- `spiritwriter/fabric/studio_job.py` — StudioJobSpec, PackagedJob, package_job()
+- `spiritwriter/fabric/studio_runner.py` — parse_job_block(), hydrate_job(), BudgetTracker, create_result_shard()

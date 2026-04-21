@@ -31,11 +31,11 @@ SW_PATH = Path.home() / "Documents" / "GitHub" / "spiritwriter-core"
 if SW_PATH.exists():
     sys.path.insert(0, str(SW_PATH))
 
-from spiritwriter.trace.shard import (
+from spiritwriter.fabric.shard import (
     MemoryShard, ShardAtom, AtomKind, DecayClass,
 )
-from spiritwriter.trace.store import ShardStore
-from spiritwriter.trace.extract import extract_atoms, classify_decay
+from spiritwriter.fabric.store import ShardStore
+from spiritwriter.fabric.extract import extract_atoms, classify_decay
 
 WORKSPACE = Path(__file__).parent.parent
 STORE_PATH = WORKSPACE / "shards"

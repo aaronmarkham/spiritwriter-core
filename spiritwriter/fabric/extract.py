@@ -13,7 +13,7 @@ from __future__ import annotations
 import re
 from typing import Sequence
 
-from spiritwriter.trace.shard import ShardAtom, AtomKind, DecayClass
+from spiritwriter.fabric.shard import ShardAtom, AtomKind, DecayClass
 
 
 # === Decision Patterns ===

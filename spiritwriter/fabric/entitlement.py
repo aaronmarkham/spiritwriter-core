@@ -12,8 +12,8 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
-from spiritwriter.trace.crypto import serialize_key, deserialize_key
-from spiritwriter.trace.shard import _now_iso
+from spiritwriter.fabric.crypto import serialize_key, deserialize_key
+from spiritwriter.fabric.shard import _now_iso
 
 
 class Capability:

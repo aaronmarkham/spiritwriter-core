@@ -19,13 +19,13 @@ import os
 from pathlib import Path
 from typing import Iterator
 
-from spiritwriter.trace.shard import MemoryShard, ShardRef, DecayClass
-from spiritwriter.trace.crypto import EncryptedShard, encrypt_shard, decrypt_shard, DecryptionError
-from spiritwriter.trace.entitlement import (
+from spiritwriter.fabric.shard import MemoryShard, ShardRef, DecayClass
+from spiritwriter.fabric.crypto import EncryptedShard, encrypt_shard, decrypt_shard, DecryptionError
+from spiritwriter.fabric.entitlement import (
     EntitlementToken, validate_capability, validate_scope,
     is_expired, get_shard_key, Capability,
 )
-from spiritwriter.trace.network import NetworkResolver
+from spiritwriter.fabric.network import NetworkResolver
 
 
 class ShardStore:
@@ -392,7 +392,7 @@ class ShardStore:
     def put_sealed(self, sealed) -> str:
         """Store a sealed shard. Returns shard_id.
 
-        Accepts a SealedShard from spiritwriter.trace.sealed.
+        Accepts a SealedShard from spiritwriter.fabric.sealed.
         The sealed payload is opaque to the operator — only the
         owner (holder of the private key) can decrypt it.
         """
@@ -418,7 +418,7 @@ class ShardStore:
         """
         path = self._sealed_path(shard_id)
         if path.exists():
-            from spiritwriter.trace.sealed import SealedShard
+            from spiritwriter.fabric.sealed import SealedShard
             return SealedShard.from_json(path.read_text(encoding="utf-8"))
 
         if self._resolver:
@@ -438,7 +438,7 @@ class ShardStore:
 
         Requires PyNaCl to be installed.
         """
-        from spiritwriter.trace.sealed import seal_shard
+        from spiritwriter.fabric.sealed import seal_shard
         sealed = seal_shard(shard, owner_pubkey)
         self.put_sealed(sealed)
         return sealed
@@ -449,7 +449,7 @@ class ShardStore:
         Only the owner (holder of the private key) can call this.
         Requires PyNaCl to be installed.
         """
-        from spiritwriter.trace.sealed import unseal_shard, UnsealError
+        from spiritwriter.fabric.sealed import unseal_shard, UnsealError
         sealed = self.get_sealed(shard_id)
         if sealed is None:
             raise KeyError(f"Sealed shard {shard_id} not found")

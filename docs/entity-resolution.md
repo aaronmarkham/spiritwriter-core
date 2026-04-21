@@ -38,7 +38,7 @@ T1 and T2 auto-merge (add sighting to existing entity). T3+ create new entities 
 ## Quick Start
 
 ```python
-from spiritwriter.trace.canonicalize import (
+from spiritwriter.fabric.canonicalize import (
     CanonicalRegistry, CanonicalSchema, ResolutionTier,
     canonicalize_batch, normalize_name, fuzzy_score,
 )
@@ -160,7 +160,7 @@ for record, result in results:
 An ESS is a content-addressed identity anchor — a SHA-256 hash of normalized defining fields:
 
 ```python
-from spiritwriter.trace.canonicalize import EntitySenseSig
+from spiritwriter.fabric.canonicalize import EntitySenseSig
 
 ess1 = EntitySenseSig.compute(
     last_name="Martinez",
@@ -191,7 +191,7 @@ print(ess1 == ess3)        # False (different digest — missing field)
 When DOB is unavailable but age is known, bucket ages for ESS compatibility:
 
 ```python
-from spiritwriter.trace.canonicalize import age_to_bucket
+from spiritwriter.fabric.canonicalize import age_to_bucket
 
 print(age_to_bucket(42, bucket_size=2))  # "42-43"
 print(age_to_bucket(43, bucket_size=2))  # "42-43"  — same bucket
@@ -207,7 +207,7 @@ ess = EntitySenseSig.compute(
 ## Normalization Utilities
 
 ```python
-from spiritwriter.trace.canonicalize import normalize_name, normalize_date, fuzzy_score
+from spiritwriter.fabric.canonicalize import normalize_name, normalize_date, fuzzy_score
 
 # Name normalization
 print(normalize_name("  martinez, carlos a.  "))  # "MARTINEZ CARLOS A"

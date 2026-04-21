@@ -32,9 +32,9 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from spiritwriter.trace.shard import MemoryShard, ShardAtom, AtomKind, DecayClass
-from spiritwriter.trace.store import ShardStore
-from spiritwriter.trace.crypto import DecryptionError
+from spiritwriter.fabric.shard import MemoryShard, ShardAtom, AtomKind, DecayClass
+from spiritwriter.fabric.store import ShardStore
+from spiritwriter.fabric.crypto import DecryptionError
 
 logger = logging.getLogger(__name__)
 

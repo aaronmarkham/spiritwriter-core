@@ -37,7 +37,7 @@ try:
 except ImportError:
     HAS_NACL = False
 
-from spiritwriter.trace.shard import MemoryShard, _sha256
+from spiritwriter.fabric.shard import MemoryShard, _sha256
 
 
 def _require_nacl() -> None:

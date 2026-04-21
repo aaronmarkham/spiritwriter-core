@@ -30,10 +30,10 @@ from spiritwriter.integrations.base import (
 )
 from spiritwriter.integrations.mempalace.backend import ShardBackend
 from spiritwriter.integrations.mempalace.entities import EntityBridge
-from spiritwriter.trace.shard import MemoryShard, ShardAtom, AtomKind, DecayClass
-from spiritwriter.trace.store import ShardStore
-from spiritwriter.trace.crypto import generate_job_key
-from spiritwriter.trace.canonicalize import normalize_name
+from spiritwriter.fabric.shard import MemoryShard, ShardAtom, AtomKind, DecayClass
+from spiritwriter.fabric.store import ShardStore
+from spiritwriter.fabric.crypto import generate_job_key
+from spiritwriter.fabric.canonicalize import normalize_name
 
 
 # ── Metrics (same as MemPalace's longmemeval_bench.py) ───────────────

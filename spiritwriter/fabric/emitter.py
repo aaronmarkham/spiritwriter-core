@@ -13,7 +13,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from spiritwriter.trace.shard import _canonical_json, _sha256, _now_iso
+from spiritwriter.fabric.shard import _canonical_json, _sha256, _now_iso
 
 
 class TraceEmitter:

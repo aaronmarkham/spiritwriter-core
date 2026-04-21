@@ -12,8 +12,8 @@ Measures:
 
 import pytest
 from conftest import BenchmarkResult, timed_op, make_shard
-from spiritwriter.trace.store import ShardStore
-from spiritwriter.trace.shard import DecayClass
+from spiritwriter.fabric.store import ShardStore
+from spiritwriter.fabric.shard import DecayClass
 
 
 class TestStorePut:

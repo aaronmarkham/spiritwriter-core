@@ -1,10 +1,10 @@
-"""Tests for spiritwriter.trace.entitlement."""
+"""Tests for spiritwriter.fabric.entitlement."""
 
 import pytest
 from datetime import datetime, timezone, timedelta
 
-from spiritwriter.trace.crypto import generate_job_key
-from spiritwriter.trace.entitlement import (
+from spiritwriter.fabric.crypto import generate_job_key
+from spiritwriter.fabric.entitlement import (
     Capability, EntitlementToken,
     create_entitlement, validate_capability, validate_scope,
     validate_budget, is_expired, get_shard_key,

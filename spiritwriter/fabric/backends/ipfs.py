@@ -26,8 +26,8 @@ try:
 except ImportError:
     HAS_REQUESTS = False
 
-from spiritwriter.trace.crypto import EncryptedShard
-from spiritwriter.trace.network import (
+from spiritwriter.fabric.crypto import EncryptedShard
+from spiritwriter.fabric.network import (
     IntegrityError,
     NetworkTimeout,
     NetworkUnavailable,
@@ -35,7 +35,7 @@ from spiritwriter.trace.network import (
     ShardManifest,
     SwarmMismatchError,
 )
-from spiritwriter.trace.shard import MemoryShard
+from spiritwriter.fabric.shard import MemoryShard
 
 logger = logging.getLogger(__name__)
 
@@ -345,7 +345,7 @@ class IPFSBackend:
         except (NetworkUnavailable, NetworkTimeout):
             return None
 
-        from spiritwriter.trace.sealed import SealedShard
+        from spiritwriter.fabric.sealed import SealedShard
         sealed = SealedShard.from_json(data.decode("utf-8"))
         if sealed.shard_id != shard_id:
             raise IntegrityError(

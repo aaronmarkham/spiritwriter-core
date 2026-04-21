@@ -12,9 +12,9 @@ import pytest
 import tempfile
 from pathlib import Path
 
-from spiritwriter.trace.shard import MemoryShard, ShardAtom, AtomKind, DecayClass
-from spiritwriter.trace.store import ShardStore
-from spiritwriter.trace.crypto import generate_job_key
+from spiritwriter.fabric.shard import MemoryShard, ShardAtom, AtomKind, DecayClass
+from spiritwriter.fabric.store import ShardStore
+from spiritwriter.fabric.crypto import generate_job_key
 from spiritwriter.integrations.mempalace.backend import ShardBackend
 from spiritwriter.integrations.mempalace.entities import EntityBridge
 from spiritwriter.integrations.base import (

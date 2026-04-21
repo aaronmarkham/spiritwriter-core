@@ -14,10 +14,10 @@ from pathlib import Path
 # Add parent to path for local dev
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from spiritwriter.trace.shard import (
+from spiritwriter.fabric.shard import (
     MemoryShard, ShardAtom, AtomKind, DecayClass,
 )
-from spiritwriter.trace.store import ShardStore
+from spiritwriter.fabric.store import ShardStore
 
 
 AGENT_ID = "agent:main:main"

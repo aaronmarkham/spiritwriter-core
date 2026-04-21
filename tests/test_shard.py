@@ -6,16 +6,16 @@ from pathlib import Path
 
 import pytest
 
-from spiritwriter.trace.shard import (
+from spiritwriter.fabric.shard import (
     MemoryShard,
     ShardAtom,
     ShardRef,
     AtomKind,
     DecayClass,
 )
-from spiritwriter.trace.store import ShardStore
-from spiritwriter.trace.emitter import TraceEmitter
-from spiritwriter.trace.extract import (
+from spiritwriter.fabric.store import ShardStore
+from spiritwriter.fabric.emitter import TraceEmitter
+from spiritwriter.fabric.extract import (
     extract_decisions,
     extract_facts,
     extract_atoms,

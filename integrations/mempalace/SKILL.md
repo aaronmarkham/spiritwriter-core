@@ -115,7 +115,7 @@ history = backend.get_drawer_history("drawer_001")
 ### Encrypted palace
 
 ```python
-from spiritwriter.trace.crypto import generate_job_key
+from spiritwriter.fabric.crypto import generate_job_key
 
 key = generate_job_key()
 backend = ShardBackend("~/.mempalace/shards", encryption_key=key)

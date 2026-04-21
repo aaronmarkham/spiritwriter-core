@@ -1,4 +1,4 @@
-"""Tests for spiritwriter.trace.sealed — zero-knowledge sealed-box encryption."""
+"""Tests for spiritwriter.fabric.sealed — zero-knowledge sealed-box encryption."""
 
 import json
 import tempfile
@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from spiritwriter.trace.shard import MemoryShard, ShardAtom, AtomKind
-from spiritwriter.trace.sealed import (
+from spiritwriter.fabric.shard import MemoryShard, ShardAtom, AtomKind
+from spiritwriter.fabric.sealed import (
     generate_owner_keypair,
     seal_for_owner,
     unseal_as_owner,
@@ -21,7 +21,7 @@ from spiritwriter.trace.sealed import (
     UnsealError,
     HAS_NACL,
 )
-from spiritwriter.trace.store import ShardStore
+from spiritwriter.fabric.store import ShardStore
 
 
 pytestmark = pytest.mark.skipif(not HAS_NACL, reason="PyNaCl not installed")

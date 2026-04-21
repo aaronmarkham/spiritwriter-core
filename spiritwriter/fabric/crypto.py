@@ -15,7 +15,7 @@ from dataclasses import dataclass
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-from spiritwriter.trace.shard import MemoryShard, _canonical_json, _sha256
+from spiritwriter.fabric.shard import MemoryShard, _canonical_json, _sha256
 
 
 class DecryptionError(Exception):

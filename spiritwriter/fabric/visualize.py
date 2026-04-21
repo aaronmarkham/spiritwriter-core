@@ -354,7 +354,7 @@ def generate_all(trace_path: str | Path, output_dir: str | Path) -> dict[str, st
 if __name__ == "__main__":
     import sys
     if len(sys.argv) < 2:
-        print("Usage: python -m spiritwriter.trace.visualize <trace.jsonl> [output_dir]")
+        print("Usage: python -m spiritwriter.fabric.visualize <trace.jsonl> [output_dir]")
         sys.exit(1)
 
     trace_path = sys.argv[1]

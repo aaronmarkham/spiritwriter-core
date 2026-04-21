@@ -26,8 +26,8 @@ Requires Python 3.9+.
 ## Quick Start
 
 ```python
-from spiritwriter.trace.shard import MemoryShard, ShardAtom, AtomKind, DecayClass
-from spiritwriter.trace.store import ShardStore
+from spiritwriter.fabric.shard import MemoryShard, ShardAtom, AtomKind, DecayClass
+from spiritwriter.fabric.store import ShardStore
 
 # Create a shard
 shard = MemoryShard(
@@ -57,7 +57,7 @@ context = retrieved.hydrate_context()
 ## Encryption
 
 ```python
-from spiritwriter.trace.crypto import generate_job_key, encrypt_shard, decrypt_shard
+from spiritwriter.fabric.crypto import generate_job_key, encrypt_shard, decrypt_shard
 
 key = generate_job_key()
 encrypted = encrypt_shard(shard, key)
@@ -67,7 +67,7 @@ decrypted = decrypt_shard(encrypted, key)
 Zero-knowledge (operator can't decrypt):
 
 ```python
-from spiritwriter.trace.sealed import generate_owner_keypair, seal_shard, unseal_shard
+from spiritwriter.fabric.sealed import generate_owner_keypair, seal_shard, unseal_shard
 
 keypair = generate_owner_keypair()
 sealed = seal_shard(shard, keypair.public_key)
@@ -77,7 +77,7 @@ decrypted = unseal_shard(sealed, keypair.private_key)
 ## Entity Resolution (Phalanx)
 
 ```python
-from spiritwriter.trace.canonicalize import CanonicalRegistry, CanonicalSchema
+from spiritwriter.fabric.canonicalize import CanonicalRegistry, CanonicalSchema
 
 schema = CanonicalSchema(
     name="person",

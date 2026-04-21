@@ -23,8 +23,8 @@ from typing import Any, Iterator
 
 import logging
 
-from spiritwriter.trace.shard import _canonical_json, _sha256, _now_iso
-from spiritwriter.trace.emitter import TraceEmitter
+from spiritwriter.fabric.shard import _canonical_json, _sha256, _now_iso
+from spiritwriter.fabric.emitter import TraceEmitter
 
 logger = logging.getLogger(__name__)
 

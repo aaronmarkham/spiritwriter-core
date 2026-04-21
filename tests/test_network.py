@@ -10,10 +10,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from spiritwriter.trace.shard import MemoryShard, ShardAtom, AtomKind
-from spiritwriter.trace.crypto import EncryptedShard, encrypt_shard, generate_job_key
-from spiritwriter.trace.store import ShardStore
-from spiritwriter.trace.network import (
+from spiritwriter.fabric.shard import MemoryShard, ShardAtom, AtomKind
+from spiritwriter.fabric.crypto import EncryptedShard, encrypt_shard, generate_job_key
+from spiritwriter.fabric.store import ShardStore
+from spiritwriter.fabric.network import (
     ShardLocation,
     ShardManifest,
     NetworkResolver,
@@ -198,7 +198,7 @@ class TestShardStoreFallback:
     def test_get_sealed_falls_back(self):
         """Sealed shard falls back to resolver."""
         pytest.importorskip("nacl")
-        from spiritwriter.trace.sealed import seal_shard, generate_owner_keypair
+        from spiritwriter.fabric.sealed import seal_shard, generate_owner_keypair
 
         with tempfile.TemporaryDirectory() as td:
             shard = _make_shard()
@@ -242,24 +242,24 @@ class TestSwarmKeyRegistration:
         """IPFS_SWARM_KEY should be in the secrets known keys after import."""
         from spiritwriter.secrets.keychain import KNOWN_KEYS
         # Importing ipfs module triggers register_keys
-        import spiritwriter.trace.backends.ipfs  # noqa: F401
+        import spiritwriter.fabric.backends.ipfs  # noqa: F401
         assert "IPFS_SWARM_KEY" in KNOWN_KEYS
 
     def test_swarm_config_default_private(self):
         """IPFSConfig defaults to requiring private swarm."""
-        from spiritwriter.trace.backends.ipfs import IPFSConfig
+        from spiritwriter.fabric.backends.ipfs import IPFSConfig
         config = IPFSConfig()
         assert config.require_private_swarm is True
 
     def test_swarm_config_opt_out(self):
         """Can explicitly disable private swarm requirement."""
-        from spiritwriter.trace.backends.ipfs import IPFSConfig
+        from spiritwriter.fabric.backends.ipfs import IPFSConfig
         config = IPFSConfig(require_private_swarm=False)
         assert config.require_private_swarm is False
 
     def test_from_env_defaults(self, monkeypatch):
         """from_env() uses defaults when no env vars set."""
-        from spiritwriter.trace.backends.ipfs import IPFSConfig
+        from spiritwriter.fabric.backends.ipfs import IPFSConfig
         # Clear any existing env vars
         for var in ("IPFS_API_URL", "IPFS_GATEWAY_URL", "IPFS_TIMEOUT",
                      "IPFS_PIN_BY_DEFAULT", "IPFS_REQUIRE_PRIVATE_SWARM"):
@@ -273,7 +273,7 @@ class TestSwarmKeyRegistration:
 
     def test_from_env_docker(self, monkeypatch):
         """from_env() picks up Docker-style env vars."""
-        from spiritwriter.trace.backends.ipfs import IPFSConfig
+        from spiritwriter.fabric.backends.ipfs import IPFSConfig
         monkeypatch.setenv("IPFS_API_URL", "http://frio-ipfs:5001")
         monkeypatch.setenv("IPFS_GATEWAY_URL", "http://frio-ipfs:8080")
         monkeypatch.setenv("IPFS_TIMEOUT", "60")

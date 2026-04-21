@@ -17,7 +17,7 @@ which application created the view.
 from __future__ import annotations
 
 from spiritwriter.geo.types import GeoView
-from spiritwriter.trace.shard import (
+from spiritwriter.fabric.shard import (
     AtomKind,
     DecayClass,
     MemoryShard,

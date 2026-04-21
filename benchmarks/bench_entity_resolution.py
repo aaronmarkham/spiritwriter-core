@@ -13,7 +13,7 @@ import pytest
 import random
 import string
 from conftest import BenchmarkResult, timed_op
-from spiritwriter.trace.canonicalize import (
+from spiritwriter.fabric.canonicalize import (
     CanonicalRegistry, CanonicalSchema, ResolutionTier,
     EntitySenseSig, canonicalize_batch,
     normalize_name, normalize_date, age_to_bucket, fuzzy_score,

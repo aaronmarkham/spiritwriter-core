@@ -2,7 +2,7 @@
 
 **Status**: Draft
 **Scope**: spiritwriter-core (generic, not Frio-specific)
-**Depends on**: `spiritwriter.trace.store.ShardStore`, `spiritwriter.trace.shard.MemoryShard`
+**Depends on**: `spiritwriter.fabric.store.ShardStore`, `spiritwriter.fabric.shard.MemoryShard`
 
 ## Problem
 
@@ -34,7 +34,7 @@ ShardStore (local files)           NetworkResolver
 ### Module layout
 
 ```
-spiritwriter/trace/
+spiritwriter/fabric/
   store.py          # Existing — unchanged except optional resolver injection
   network.py        # NEW — NetworkResolver protocol + CID mapping
   backends/
@@ -310,8 +310,8 @@ Mark integration tests with `@pytest.mark.ipfs` so they can be skipped in CI wit
 
 ## Implementation Order
 
-1. `spiritwriter/trace/network.py` — Protocol, types (ShardLocation, ShardManifest), exceptions
-2. `spiritwriter/trace/backends/ipfs.py` — IPFSBackend (Kubo HTTP client)
+1. `spiritwriter/fabric/network.py` — Protocol, types (ShardLocation, ShardManifest), exceptions
+2. `spiritwriter/fabric/backends/ipfs.py` — IPFSBackend (Kubo HTTP client)
 3. CID map persistence in ShardStore directory
 4. ShardStore integration (optional resolver parameter, fallback in get/get_sealed/get_encrypted)
 5. Manifest publish/resolve

@@ -21,7 +21,7 @@ Web Form → shard_engine.py → FrioStore (ShardStore wrapper)
 Each search target becomes a MemoryShard with structured atoms:
 
 ```python
-from spiritwriter.trace.shard import MemoryShard, ShardAtom, AtomKind, DecayClass
+from spiritwriter.fabric.shard import MemoryShard, ShardAtom, AtomKind, DecayClass
 
 def shard_from_web_intake(last_name, first_names, name, region,
                           threshold=0.85, notify_channel="signal",
@@ -79,7 +79,7 @@ def shard_from_web_intake(last_name, first_names, name, region,
 For maximum privacy, search params are encrypted so the operator can't see them:
 
 ```python
-from spiritwriter.trace.sealed import (
+from spiritwriter.fabric.sealed import (
     generate_owner_keypair, seal_for_owner, unseal_as_owner,
 )
 import json, base64
@@ -131,7 +131,7 @@ def sealed_shard_from_web_intake(last_name, first_names, name, region,
 Frio extends ShardStore with lifecycle management:
 
 ```python
-from spiritwriter.trace.store import ShardStore
+from spiritwriter.fabric.store import ShardStore
 
 class FrioStore:
     """Wraps ShardStore with frio-specific lifecycle management."""
@@ -151,7 +151,7 @@ class FrioStore:
 
     def update_checked(self, shard):
         """Bump last_checked and check_count after a check cycle."""
-        from spiritwriter.trace.shard import _now_iso
+        from spiritwriter.fabric.shard import _now_iso
         # Shards are immutable — we write updated metadata
         shard.last_checked = _now_iso()
         shard.check_count += 1
@@ -171,7 +171,7 @@ class FrioStore:
 Frio uses spiritwriter's normalization when available:
 
 ```python
-from spiritwriter.trace.canonicalize import normalize_name, fuzzy_score
+from spiritwriter.fabric.canonicalize import normalize_name, fuzzy_score
 
 def match_name(candidate_name, target_last, target_firsts, threshold=0.85):
     """Check if a roster name matches the search target."""
@@ -525,7 +525,7 @@ print(history[1].atoms[0].text)  # "Max had his first swim meet..."
 Add encryption with zero code changes to MemPalace:
 
 ```python
-from spiritwriter.trace.crypto import generate_job_key
+from spiritwriter.fabric.crypto import generate_job_key
 
 key = generate_job_key()  # 32-byte AES-256 key
 
@@ -542,7 +542,7 @@ backend.add(documents=["sensitive content"], ids=["drawer_secret"],
 For zero-knowledge storage (operator can't decrypt):
 
 ```python
-from spiritwriter.trace.sealed import generate_owner_keypair, seal_shard
+from spiritwriter.fabric.sealed import generate_owner_keypair, seal_shard
 
 keypair = generate_owner_keypair()
 # Give public key to the service, keep private key as capability token
@@ -584,7 +584,7 @@ print(r3.tier)  # T2_STRONG or T3_FUZZY depending on score
 Track every memory access with a tamper-evident audit trail:
 
 ```python
-from spiritwriter.trace.emitter import TraceEmitter
+from spiritwriter.fabric.emitter import TraceEmitter
 
 tracer = TraceEmitter(
     run_id="session-42", agent_id="atlas",
@@ -682,7 +682,7 @@ def _ensure_imports():
     global _shard_module
     if _shard_module is None:
         try:
-            from spiritwriter.trace.shard import (
+            from spiritwriter.fabric.shard import (
                 MemoryShard, ShardAtom, AtomKind, DecayClass,
             )
             _shard_module = type("M", (), {
@@ -704,7 +704,7 @@ def _ensure_imports():
 ```python
 import os
 from pathlib import Path
-from spiritwriter.trace.store import ShardStore
+from spiritwriter.fabric.store import ShardStore
 
 def init_store(app_name="myapp"):
     """Initialize shard store at the standard location."""

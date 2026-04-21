@@ -10,7 +10,7 @@ Measures:
 
 import pytest
 from conftest import BenchmarkResult, timed_op, make_shard
-from spiritwriter.trace.shard import MemoryShard, ShardAtom, AtomKind, DecayClass
+from spiritwriter.fabric.shard import MemoryShard, ShardAtom, AtomKind, DecayClass
 
 
 class TestShardCreation:
