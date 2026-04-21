@@ -12,14 +12,18 @@ from spiritwriter.secrets import get_api_key
 from .base import LLMProvider
 
 
+DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-20250514"
+
+
 class AnthropicProvider(LLMProvider):
     """
     Anthropic Claude LLM provider that implements the LLMProvider interface
     Handles all the message object parsing internally
     """
-    
-    def __init__(self, debug: bool = False):
+
+    def __init__(self, debug: bool = False, model: Optional[str] = None):
         self.debug = debug
+        self.model = model or DEFAULT_ANTHROPIC_MODEL
         
     async def query(
         self,
@@ -90,7 +94,7 @@ class AnthropicProvider(LLMProvider):
 
                 client = anthropic.Anthropic(api_key=api_key)
                 response = client.messages.create(
-                    model="claude-sonnet-4-20250514",
+                    model=kwargs.get("model", self.model),
                     max_tokens=16384,
                     messages=[{"role": "user", "content": full_prompt}]
                 )
@@ -203,7 +207,7 @@ class AnthropicProvider(LLMProvider):
 
             # Create message with vision
             create_kwargs = {
-                "model": "claude-sonnet-4-20250514",  # Supports vision
+                "model": kwargs.get("model", self.model),
                 "max_tokens": 4096,
                 "messages": [{"role": "user", "content": message_content}],
             }
