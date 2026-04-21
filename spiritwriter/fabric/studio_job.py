@@ -16,15 +16,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from spiritwriter.trace.shard import (
+from spiritwriter.fabric.shard import (
     MemoryShard, ShardAtom, AtomKind, DecayClass, _now_iso,
 )
-from spiritwriter.trace.crypto import generate_job_key, encrypt_shard, serialize_key
-from spiritwriter.trace.entitlement import (
+from spiritwriter.fabric.crypto import generate_job_key, encrypt_shard, serialize_key
+from spiritwriter.fabric.entitlement import (
     EntitlementToken, Capability, create_entitlement, serialize_token,
 )
-from spiritwriter.trace.store import ShardStore
-from spiritwriter.trace.emitter import TraceEmitter
+from spiritwriter.fabric.store import ShardStore
+from spiritwriter.fabric.emitter import TraceEmitter
 
 
 @dataclass

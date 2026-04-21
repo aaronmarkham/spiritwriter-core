@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from spiritwriter.trace.canonicalize import (
+from spiritwriter.fabric.canonicalize import (
     EntitySenseSig,
     ResolutionTier,
     ResolutionResult,

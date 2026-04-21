@@ -10,11 +10,11 @@ Measures:
 
 import pytest
 from conftest import BenchmarkResult, timed_op, make_shard
-from spiritwriter.trace.crypto import (
+from spiritwriter.fabric.crypto import (
     generate_job_key, encrypt_shard, decrypt_shard,
     serialize_key, deserialize_key,
 )
-from spiritwriter.trace.store import ShardStore
+from spiritwriter.fabric.store import ShardStore
 
 
 class TestAESEncryption:
@@ -110,7 +110,7 @@ class TestSealedBox:
     @pytest.fixture(autouse=True)
     def _check_nacl(self):
         try:
-            from spiritwriter.trace.sealed import HAS_NACL
+            from spiritwriter.fabric.sealed import HAS_NACL
             if not HAS_NACL:
                 pytest.skip("PyNaCl not installed")
         except ImportError:
@@ -118,7 +118,7 @@ class TestSealedBox:
 
     def test_keypair_generation(self):
         """Generate owner keypairs."""
-        from spiritwriter.trace.sealed import generate_owner_keypair
+        from spiritwriter.fabric.sealed import generate_owner_keypair
         result = BenchmarkResult("nacl_keypair_generation")
         for _ in range(2000):
             with timed_op(result):
@@ -127,7 +127,7 @@ class TestSealedBox:
 
     def test_seal_small(self):
         """Seal small shards."""
-        from spiritwriter.trace.sealed import generate_owner_keypair, seal_shard
+        from spiritwriter.fabric.sealed import generate_owner_keypair, seal_shard
         keypair = generate_owner_keypair()
         shards = [make_shard(num_atoms=5, unique_id=i) for i in range(1000)]
         result = BenchmarkResult("nacl_seal_small (5 atoms)")
@@ -138,7 +138,7 @@ class TestSealedBox:
 
     def test_seal_large(self):
         """Seal large shards."""
-        from spiritwriter.trace.sealed import generate_owner_keypair, seal_shard
+        from spiritwriter.fabric.sealed import generate_owner_keypair, seal_shard
         keypair = generate_owner_keypair()
         shards = [make_shard(num_atoms=100, unique_id=i) for i in range(200)]
         result = BenchmarkResult("nacl_seal_large (100 atoms)")
@@ -149,7 +149,7 @@ class TestSealedBox:
 
     def test_unseal_small(self):
         """Unseal small shards."""
-        from spiritwriter.trace.sealed import (
+        from spiritwriter.fabric.sealed import (
             generate_owner_keypair, seal_shard, unseal_shard,
         )
         keypair = generate_owner_keypair()
@@ -165,7 +165,7 @@ class TestSealedBox:
 
     def test_seal_unseal_roundtrip(self):
         """Full seal → unseal roundtrip."""
-        from spiritwriter.trace.sealed import (
+        from spiritwriter.fabric.sealed import (
             generate_owner_keypair, seal_shard, unseal_shard,
         )
         keypair = generate_owner_keypair()
@@ -180,7 +180,7 @@ class TestSealedBox:
 
     def test_raw_seal_throughput(self):
         """Raw seal_for_owner throughput (no shard overhead)."""
-        from spiritwriter.trace.sealed import (
+        from spiritwriter.fabric.sealed import (
             generate_owner_keypair, seal_for_owner, unseal_as_owner,
         )
         keypair = generate_owner_keypair()
@@ -198,7 +198,7 @@ class TestSigning:
     @pytest.fixture(autouse=True)
     def _check_nacl(self):
         try:
-            from spiritwriter.trace.sealed import HAS_NACL
+            from spiritwriter.fabric.sealed import HAS_NACL
             if not HAS_NACL:
                 pytest.skip("PyNaCl not installed")
         except ImportError:
@@ -206,7 +206,7 @@ class TestSigning:
 
     def test_signing_keypair(self):
         """Generate signing keypairs."""
-        from spiritwriter.trace.sealed import generate_signing_keypair
+        from spiritwriter.fabric.sealed import generate_signing_keypair
         result = BenchmarkResult("ed25519_keypair_generation")
         for _ in range(2000):
             with timed_op(result):
@@ -215,7 +215,7 @@ class TestSigning:
 
     def test_sign_data(self):
         """Sign data."""
-        from spiritwriter.trace.sealed import generate_signing_keypair, sign_data
+        from spiritwriter.fabric.sealed import generate_signing_keypair, sign_data
         sk, vk = generate_signing_keypair()
         data = b"x" * 1024  # 1KB payload
         result = BenchmarkResult("ed25519_sign (1KB)")
@@ -226,7 +226,7 @@ class TestSigning:
 
     def test_verify_signature(self):
         """Verify signatures."""
-        from spiritwriter.trace.sealed import (
+        from spiritwriter.fabric.sealed import (
             generate_signing_keypair, sign_data, verify_signature,
         )
         sk, vk = generate_signing_keypair()

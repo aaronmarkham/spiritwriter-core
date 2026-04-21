@@ -9,8 +9,8 @@ For agent-to-agent sharing where both sides cooperate. The encryption key is sha
 ### Encrypt and Decrypt
 
 ```python
-from spiritwriter.trace.shard import MemoryShard, ShardAtom, AtomKind, DecayClass
-from spiritwriter.trace.crypto import (
+from spiritwriter.fabric.shard import MemoryShard, ShardAtom, AtomKind, DecayClass
+from spiritwriter.fabric.crypto import (
     generate_job_key, encrypt_shard, decrypt_shard,
     serialize_key, deserialize_key, DecryptionError,
 )
@@ -71,7 +71,7 @@ assert key == key_back
 ### Store Integration
 
 ```python
-from spiritwriter.trace.store import ShardStore
+from spiritwriter.fabric.store import ShardStore
 
 store = ShardStore("~/.myapp/shards")
 
@@ -101,7 +101,7 @@ For zero-knowledge scenarios where the operator/service should NOT be able to re
 ### Key Management
 
 ```python
-from spiritwriter.trace.sealed import (
+from spiritwriter.fabric.sealed import (
     OwnerKeypair, generate_owner_keypair,
     seal_for_owner, unseal_as_owner,
 )
@@ -133,7 +133,7 @@ assert decrypted == plaintext
 ### Seal and Unseal Shards
 
 ```python
-from spiritwriter.trace.sealed import seal_shard, unseal_shard, UnsealError
+from spiritwriter.fabric.sealed import seal_shard, unseal_shard, UnsealError
 
 # Seal a complete shard
 sealed = seal_shard(shard, keypair.public_key)
@@ -154,7 +154,7 @@ assert decrypted.shard_id == shard.shard_id
 Sign data for integrity verification — proves results came from a specific service:
 
 ```python
-from spiritwriter.trace.sealed import (
+from spiritwriter.fabric.sealed import (
     generate_signing_keypair, sign_data, verify_signature,
 )
 
@@ -190,7 +190,7 @@ decrypted = store.unseal_and_get(sealed.shard_id, keypair.private_key)
 Entitlement tokens grant sub-agents scoped access to encrypted shards:
 
 ```python
-from spiritwriter.trace.entitlement import (
+from spiritwriter.fabric.entitlement import (
     create_entitlement, EntitlementToken, Capability,
     validate_capability, validate_scope, is_expired,
     get_shard_key, serialize_token, deserialize_token,

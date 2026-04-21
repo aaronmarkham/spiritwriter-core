@@ -36,8 +36,8 @@ ipfs daemon
 ### 1. Create the Backend
 
 ```python
-from spiritwriter.trace.backends.ipfs import IPFSBackend, IPFSConfig
-from spiritwriter.trace.store import ShardStore
+from spiritwriter.fabric.backends.ipfs import IPFSBackend, IPFSConfig
+from spiritwriter.fabric.store import ShardStore
 
 # For development (disable private swarm requirement)
 config = IPFSConfig(require_private_swarm=False)
@@ -50,7 +50,7 @@ store = ShardStore("./my-shards", resolver=backend)
 ### 2. Publish a Shard
 
 ```python
-from spiritwriter.trace.shard import MemoryShard, ShardAtom, AtomKind
+from spiritwriter.fabric.shard import MemoryShard, ShardAtom, AtomKind
 
 shard = MemoryShard(
     atoms=[ShardAtom(text="IPFS distribution is live", kind=AtomKind.FACT)],
@@ -83,7 +83,7 @@ shard = store2.get(shard_id)
 ### 4. Publish a Manifest for Discovery
 
 ```python
-from spiritwriter.trace.network import ShardManifest
+from spiritwriter.fabric.network import ShardManifest
 
 # Publish all active job shards
 locations = [backend.publish(s) for s in store.by_scope("project:jobs")]
@@ -115,7 +115,7 @@ for entry in manifest.entries:
 Publishing plaintext shards to any network — even a private swarm — means anyone on the swarm can read them. For sensitive content, encrypt first:
 
 ```python
-from spiritwriter.trace.crypto import encrypt_shard, generate_job_key
+from spiritwriter.fabric.crypto import encrypt_shard, generate_job_key
 
 key = generate_job_key()
 encrypted = encrypt_shard(shard, key)
@@ -130,7 +130,7 @@ loc = backend.publish_encrypted(encrypted)
 For zero-knowledge scenarios (operator can't see content):
 
 ```python
-from spiritwriter.trace.sealed import seal_shard, generate_owner_keypair
+from spiritwriter.fabric.sealed import seal_shard, generate_owner_keypair
 
 keypair = generate_owner_keypair()
 sealed = seal_shard(shard, keypair.public_key)
@@ -281,10 +281,10 @@ Publish/resolve round-trips, pin/unpin, manifests. Skipped automatically if Kubo
 
 | File | Purpose |
 |------|---------|
-| `spiritwriter/trace/network.py` | NetworkResolver protocol, ShardLocation, ShardManifest, exceptions |
-| `spiritwriter/trace/backends/__init__.py` | Backends package |
-| `spiritwriter/trace/backends/ipfs.py` | IPFSBackend, IPFSConfig, swarm verification |
-| `spiritwriter/trace/store.py` | ShardStore with optional resolver injection |
+| `spiritwriter/fabric/network.py` | NetworkResolver protocol, ShardLocation, ShardManifest, exceptions |
+| `spiritwriter/fabric/backends/__init__.py` | Backends package |
+| `spiritwriter/fabric/backends/ipfs.py` | IPFSBackend, IPFSConfig, swarm verification |
+| `spiritwriter/fabric/store.py` | ShardStore with optional resolver injection |
 | `tests/test_network.py` | Unit tests (mock resolver) |
 | `tests/test_ipfs_backend.py` | Integration tests (requires Kubo) |
 | `docs/specs/network-resolver-spec.md` | Original design spec |

@@ -16,9 +16,9 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
-    from spiritwriter.trace.crypto import EncryptedShard
-    from spiritwriter.trace.sealed import SealedShard
-    from spiritwriter.trace.shard import MemoryShard
+    from spiritwriter.fabric.crypto import EncryptedShard
+    from spiritwriter.fabric.sealed import SealedShard
+    from spiritwriter.fabric.shard import MemoryShard
 
 
 # === Exceptions ===

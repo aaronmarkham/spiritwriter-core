@@ -29,8 +29,9 @@ spiritwriter/
   classify/    — Content classification
   ingest/      — Document ingestion
   llm/         — LLM provider abstraction
-  trace/       — Shards, store, emitter, crypto, entitlements, studio jobs, network resolver
+  fabric/      — Shards, store, emitter, crypto, entitlements, studio jobs, network resolver
     backends/  — Network backends (IPFS/Kubo)
+  trace/       — Deprecated shim re-exporting fabric/ (removed in 0.6.0)
   stopwords.py — Centralized stopword list
 ```
 
@@ -38,7 +39,7 @@ spiritwriter/
 
 - Content-addressed storage (SHA-256). Same content = same ID.
 - File-based, no external databases. DHT-ready.
-- Namespace packages (`from spiritwriter.trace import ShardStore`).
+- Namespace packages (`from spiritwriter.fabric import ShardStore`).
 - Apache 2.0 license.
 
 ## Tests

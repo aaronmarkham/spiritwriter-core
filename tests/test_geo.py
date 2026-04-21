@@ -9,7 +9,7 @@ from spiritwriter.geo import (
     geo_view_to_shard,
     shard_to_geo_view,
 )
-from spiritwriter.trace.shard import AtomKind, DecayClass
+from spiritwriter.fabric.shard import AtomKind, DecayClass
 
 
 class TestGeoView:
@@ -179,7 +179,7 @@ class TestShardToGeoView:
 
     def test_missing_atoms_use_defaults(self):
         """A shard with no view atoms should return sensible defaults."""
-        from spiritwriter.trace.shard import MemoryShard, ShardAtom
+        from spiritwriter.fabric.shard import MemoryShard, ShardAtom
         shard = MemoryShard(
             atoms=[ShardAtom(text="empty", entity="app", key="origin", value="test")],
             scope=SCOPE_GEO_VIEW,

@@ -49,7 +49,7 @@ Spiritwriter makes the system immutable. Verification is still useful (and the
 trace chain provides it), but it's a belt on top of suspenders — the data model
 itself prevents the attack.
 
-**Source:** `spiritwriter/trace/shard.py:168-176` (content addressing),
+**Source:** `spiritwriter/fabric/shard.py:168-176` (content addressing),
 `AtomKind.INSTRUCTION` at line 43.
 
 ---
@@ -89,7 +89,7 @@ Validation happens at every access point:
 Every check is logged to the trace hash chain via `TraceEmitter`, creating an
 auditable record of what was attempted, what was allowed, and what was denied.
 
-**Source:** `spiritwriter/trace/entitlement.py`, `spiritwriter/trace/studio_runner.py:172-181`.
+**Source:** `spiritwriter/fabric/entitlement.py`, `spiritwriter/fabric/studio_runner.py:172-181`.
 
 ---
 
@@ -122,7 +122,7 @@ At the Spiritwriter layer, this maps to:
 This is a stronger guarantee than integrity alone. ProofTrail proves you *didn't*
 tamper. Sealed boxes ensure you *can't* — because you can't read the content.
 
-**Source:** `spiritwriter/trace/crypto.py`, ToorCamp CFP (`docs/specs/toorcamp-2026-cfp.md:22-23`).
+**Source:** `spiritwriter/fabric/crypto.py`, ToorCamp CFP (`docs/specs/toorcamp-2026-cfp.md:22-23`).
 
 ---
 
@@ -154,7 +154,7 @@ content hashes), the trace chain and shard store form a **mutual integrity
 lock** — the trace proves the shard existed, and the shard's content address
 proves it hasn't changed.
 
-**Source:** `spiritwriter/trace/emitter.py`, `docs/traced-workflows.md`.
+**Source:** `spiritwriter/fabric/emitter.py`, `docs/traced-workflows.md`.
 
 ---
 
@@ -208,7 +208,7 @@ and execute the exact ability version it was granted access to.
 walk the chain of superseded shards to see how an ability evolved — but the
 execution path is always pinned to a specific content hash.
 
-**Source:** `spiritwriter/trace/shard.py:162` (parent lineage), `entitlement.py:35` (shard_keys binding).
+**Source:** `spiritwriter/fabric/shard.py:162` (parent lineage), `entitlement.py:35` (shard_keys binding).
 
 ---
 

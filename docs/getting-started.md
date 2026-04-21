@@ -27,7 +27,7 @@ Requires Python 3.9+.
 A **MemoryShard** is the fundamental unit of distributable agent memory. Think of it as a content-addressed bundle of structured knowledge:
 
 ```python
-from spiritwriter.trace.shard import MemoryShard, ShardAtom, AtomKind, DecayClass
+from spiritwriter.fabric.shard import MemoryShard, ShardAtom, AtomKind, DecayClass
 
 # Create a shard with structured knowledge atoms
 shard = MemoryShard(
@@ -70,7 +70,7 @@ Every shard has a **content address** — a SHA-256 hash of its atoms, scope, an
 The **ShardStore** persists shards to disk using a Git-style object layout:
 
 ```python
-from spiritwriter.trace.store import ShardStore
+from spiritwriter.fabric.store import ShardStore
 
 store = ShardStore("~/.myapp/shards")
 
@@ -97,7 +97,7 @@ Two layers of encryption protect shards at rest and in transit:
 **AES-256-GCM** — symmetric encryption for agent-to-agent sharing:
 
 ```python
-from spiritwriter.trace.crypto import generate_job_key, encrypt_shard, decrypt_shard
+from spiritwriter.fabric.crypto import generate_job_key, encrypt_shard, decrypt_shard
 
 key = generate_job_key()  # 32-byte random key
 encrypted = encrypt_shard(shard, key)
@@ -112,7 +112,7 @@ decrypted = store.decrypt_and_get(encrypted.shard_id, key)
 **NaCl Sealed Boxes** — asymmetric encryption for zero-knowledge scenarios:
 
 ```python
-from spiritwriter.trace.sealed import generate_owner_keypair, seal_shard, unseal_shard
+from spiritwriter.fabric.sealed import generate_owner_keypair, seal_shard, unseal_shard
 
 # Owner generates keypair (private key = capability key)
 keypair = generate_owner_keypair()
@@ -130,7 +130,7 @@ decrypted = unseal_shard(sealed, keypair.private_key)
 The **CanonicalRegistry** is the runtime component of Phalanx (spiritwriter's entity resolution system, based on the [Consensus Memory Canonicalization](specs/cmc-spec-v0.1.md) spec). It resolves entities across records using tiered confidence matching:
 
 ```python
-from spiritwriter.trace.canonicalize import (
+from spiritwriter.fabric.canonicalize import (
     CanonicalRegistry, CanonicalSchema, canonicalize_batch,
 )
 
@@ -171,7 +171,7 @@ with CanonicalRegistry("/tmp/people.db", schema) as registry:
 The **TraceEmitter** produces hash-chained JSONL logs — a tamper-evident audit trail:
 
 ```python
-from spiritwriter.trace.emitter import TraceEmitter, verify_chain
+from spiritwriter.fabric.emitter import TraceEmitter, verify_chain
 
 emitter = TraceEmitter(
     run_id="run-001",

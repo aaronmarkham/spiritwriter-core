@@ -7,7 +7,7 @@ import os
 
 import pytest
 
-from spiritwriter.trace import (
+from spiritwriter.fabric import (
     TraceEmitter,
     verify_chain,
     render_trace,
@@ -15,7 +15,7 @@ from spiritwriter.trace import (
     CanonicalRegistry,
     ResolutionTier,
 )
-from spiritwriter.trace.visualize import render_simple_workflow
+from spiritwriter.fabric.visualize import render_simple_workflow
 
 
 # ── 3a: TraceEmitter.get_events() and verify_chain() ───────────────

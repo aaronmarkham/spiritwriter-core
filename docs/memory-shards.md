@@ -15,7 +15,7 @@ A **MemoryShard** is the fundamental unit of distributable agent memory in spiri
 Atoms are the smallest unit of retrievable knowledge. Each atom has a semantic type and optional structured fields for exact lookup:
 
 ```python
-from spiritwriter.trace.shard import ShardAtom, AtomKind
+from spiritwriter.fabric.shard import ShardAtom, AtomKind
 
 # Structured atom with entity/key/value (exact lookup)
 fact = ShardAtom(
@@ -88,7 +88,7 @@ print(fact.content_hash)  # SHA-256 of (text, kind, entity, key, value)
 A shard bundles atoms with metadata:
 
 ```python
-from spiritwriter.trace.shard import MemoryShard, DecayClass
+from spiritwriter.fabric.shard import MemoryShard, DecayClass
 
 shard = MemoryShard(
     atoms=[fact, decision, convention],

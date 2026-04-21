@@ -6,18 +6,18 @@ from pathlib import Path
 
 import pytest
 
-from spiritwriter.trace.emitter import TraceEmitter
+from spiritwriter.fabric.emitter import TraceEmitter
 
-from spiritwriter.trace.shard import MemoryShard, ShardAtom, AtomKind, DecayClass
-from spiritwriter.trace.store import ShardStore
-from spiritwriter.trace.crypto import generate_job_key, encrypt_shard, serialize_key
-from spiritwriter.trace.entitlement import (
+from spiritwriter.fabric.shard import MemoryShard, ShardAtom, AtomKind, DecayClass
+from spiritwriter.fabric.store import ShardStore
+from spiritwriter.fabric.crypto import generate_job_key, encrypt_shard, serialize_key
+from spiritwriter.fabric.entitlement import (
     Capability, create_entitlement, serialize_token, deserialize_token,
 )
-from spiritwriter.trace.studio_job import (
+from spiritwriter.fabric.studio_job import (
     StudioJobSpec, PackagedJob, package_job,
 )
-from spiritwriter.trace.studio_runner import (
+from spiritwriter.fabric.studio_runner import (
     StudioRunnerError, JobContext, BudgetTracker,
     parse_job_block, hydrate_job, create_result_shard,
 )

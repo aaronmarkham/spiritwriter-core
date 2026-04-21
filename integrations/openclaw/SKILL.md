@@ -50,8 +50,8 @@ spiritwriter is a Python library, not a CLI tool. Your agent uses it via Python 
 pip install spiritwriter-core
 
 # From your agent code or hooks:
-from spiritwriter.trace.shard import MemoryShard, ShardAtom, AtomKind
-from spiritwriter.trace.store import ShardStore
+from spiritwriter.fabric.shard import MemoryShard, ShardAtom, AtomKind
+from spiritwriter.fabric.store import ShardStore
 
 store = ShardStore("~/.openclaw/shards")
 ```
@@ -63,8 +63,8 @@ spiritwriter works with whatever vector DB your OpenClaw agent already uses. If 
 ### Structured memory (not raw text dumps)
 
 ```python
-from spiritwriter.trace.shard import MemoryShard, ShardAtom, AtomKind, DecayClass
-from spiritwriter.trace.store import ShardStore
+from spiritwriter.fabric.shard import MemoryShard, ShardAtom, AtomKind, DecayClass
+from spiritwriter.fabric.store import ShardStore
 
 store = ShardStore("~/.openclaw/shards")
 
@@ -112,7 +112,7 @@ latest = store.resolve_ref("project-myproject")
 ### Encryption (your memory, not theirs)
 
 ```python
-from spiritwriter.trace.crypto import generate_job_key
+from spiritwriter.fabric.crypto import generate_job_key
 
 # AES-256-GCM — encrypt at rest
 key = generate_job_key()
@@ -120,7 +120,7 @@ encrypted = store.encrypt_and_store(shard, key)
 # On disk: ciphertext. In memory: plaintext only during access.
 
 # NaCl sealed boxes — zero-knowledge (even the operator can't decrypt)
-from spiritwriter.trace.sealed import generate_owner_keypair, seal_shard
+from spiritwriter.fabric.sealed import generate_owner_keypair, seal_shard
 keypair = generate_owner_keypair()
 sealed = seal_shard(shard, keypair.public_key)
 ```
@@ -128,7 +128,7 @@ sealed = seal_shard(shard, keypair.public_key)
 ### Entity resolution (Phalanx) — who is "Max"?
 
 ```python
-from spiritwriter.trace.canonicalize import CanonicalRegistry, CanonicalSchema
+from spiritwriter.fabric.canonicalize import CanonicalRegistry, CanonicalSchema
 
 schema = CanonicalSchema(
     name="person",
@@ -150,7 +150,7 @@ with CanonicalRegistry("~/.openclaw/entities.db", schema) as registry:
 ### Provenance (tamper-evident audit trail)
 
 ```python
-from spiritwriter.trace.emitter import TraceEmitter, verify_chain
+from spiritwriter.fabric.emitter import TraceEmitter, verify_chain
 
 tracer = TraceEmitter(run_id="session-42", agent_id="my-agent",
                       out_path="~/.openclaw/trace.jsonl")

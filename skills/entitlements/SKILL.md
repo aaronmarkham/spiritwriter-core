@@ -28,7 +28,7 @@ pip install -e /path/to/spiritwriter-core
 ### Encrypt a shard
 
 ```python
-from spiritwriter.trace.crypto import encrypt_shard, decrypt_shard, generate_key
+from spiritwriter.fabric.crypto import encrypt_shard, decrypt_shard, generate_key
 
 key = generate_key()  # 32 bytes, AES-256
 encrypted = encrypt_shard(shard, key)
@@ -43,7 +43,7 @@ original = decrypt_shard(encrypted, key)
 ### Create an entitlement token
 
 ```python
-from spiritwriter.trace.entitlement import (
+from spiritwriter.fabric.entitlement import (
     create_entitlement, Capability
 )
 
@@ -69,7 +69,7 @@ context = store.hydrate_with_entitlement(token)
 ### Validate access
 
 ```python
-from spiritwriter.trace.entitlement import (
+from spiritwriter.fabric.entitlement import (
     validate_capability, validate_scope, is_expired
 )
 
@@ -89,6 +89,6 @@ validate_scope(token, "project:csp")           # bool (fnmatch)
 
 ## Source Files
 
-- `spiritwriter/trace/crypto.py` — AES-256-GCM encrypt/decrypt, EncryptedShard, key generation
-- `spiritwriter/trace/entitlement.py` — EntitlementToken, create_entitlement, validate_*, Capability
-- `spiritwriter/trace/store.py` — hydrate_with_entitlement(), encrypt_and_store(), decrypt_and_get()
+- `spiritwriter/fabric/crypto.py` — AES-256-GCM encrypt/decrypt, EncryptedShard, key generation
+- `spiritwriter/fabric/entitlement.py` — EntitlementToken, create_entitlement, validate_*, Capability
+- `spiritwriter/fabric/store.py` — hydrate_with_entitlement(), encrypt_and_store(), decrypt_and_get()

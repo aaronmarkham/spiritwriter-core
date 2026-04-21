@@ -16,12 +16,12 @@ import json
 import random
 import pytest
 from conftest import BenchmarkResult, timed_op, make_shard
-from spiritwriter.trace.shard import (
+from spiritwriter.fabric.shard import (
     MemoryShard, ShardAtom, AtomKind, DecayClass,
 )
-from spiritwriter.trace.store import ShardStore
-from spiritwriter.trace.crypto import generate_job_key, encrypt_shard, decrypt_shard
-from spiritwriter.trace.canonicalize import (
+from spiritwriter.fabric.store import ShardStore
+from spiritwriter.fabric.crypto import generate_job_key, encrypt_shard, decrypt_shard
+from spiritwriter.fabric.canonicalize import (
     CanonicalRegistry, CanonicalSchema, canonicalize_batch,
 )
 

@@ -2,7 +2,7 @@
 
 **Status:** Draft
 **Date:** 2026-02-25
-**Location:** `spiritwriter/trace/canonicalize.py`
+**Location:** `spiritwriter/fabric/canonicalize.py`
 **First consumer:** Frio inmate record normalization
 
 ---
@@ -325,7 +325,7 @@ def fuzzy_score(a: str, b: str) -> float:
 
 ## Integration Points
 
-### With existing `spiritwriter.trace`
+### With existing `spiritwriter.fabric`
 
 - **`ShardAtom`**: A canonical entity can be serialized as a `ShardAtom` (kind=ENTITY) for distribution via the shard system. The `entity` field maps to `canonical_id`, `key` to the primary name, `value` to ESS digest.
 - **`ShardStore`**: Registries can optionally be backed by shards for distribution. A registry snapshot becomes a shard; resolution results become atoms.
@@ -335,7 +335,7 @@ def fuzzy_score(a: str, b: str) -> float:
 
 Frio imports:
 ```python
-from spiritwriter.trace.canonicalize import (
+from spiritwriter.fabric.canonicalize import (
     CanonicalSchema, CanonicalRegistry, EntitySenseSig,
     ResolutionTier, canonicalize_batch,
 )
@@ -367,10 +367,10 @@ Future: `extract.py` could feed atoms into a `CanonicalRegistry` for cross-sessi
 
 ## Module Exports
 
-Added to `spiritwriter/trace/__init__.py`:
+Added to `spiritwriter/fabric/__init__.py`:
 
 ```python
-from spiritwriter.trace.canonicalize import (
+from spiritwriter.fabric.canonicalize import (
     EntitySenseSig,
     ResolutionTier,
     ResolutionResult,

@@ -15,7 +15,7 @@ Tampering with any event breaks the chain — `verify_chain()` detects it.
 ## Quick Start
 
 ```python
-from spiritwriter.trace.emitter import TraceEmitter, verify_chain
+from spiritwriter.fabric.emitter import TraceEmitter, verify_chain
 
 emitter = TraceEmitter(
     run_id="run-2026-04-17-001",
@@ -40,7 +40,7 @@ assert verify_chain(events)  # True if no tampering
 ## Shard Lifecycle Events
 
 ```python
-from spiritwriter.trace.shard import MemoryShard, ShardAtom, AtomKind
+from spiritwriter.fabric.shard import MemoryShard, ShardAtom, AtomKind
 
 shard = MemoryShard(
     atoms=[ShardAtom(text="Project context", kind=AtomKind.CONTEXT)],
@@ -184,7 +184,7 @@ If an event is modified, inserted, or removed, `verify_chain()` returns `False`.
 For non-repudiation, pass an Ed25519 signer:
 
 ```python
-from spiritwriter.trace.sealed import generate_signing_keypair
+from spiritwriter.fabric.sealed import generate_signing_keypair
 
 signing_key, verify_key = generate_signing_keypair()
 
@@ -193,7 +193,7 @@ class Signer:
     def __init__(self, key):
         self._key = key
     def sign(self, data):
-        from spiritwriter.trace.sealed import sign_data
+        from spiritwriter.fabric.sealed import sign_data
         return sign_data(data if isinstance(data, bytes) else data.encode(), self._key).hex()
 
 emitter = TraceEmitter(

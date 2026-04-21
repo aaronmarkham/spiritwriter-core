@@ -24,7 +24,7 @@ shards/                          # root directory
 ### Initialize
 
 ```python
-from spiritwriter.trace.store import ShardStore
+from spiritwriter.fabric.store import ShardStore
 
 store = ShardStore("~/.myapp/shards")
 # Creates directory structure on first call
@@ -33,7 +33,7 @@ store = ShardStore("~/.myapp/shards")
 ### Store and Retrieve
 
 ```python
-from spiritwriter.trace.shard import MemoryShard, ShardAtom, AtomKind, DecayClass
+from spiritwriter.fabric.shard import MemoryShard, ShardAtom, AtomKind, DecayClass
 
 shard = MemoryShard(
     atoms=[
@@ -146,7 +146,7 @@ shards = store.resolve_many(refs)  # skips missing refs
 The store supports AES-256-GCM encrypted shards. Scope metadata remains visible; content is encrypted:
 
 ```python
-from spiritwriter.trace.crypto import generate_job_key
+from spiritwriter.fabric.crypto import generate_job_key
 
 key = generate_job_key()
 
@@ -168,7 +168,7 @@ decrypted = store.decrypt_and_get(encrypted.shard_id, key)
 NaCl sealed-box shards support zero-knowledge storage — the operator cannot decrypt:
 
 ```python
-from spiritwriter.trace.sealed import generate_owner_keypair
+from spiritwriter.fabric.sealed import generate_owner_keypair
 
 keypair = generate_owner_keypair()
 
@@ -189,8 +189,8 @@ decrypted = store.unseal_and_get(sealed.shard_id, keypair.private_key)
 Hydrate shards through an entitlement token — validates expiry, scope, and capability before decrypting:
 
 ```python
-from spiritwriter.trace.entitlement import create_entitlement, Capability
-from spiritwriter.trace.crypto import generate_job_key, serialize_key
+from spiritwriter.fabric.entitlement import create_entitlement, Capability
+from spiritwriter.fabric.crypto import generate_job_key, serialize_key
 
 key = generate_job_key()
 encrypted = store.encrypt_and_store(shard, key)
@@ -248,7 +248,7 @@ print(stats)
 The store supports an optional network resolver for distributed access. If a shard isn't found locally (L1), the store falls back to the network (L2):
 
 ```python
-from spiritwriter.trace.backends.ipfs import IPFSBackend
+from spiritwriter.fabric.backends.ipfs import IPFSBackend
 
 ipfs = IPFSBackend()
 store = ShardStore("~/.myapp/shards", resolver=ipfs)

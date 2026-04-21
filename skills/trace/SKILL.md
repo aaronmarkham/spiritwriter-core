@@ -28,7 +28,7 @@ pip install -e /path/to/spiritwriter-core
 ### Emit trace events
 
 ```python
-from spiritwriter.trace.emitter import TraceEmitter
+from spiritwriter.fabric.emitter import TraceEmitter
 
 emitter = TraceEmitter(agent_id="lilit", output_path="trace.jsonl")
 
@@ -56,7 +56,7 @@ emitter.emit_studio_job_failed(job_id, error)
 ### Verify chain integrity
 
 ```python
-from spiritwriter.trace.emitter import verify_chain
+from spiritwriter.fabric.emitter import verify_chain
 
 events = emitter.get_events()
 is_valid = verify_chain(events)  # True if no tampering
@@ -65,7 +65,7 @@ is_valid = verify_chain(events)  # True if no tampering
 ### Visualize traces
 
 ```python
-from spiritwriter.trace.visualize import render_trace
+from spiritwriter.fabric.visualize import render_trace
 
 # Generates Mermaid diagram from JSONL trace
 mermaid_code = render_trace(
@@ -91,5 +91,5 @@ Events are stored as newline-delimited JSON (JSONL). Each line is one event.
 
 ## Source Files
 
-- `spiritwriter/trace/emitter.py` — TraceEmitter, verify_chain
-- `spiritwriter/trace/visualize.py` — Mermaid diagram generation from traces
+- `spiritwriter/fabric/emitter.py` — TraceEmitter, verify_chain
+- `spiritwriter/fabric/visualize.py` — Mermaid diagram generation from traces

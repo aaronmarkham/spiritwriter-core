@@ -53,7 +53,7 @@ pip install -e /path/to/spiritwriter-core
 ### Create a shard
 
 ```python
-from spiritwriter.trace.shard import MemoryShard, ShardAtom, AtomKind, DecayClass
+from spiritwriter.fabric.shard import MemoryShard, ShardAtom, AtomKind, DecayClass
 
 shard = MemoryShard(
     atoms=[
@@ -81,7 +81,7 @@ shard = MemoryShard(
 ### Store and retrieve
 
 ```python
-from spiritwriter.trace.store import ShardStore
+from spiritwriter.fabric.store import ShardStore
 
 store = ShardStore("/path/to/shard-directory")
 
@@ -122,7 +122,7 @@ context = store.hydrate(refs)
 ### Extract atoms from text
 
 ```python
-from spiritwriter.trace.extract import extract_atoms
+from spiritwriter.fabric.extract import extract_atoms
 
 atoms = extract_atoms("""
 We decided to use SQLite with vec0 for memory search.
@@ -193,7 +193,7 @@ shard-directory/
 
 ## Source Files
 
-- `spiritwriter/trace/shard.py` — MemoryShard, ShardAtom, ShardRef, DecayClass, AtomKind
-- `spiritwriter/trace/store.py` — ShardStore (file-based content-addressed storage, optional network resolver)
-- `spiritwriter/trace/extract.py` — Knowledge extraction from text → atoms
-- `spiritwriter/trace/network.py` — NetworkResolver protocol, ShardLocation, ShardManifest
+- `spiritwriter/fabric/shard.py` — MemoryShard, ShardAtom, ShardRef, DecayClass, AtomKind
+- `spiritwriter/fabric/store.py` — ShardStore (file-based content-addressed storage, optional network resolver)
+- `spiritwriter/fabric/extract.py` — Knowledge extraction from text → atoms
+- `spiritwriter/fabric/network.py` — NetworkResolver protocol, ShardLocation, ShardManifest

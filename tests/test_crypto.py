@@ -1,8 +1,8 @@
-"""Tests for spiritwriter.trace.crypto."""
+"""Tests for spiritwriter.fabric.crypto."""
 
 import pytest
-from spiritwriter.trace.shard import MemoryShard, ShardAtom, AtomKind
-from spiritwriter.trace.crypto import (
+from spiritwriter.fabric.shard import MemoryShard, ShardAtom, AtomKind
+from spiritwriter.fabric.crypto import (
     generate_job_key, encrypt_shard, decrypt_shard,
     serialize_key, deserialize_key, DecryptionError,
 )

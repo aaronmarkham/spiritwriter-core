@@ -2,7 +2,7 @@
 
 Complete public API surface of spiritwriter-core.
 
-## spiritwriter.trace.shard
+## spiritwriter.fabric.shard
 
 ### Classes
 
@@ -81,7 +81,7 @@ Lightweight pointer to a shard.
 
 ---
 
-## spiritwriter.trace.store
+## spiritwriter.fabric.store
 
 ### `ShardStore(root, resolver=None)`
 
@@ -140,7 +140,7 @@ Content-addressed shard storage.
 
 ---
 
-## spiritwriter.trace.crypto
+## spiritwriter.fabric.crypto
 
 ### `EncryptedShard`
 
@@ -171,7 +171,7 @@ AES-256-GCM encrypted shard.
 
 ---
 
-## spiritwriter.trace.sealed
+## spiritwriter.fabric.sealed
 
 ### Classes
 
@@ -224,7 +224,7 @@ NaCl sealed-box encrypted shard.
 
 ---
 
-## spiritwriter.trace.canonicalize
+## spiritwriter.fabric.canonicalize
 
 ### Classes
 
@@ -299,7 +299,7 @@ Content-addressed identity anchor.
 
 ---
 
-## spiritwriter.trace.emitter
+## spiritwriter.fabric.emitter
 
 ### `TraceEmitter(run_id, agent_id, out_path, signer=None)`
 
@@ -338,7 +338,7 @@ Verify hash chain integrity. Returns `True` if valid or empty.
 
 ---
 
-## spiritwriter.trace.entitlement
+## spiritwriter.fabric.entitlement
 
 ### `EntitlementToken`
 

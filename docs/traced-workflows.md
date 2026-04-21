@@ -35,8 +35,8 @@ STAGES = ["ingest", "extract", "generate", "validate", "assemble"]
 ### 2. Set Up Store and Emitter
 
 ```python
-from spiritwriter.trace.emitter import TraceEmitter
-from spiritwriter.trace.store import ShardStore
+from spiritwriter.fabric.emitter import TraceEmitter
+from spiritwriter.fabric.store import ShardStore
 
 store = ShardStore("/path/to/shards")
 emitter = TraceEmitter(agent_id="my-pipeline", output_path="run.jsonl")
@@ -61,7 +61,7 @@ emitter.emit("stage_completed", {"stage": "extract", "output_ref": output_shard.
 After each stage, persist state as a shard:
 
 ```python
-from spiritwriter.trace.shard import MemoryShard, ShardAtom, AtomKind, DecayClass
+from spiritwriter.fabric.shard import MemoryShard, ShardAtom, AtomKind, DecayClass
 
 checkpoint = MemoryShard(
     atoms=[
@@ -118,8 +118,8 @@ def get_resume_stage(store, stages, job_ref="job:my-pipeline:checkpoint"):
 After all stages complete:
 
 ```python
-from spiritwriter.trace.emitter import verify_chain
-from spiritwriter.trace.visualize import render_trace
+from spiritwriter.fabric.emitter import verify_chain
+from spiritwriter.fabric.visualize import render_trace
 
 # Verify no tampering
 events = emitter.get_events()
@@ -134,10 +134,10 @@ mermaid_code = render_trace("run.jsonl", diagram_type="workflow")
 ```python
 """Traced workflow template — copy and customize."""
 
-from spiritwriter.trace.emitter import TraceEmitter, verify_chain
-from spiritwriter.trace.store import ShardStore
-from spiritwriter.trace.shard import MemoryShard, ShardAtom, AtomKind, DecayClass
-from spiritwriter.trace.visualize import render_trace
+from spiritwriter.fabric.emitter import TraceEmitter, verify_chain
+from spiritwriter.fabric.store import ShardStore
+from spiritwriter.fabric.shard import MemoryShard, ShardAtom, AtomKind, DecayClass
+from spiritwriter.fabric.visualize import render_trace
 
 
 STAGES = ["ingest", "extract", "generate", "validate", "assemble"]
@@ -288,7 +288,7 @@ stage_completed {agent: "sonnet", stage: "generate", cost: 0.02}
 ### With Budget Tracking
 
 ```python
-from spiritwriter.trace.studio_runner import BudgetTracker
+from spiritwriter.fabric.studio_runner import BudgetTracker
 
 tracker = BudgetTracker(budget_cents=100)  # $1.00 cap
 
@@ -305,8 +305,8 @@ print(tracker.summary())
 For sensitive inputs, encrypt and scope access per agent:
 
 ```python
-from spiritwriter.trace.crypto import encrypt_shard, generate_key
-from spiritwriter.trace.entitlement import create_entitlement, Capability
+from spiritwriter.fabric.crypto import encrypt_shard, generate_key
+from spiritwriter.fabric.entitlement import create_entitlement, Capability
 
 # Encrypt the input
 key = generate_key()
@@ -370,7 +370,7 @@ claude -p --permission-mode acceptEdits --max-turns 20 \
 
 # Verify checkpoint before advancing
 python3 -c "
-from spiritwriter.trace.store import ShardStore
+from spiritwriter.fabric.store import ShardStore
 store = ShardStore('/path/to/shards')
 c = store.resolve_ref('job:my-pipeline:checkpoint')
 assert c.get_atom('stage').value == 'extract_complete'
@@ -392,7 +392,7 @@ for stage in "${STAGES[@]}"; do
         2>&1 | tee "logs/$stage.log"
     
     python3 -c "
-from spiritwriter.trace.store import ShardStore
+from spiritwriter.fabric.store import ShardStore
 store = ShardStore('/path/to/shards')
 c = store.resolve_ref('job:my-pipeline:checkpoint')
 assert c.get_atom('stage').value == '${stage}_complete', 'Checkpoint missing!'
@@ -405,11 +405,11 @@ done
 
 | File | What it does |
 |------|-------------|
-| `spiritwriter/trace/shard.py` | MemoryShard, ShardAtom, content addressing |
-| `spiritwriter/trace/store.py` | ShardStore, refs, checkpoint persistence |
-| `spiritwriter/trace/emitter.py` | TraceEmitter, hash chain, verify_chain |
-| `spiritwriter/trace/visualize.py` | Mermaid diagram generation |
-| `spiritwriter/trace/crypto.py` | AES-256-GCM shard encryption |
-| `spiritwriter/trace/entitlement.py` | Scoped access tokens |
-| `spiritwriter/trace/studio_job.py` | Job packaging |
-| `spiritwriter/trace/studio_runner.py` | Job execution, BudgetTracker |
+| `spiritwriter/fabric/shard.py` | MemoryShard, ShardAtom, content addressing |
+| `spiritwriter/fabric/store.py` | ShardStore, refs, checkpoint persistence |
+| `spiritwriter/fabric/emitter.py` | TraceEmitter, hash chain, verify_chain |
+| `spiritwriter/fabric/visualize.py` | Mermaid diagram generation |
+| `spiritwriter/fabric/crypto.py` | AES-256-GCM shard encryption |
+| `spiritwriter/fabric/entitlement.py` | Scoped access tokens |
+| `spiritwriter/fabric/studio_job.py` | Job packaging |
+| `spiritwriter/fabric/studio_runner.py` | Job execution, BudgetTracker |

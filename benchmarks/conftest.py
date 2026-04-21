@@ -10,10 +10,10 @@ from pathlib import Path
 
 import pytest
 
-from spiritwriter.trace.shard import (
+from spiritwriter.fabric.shard import (
     MemoryShard, ShardAtom, AtomKind, DecayClass,
 )
-from spiritwriter.trace.store import ShardStore
+from spiritwriter.fabric.store import ShardStore
 
 
 @dataclass

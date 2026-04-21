@@ -12,14 +12,14 @@ import tempfile
 
 import pytest
 
-from spiritwriter.trace.shard import MemoryShard, ShardAtom, AtomKind
-from spiritwriter.trace.crypto import encrypt_shard, generate_job_key
-from spiritwriter.trace.network import ShardLocation, ShardManifest, IntegrityError
+from spiritwriter.fabric.shard import MemoryShard, ShardAtom, AtomKind
+from spiritwriter.fabric.crypto import encrypt_shard, generate_job_key
+from spiritwriter.fabric.network import ShardLocation, ShardManifest, IntegrityError
 
 # Guard: skip entire module if requests is not installed
 requests = pytest.importorskip("requests")
 
-from spiritwriter.trace.backends.ipfs import IPFSBackend, IPFSConfig
+from spiritwriter.fabric.backends.ipfs import IPFSBackend, IPFSConfig
 
 
 def _make_shard(text: str = "ipfs test fact", scope: str = "test:ipfs") -> MemoryShard:
@@ -102,7 +102,7 @@ class TestEncryptedShards:
 class TestSealedShards:
     def test_publish_resolve_sealed(self, backend):
         nacl = pytest.importorskip("nacl")
-        from spiritwriter.trace.sealed import seal_shard, generate_owner_keypair
+        from spiritwriter.fabric.sealed import seal_shard, generate_owner_keypair
 
         shard = _make_shard("sealed content")
         keypair = generate_owner_keypair()

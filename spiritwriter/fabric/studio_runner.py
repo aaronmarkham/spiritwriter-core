@@ -18,16 +18,16 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
-from spiritwriter.trace.shard import (
+from spiritwriter.fabric.shard import (
     MemoryShard, ShardAtom, AtomKind, DecayClass, _now_iso,
 )
-from spiritwriter.trace.store import ShardStore
-from spiritwriter.trace.crypto import decrypt_shard
-from spiritwriter.trace.entitlement import (
+from spiritwriter.fabric.store import ShardStore
+from spiritwriter.fabric.crypto import decrypt_shard
+from spiritwriter.fabric.entitlement import (
     EntitlementToken, deserialize_token, validate_capability,
     validate_budget, is_expired, get_shard_key, Capability,
 )
-from spiritwriter.trace.emitter import TraceEmitter
+from spiritwriter.fabric.emitter import TraceEmitter
 
 
 class StudioRunnerError(Exception):
