@@ -15,9 +15,20 @@ import warnings
 
 
 def _reimport_trace():
-    """Drop cached trace modules and return a freshly imported spiritwriter.trace."""
+    """Simulate a cold import of spiritwriter.trace.
+
+    Drops both trace *and* fabric from sys.modules so fabric's import-time
+    behavior is exercised alongside the shim — otherwise we'd only be
+    re-importing the shim against an already-cached fabric, which could
+    mask regressions in fabric's own import path.
+    """
     for name in list(sys.modules):
-        if name == "spiritwriter.trace" or name.startswith("spiritwriter.trace."):
+        if (
+            name == "spiritwriter.trace"
+            or name.startswith("spiritwriter.trace.")
+            or name == "spiritwriter.fabric"
+            or name.startswith("spiritwriter.fabric.")
+        ):
             del sys.modules[name]
     return importlib.import_module("spiritwriter.trace")
 
