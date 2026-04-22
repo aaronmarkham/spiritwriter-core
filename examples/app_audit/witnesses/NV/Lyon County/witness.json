@@ -1,0 +1,466 @@
+{
+  "witness_version": "1.0",
+  "witness_sha256": "8b3b76014277569850eb33d9a8317d4211691c8ba2665adf66f22312f674068d",
+  "generated_at": "2026-03-31T05:38:57Z",
+  "input": {
+    "package_name": "com.ocv.a958",
+    "apk_sha256": "6785aad6f71e80aa9674054b81831bdae37bf8906fad65ab098573e109085bd1",
+    "apk_size_bytes": 55693508,
+    "download_source": "apkpure"
+  },
+  "evidence": {
+    "extraction_file_count": 38,
+    "file_hashes": {
+      "classes.dex": "6a113c737f1226f5293d74ec07c2d8fea8a5b562bafcdeb18228a3dfb64fd3dc",
+      "classes2.dex": "4183e812eabf04504f0f91a741f0f819993bb0590cab3203a692b35153725e5d",
+      "classes3.dex": "74c12271c09d9da62ae5a172696c36c3232f8178f84dac6e6b7cf70bb411d7d2",
+      "classes4.dex": "9177993c581266dc5336ef1513913fede54ad90e7f484fc93a4f3c91c561db1b",
+      "classes5.dex": "41cb63c8ecbc4e6ff6ae54cd739210914d46937015470dd756ff6f9a0194f330",
+      "AndroidManifest.xml": "0b1b2a067f343cd0e8979655ba22d267684b2813684877f9b49c7f7ecfa54084",
+      "firebase-analytics.properties": "29b23a7d8b12ee8994b294723041e4e24daa34ab02f34cb43d5f25079b80df68",
+      "firebase-annotations.properties": "972326b7b3ba61a998494be06ce6820c633b5c38382279e81f144c48ea6b5d7f",
+      "firebase-common.properties": "bd36193832e1e27d8dc6e7396143f292d8a9d5ad98ad03ef8c19cca64a103696",
+      "firebase-components.properties": "b79cf96b46189203e0358147a9001ab2349aa50cccbcaea496672a4689f5e8a0",
+      "firebase-datatransport.properties": "deebe9c75831d2c4f1ee19de262751444c65fe9acee690bf4a2c7d36c7a7802c",
+      "firebase-encoders-json.properties": "354e4def95204eb991b805e8f8e2319651e0ed590d1ad6ffe8a5cd4b9ec65db7",
+      "firebase-encoders-proto.properties": "eba792be6ea03f3b6d68eccfd25f3f53a0767657ec12b1b90996b5d5b34a9688",
+      "firebase-encoders.properties": "527438e526e7befb6c04dc394f4e36824a11019c7d6d687c2772a435d22c0e9f",
+      "firebase-iid-interop.properties": "a2862ae5811a268630807c645d5dadc1f15e85b922a2ab0408e984ea5548e102",
+      "firebase-installations-interop.properties": "e18456985c7e2c69b5b0b538643b7a3f60e4357072b2d08fa1b4ad52d10e8f04",
+      "firebase-installations.properties": "66de47b00d792d4cb320ee5acbcfc8b2e63379f3575c26b6c0795d1d52d031e5",
+      "firebase-measurement-connector.properties": "ca7d9dd559c3cf48a087b9d4fc5b7c6eded0c99892297b59758093459d98463a",
+      "firebase-messaging.properties": "d79b127f75ff3f93005d264d94dee4382cdf712f42fc84c466eadcf4e239aaf1",
+      "places.properties": "3b838f598f6e10f2e0626ea2536da9da1c820a59f4d8650bacdf72afae41bfbf",
+      "play-services-ads-identifier.properties": "e62509e4ccec3ae9361c036260befb5208709627bc82b1d6f5a7b12813875181",
+      "play-services-base.properties": "956ac5352b689260a4294059a650eb8d46acadd777a74d729f4cf3c79faf73d2",
+      "play-services-basement.properties": "f97448f9c0e17275238e7bfd89b7374433fa9f73c8cd13012f327f78afb83b6c",
+      "play-services-cloud-messaging.properties": "f8ef7565db66da4890f4be15b2ebc62ac05833f4f5bbbb7deb02eabd5a324021",
+      "play-services-location.properties": "689dde3ecbb3e3920bc1d361b33cc098307ebdcefcd12a6d691a011e65867487",
+      "play-services-maps.properties": "b91d5c33b04266b10b808552d740a69f6ec18972ed1f8bafc18eb8bcd20ae38f",
+      "play-services-measurement-api.properties": "f536f0f85479f1e2ada64337d7c03b230d46ee679c81c430c314c0b8af4327b6",
+      "play-services-measurement-base.properties": "cd81e0aabeed37c1194f6e2834b296d4b3df65a251add594c19da1634cac3e1b",
+      "play-services-measurement-impl.properties": "e5d9698c0f97ec7443439d2dd80a9e5605d1f9fdb7a6ef1e916b21c91c8ceb38",
+      "play-services-measurement-sdk-api.properties": "cc0b55b8baf2d0827a2a6e90e1cfafbc49616df1bb2d58089b61046a52bfd7e4",
+      "play-services-measurement-sdk.properties": "a9fa774e1cdf0e6dd3c54bb09f89dca6ec88b0594f96fce26f5fab9c717a867c",
+      "play-services-measurement.properties": "cd5d198d4d5aaac562898fe64b676420e5e1484db908b1d6c92bca9ece57dfed",
+      "play-services-stats.properties": "6b751c654deb3ac65a878025d2ff2b89fabfa0ebe00ac4152ad3f7a361aed107",
+      "play-services-tasks.properties": "dffd492d60677d27cc216d6687da9477242b7d9447029bf7c260a0147e84ee1f",
+      "transport-api.properties": "e75f0a43308c145c5470418f30b7705738845c39c83bdb694ca5847b56a175bb",
+      "transport-backend-cct.properties": "c558e245601e0883e8baa79a7f1f97c85abf7baf7476ff78f5edd2e5f39a26d4",
+      "transport-runtime.properties": "f0f32f83722de6a4d524d9d607b071c132a9f160ece8efbecbb6f0b6fca02cc6",
+      "resources.arsc": "67784293ae3b19f3f9b5d43baa53b6c8e5055bbf4b5e2f210b83fa8045398494"
+    },
+    "dex_corpus_sha256": "e25e4dbf4e2f9afd249585ca15aff0e503db496dd79924ad78ec179648fc91af",
+    "dex_string_count": 285359,
+    "dex_extraction_params": {
+      "min_length": 8,
+      "pattern": "[\\x20-\\x7e]{8,}"
+    }
+  },
+  "findings": [
+    {
+      "name": "Firebase Analytics (Google Analytics for Firebase)",
+      "category": "analytics",
+      "risk": "medium",
+      "evidence_strings": [
+        "client=firebase-analytics, firebase-analytics_client=21.1.0",
+        "Multiple measurement SDK property files present (measurement, measurement-api, measurement-base, measurement-impl, measurement-sdk, measurement-sdk-api), all version 21.1.0",
+        "App measurement initialized | google_app_id | Lcom/google/firebase/analytics/FirebaseAnalytics | firebase_analytics_collection_enabled | google_app_measurement.db | https://app-measurement.com/a",
+        "Firebase App ID: 1:390002740973:android:10df063d42e3952dde06e4"
+      ],
+      "evidence_files": [
+        "firebase-analytics.properties",
+        "play-services-measurement.properties / play-services-measurement-impl.properties",
+        "classes*.dex",
+        "resources.arsc"
+      ],
+      "derivation_event_hash": "3574cc2f49c3f1503b2ae883ae439a7263d25d8b5b16ab1eba3d0c4c7bf60147"
+    },
+    {
+      "name": "Firebase Cloud Messaging (FCM)",
+      "category": "analytics",
+      "risk": "low",
+      "evidence_strings": [
+        "client=firebase-messaging, firebase-messaging_client=23.0.7",
+        "FCM_CLIENT_EVENT_LOGGING | FcmBroadcastProcessor | FCM_FALLBACK_NOTIFICATION_CHANNEL | handleFCMCampaignPush | Push3ListenerService"
+      ],
+      "evidence_files": [
+        "firebase-messaging.properties",
+        "classes*.dex"
+      ],
+      "derivation_event_hash": "9d9ce0fbda7bc4ae9c3092d9355f80e543d1307b1c32987e06aac7812c9e24d6"
+    },
+    {
+      "name": "Firebase Installations",
+      "category": "analytics",
+      "risk": "low",
+      "evidence_strings": [
+        "client=firebase-installations, firebase-installations_client=17.0.1",
+        "Firebase Installations getId Task has timed out | firebaseinstallations.googleapis.com | FIREBASE_INSTALLATIONS_API_DOMAIN"
+      ],
+      "evidence_files": [
+        "firebase-installations.properties",
+        "classes*.dex"
+      ],
+      "derivation_event_hash": "f0ed771989ff64b0f85e2f9714e33efa5cc5cc442eea597d891e0076f4466ddb"
+    },
+    {
+      "name": "Facebook SDK",
+      "category": "analytics",
+      "risk": "medium",
+      "evidence_strings": [
+        "com.amazonaws.mobile.auth.facebook.FacebookButton | FacebookSignInProvider | FacebookResponseModel* | com.amazonaws:aws-android-sdk-auth-facebook:2.7.6",
+        "https://www.facebook.com/ | FACEBOOK | FACEBOOK_BOX | FACEBOOK_MESSENGER | FACEBOOK_SIGN_IN_IMPORT"
+      ],
+      "evidence_files": [
+        "classes*.dex",
+        "classes*.dex"
+      ],
+      "derivation_event_hash": "2a7dba62815e4729a03496781ab14010e662cc5429fc2d678a6d4988214f05bb"
+    },
+    {
+      "name": "Google AdMob / Play Services Ads Identifier",
+      "category": "ads",
+      "risk": "high",
+      "evidence_strings": [
+        "client=play-services-ads-identifier, version=18.0.0",
+        "admob_app_id | linked_admob_app_id | AdvertisingIdClient | getAdvertisingIdInfo | last_advertising_id_reset | ca-app-pub- regex pattern",
+        "https://pagead2.googlesyndication.com/pagead/gen_204?id=gmob-apps | https://www.googleadservices.com/pagead/conversion/app/deeplink?id_type=adid&sdk_version=%s&rdid=%s&bundleid=%s&retry=%s"
+      ],
+      "evidence_files": [
+        "play-services-ads-identifier.properties",
+        "classes*.dex",
+        "classes*.dex"
+      ],
+      "derivation_event_hash": "336edec57aa0d9f21b54c226450a3c4ad0506b3937ee9e2b8412142f02a4897a"
+    },
+    {
+      "name": "Google Play Services Location",
+      "category": "analytics",
+      "risk": "high",
+      "evidence_strings": [
+        "client=play-services-location, version=21.1.0",
+        "ACCESS_FINE_LOCATION | ACCESS_COARSE_LOCATION | GPSPointDimensionJsonMarshaller | SegmentLocationJsonUnmarshaller | SEMANTIC_LOCATION_UPDATES_REGISTER/UNREGISTER | onMyLocationButtonClick | onMyLocationChange | LAST_KNOWN_SEMANTIC_LOCATION | GEOFENCE_TRANSITION_ENTER/EXIT/DWELL"
+      ],
+      "evidence_files": [
+        "play-services-location.properties",
+        "classes*.dex"
+      ],
+      "derivation_event_hash": "61f8ab358f485e356d6913b84f8de204922cca1bb4b5b8eeaf0f47113c553c7a"
+    },
+    {
+      "name": "Google Maps SDK for Android",
+      "category": "analytics",
+      "risk": "low",
+      "evidence_strings": [
+        "client=play-services-maps, version=18.2.0",
+        "maps.googleapis.com | onMyLocationClick | OffenderClusterRenderer (sex offender map) | AssetTrackerLocationFormBinding"
+      ],
+      "evidence_files": [
+        "play-services-maps.properties",
+        "classes*.dex"
+      ],
+      "derivation_event_hash": "10b1e355d9d644295c1c4b656d6d110a15f8179771cd254e57f3219ccdf23b2f"
+    },
+    {
+      "name": "BugSnag",
+      "category": "crash_reporting",
+      "risk": "low",
+      "evidence_strings": [
+        "Native C/C++ BugSnag header present",
+        "com.bugsnag.android.* (750 string matches) | BugsnagNDK | com.bugsnag.android.API_KEY | com.bugsnag.android.ENDPOINT_NOTIFY | com.bugsnag.android.ENDPOINT_SESSIONS | com.bugsnag.android.AUTO_TRACK_SESSIONS",
+        "https://notify.bugsnag.com | https://sessions.bugsnag.com"
+      ],
+      "evidence_files": [
+        "assets/include/bugsnag.h",
+        "classes*.dex",
+        "classes*.dex (URLs)"
+      ],
+      "derivation_event_hash": "593a2865bd31844cc059e980ae83b0b8c2c56fde68d8c9401b1d4b9a51e16f67"
+    },
+    {
+      "name": "AWS Amplify + Amazon Pinpoint",
+      "category": "analytics",
+      "risk": "medium",
+      "evidence_strings": [
+        "fabric-identifier=com.amazonaws.aws-android-sdk-core, fabric-version=2.16.13",
+        "Lcom/amplifyframework/analytics/pinpoint/* | AWSPinpointAnalyticsPlugin | PinpointAppId | AmazonPinpointAnalyticsClient | pinpoint.us-east-1.amazonaws.com | pinpoint.notification.silentPush"
+      ],
+      "evidence_files": [
+        "fabric/com.amazonaws.aws-android-sdk-core.properties",
+        "classes*.dex"
+      ],
+      "derivation_event_hash": "8453e0b7f074533835273b1139ac053d3087e0b802629f1445790f4556fa4412"
+    },
+    {
+      "name": "AWS Cognito",
+      "category": "analytics",
+      "risk": "low",
+      "evidence_strings": [
+        "AWSCognitoAuthPlugin | CognitoUserPoolsSignInProvider | AWSCognitoUserPoolTokens | cognito-idp.*.amazonaws.com",
+        "Embedded Amplify config: CredentialsProvider > CognitoIdentity > Default > PoolId: us-east-1:... | CognitoUserPool > Default > Region: us-east-1",
+        "Cognito Identity Pool ID: us-east-1:2793e471-e8b3-4dba-8270-d1a4192c0d17"
+      ],
+      "evidence_files": [
+        "classes*.dex",
+        "classes*.dex (config)",
+        "resources.arsc"
+      ],
+      "derivation_event_hash": "24190d64bd3474f6112593a64d7c53b548c6614742254e4192916355fa2db151"
+    },
+    {
+      "name": "AWS IoT",
+      "category": "surveillance",
+      "risk": "high",
+      "evidence_strings": [
+        "data.iot.us-east-1.amazonaws.com | data.iot.us-west-2.amazonaws.com | data.iot.eu-west-1.amazonaws.com (9 regional IoT endpoints)",
+        "DynamicAssetTrackerFeed | AssetTrackerLocation (SQLite table with GPS) | AssetTrackerLocationFormBinding | TagAlongSessionViewBinding | TagAlongTripItemBinding | /tagAlong.txt",
+        "https://api.myocv.com/apps/tagalong/add/ | https://api.myocv.com/apps/tagalong/session/ | https://api.myocv.com/apps/tagalong/session?appID="
+      ],
+      "evidence_files": [
+        "classes*.dex",
+        "classes*.dex",
+        "classes*.dex (API)"
+      ],
+      "derivation_event_hash": "787df67a6075c0a55e576198e10e866096e0ca575b2d53950ec787aed49191c8"
+    },
+    {
+      "name": "YouTube Data API v3 (Embedded Key)",
+      "category": "analytics",
+      "risk": "medium",
+      "evidence_strings": [
+        "https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&key=AIzaSyASZbllDc_ielyHaBZw120XkaOoeQ11n2Y&maxResults=50&playlistId="
+      ],
+      "evidence_files": [
+        "classes*.dex"
+      ],
+      "derivation_event_hash": "77d3c54f7cc94bb50c041a5da6c4699ee26c34372de822e832237fd5aa5a121a"
+    },
+    {
+      "name": "Google Calendar API (Embedded Key)",
+      "category": "analytics",
+      "risk": "medium",
+      "evidence_strings": [
+        "https://www.googleapis.com/calendar/v3/calendars/ ... key=AIzaSyASZbllDc_ielyHaBZw120XkaOoeQ11n2Y&singleEvents=true&orderBy=startTime&maxResults=2500"
+      ],
+      "evidence_files": [
+        "classes*.dex"
+      ],
+      "derivation_event_hash": "8d16ae4b5bc031e39ff5747f0778e0733b29372070a3735bc0eb796ae9f68b34"
+    },
+    {
+      "name": "Appriss VINE",
+      "category": "surveillance",
+      "risk": "medium",
+      "evidence_strings": [
+        "ApprissVineSearchFragment | ApprissVineDetailFragment | ApprissInmateItem | ApprissPagination | ApprissEntryID",
+        "https://appriss.api.myocv.com/prod/apprissList/ | /apprissSearch/ | /charges/ | /register",
+        "https://vinelink.com/classic/#/home | https://vinelink.vineapps.com/search/person/registration | http://www.vinelink.com/vinelink/servlet/SubjectSearch?siteID="
+      ],
+      "evidence_files": [
+        "classes*.dex",
+        "classes*.dex (API)",
+        "classes*.dex (VINE)"
+      ],
+      "derivation_event_hash": "033fd582c24c858607d77cbd36ea647adb5cb60ae40e2884e7a4be919e2f67b9"
+    },
+    {
+      "name": "OCV Platform Services",
+      "category": "analytics",
+      "risk": "medium",
+      "evidence_strings": [
+        "https://api.myocv.com/ | https://app.api.myocv.com/prod/allinone | /prod/manifest | https://blogapi.myocv.com/prod/ | https://cdn.myocv.com/ocvapps/",
+        "https://api.myocv.com/apps/feedback?appID= | /forms/submit/ | /dynamic/digest/",
+        "https://oc1rhn99vi.execute-api.us-east-1.amazonaws.com/beta",
+        "CDN manifest: https://cdn.myocv.com/ocvapps/a95889447/public/int_manifestMenu.json"
+      ],
+      "evidence_files": [
+        "classes*.dex",
+        "classes*.dex",
+        "classes*.dex (Lambda)",
+        "resources.arsc"
+      ],
+      "derivation_event_hash": "2a0e66abfb172acb24b33a7bc205640a78a9d813e3626fa63077da5a8820cbfe"
+    },
+    {
+      "name": "OffenderWatch",
+      "category": "surveillance",
+      "risk": "medium",
+      "evidence_strings": [
+        "SexOffendersFragment | SexOffendersMapFragment | OffenderClusterRenderer | OffenderWatchController | OffenderWatchFeed | OffenderWatchPin | OffenderWatchCountyObject",
+        "https://www.icrimewatch.net/register | https://www.icrimewatch.net/register_offender.php?offid= | https://cdn.myocv.com/ocvapps/a22936830/public/page_offenderWatchSafetyApp.json"
+      ],
+      "evidence_files": [
+        "classes*.dex",
+        "classes*.dex (URLs)"
+      ],
+      "derivation_event_hash": "5ff042cf0f6d8d729753909fc4ddc8cd9e91e97189a546a841c80c7fc021c166"
+    },
+    {
+      "name": "iCrimeWatch",
+      "category": "surveillance",
+      "risk": "medium",
+      "evidence_strings": [
+        "SexOffendersFragment | SexOffendersMapFragment | OffenderClusterRenderer | OffenderWatchController | OffenderWatchFeed | OffenderWatchPin | OffenderWatchCountyObject",
+        "https://www.icrimewatch.net/register | https://www.icrimewatch.net/register_offender.php?offid= | https://cdn.myocv.com/ocvapps/a22936830/public/page_offenderWatchSafetyApp.json"
+      ],
+      "evidence_files": [
+        "classes*.dex",
+        "classes*.dex (URLs)"
+      ],
+      "derivation_event_hash": "37be6f52519b3872b6831324fb8148d0a4791ee04c1c82b91cc194aa2b3f54ab"
+    }
+  ],
+  "permissions": [
+    {
+      "permission": "android.permission.ACCESS_FINE_LOCATION",
+      "risk": "critical",
+      "notes": "Allows precise GPS location tracking -- used by Maps, AssetTracker, TagAlong, OffenderWatch, Pinpoint SegmentLocation, and geofencing"
+    },
+    {
+      "permission": "android.permission.ACCESS_COARSE_LOCATION",
+      "risk": "high",
+      "notes": "Allows approximate location via network/WiFi"
+    },
+    {
+      "permission": "android.permission.READ_PHONE_STATE",
+      "risk": "high",
+      "notes": "Exposes IMEI, IMSI, and device identifiers"
+    },
+    {
+      "permission": "android.permission.READ_CONTACTS",
+      "risk": "high",
+      "notes": "Reads device contacts list"
+    },
+    {
+      "permission": "android.permission.CALL_PHONE",
+      "risk": "high",
+      "notes": "Can initiate phone calls without user interaction"
+    },
+    {
+      "permission": "android.permission.CAMERA",
+      "risk": "medium",
+      "notes": "Camera access -- used for AssetTracker photo capture and possibly barcode scanning"
+    },
+    {
+      "permission": "android.permission.READ_EXTERNAL_STORAGE",
+      "risk": "medium",
+      "notes": "Reads files on external/shared storage"
+    },
+    {
+      "permission": "android.permission.WRITE_EXTERNAL_STORAGE",
+      "risk": "medium",
+      "notes": "Writes files to external/shared storage"
+    },
+    {
+      "permission": "android.permission.ACCESS_NETWORK_STATE",
+      "risk": "low",
+      "notes": "Reads network connectivity status"
+    },
+    {
+      "permission": "android.permission.ACCESS_WIFI_STATE",
+      "risk": "low",
+      "notes": "Reads WiFi connection state"
+    },
+    {
+      "permission": "android.permission.INTERNET",
+      "risk": "low",
+      "notes": "Standard network access"
+    },
+    {
+      "permission": "android.permission.POST_NOTIFICATIONS",
+      "risk": "low",
+      "notes": "Standard push notification permission"
+    },
+    {
+      "permission": "android.permission.VIBRATE",
+      "risk": "low",
+      "notes": "Vibration for notifications"
+    },
+    {
+      "permission": "android.permission.WAKE_LOCK",
+      "risk": "low",
+      "notes": "Keeps CPU awake for background processing"
+    },
+    {
+      "permission": "android.permission.FLASHLIGHT",
+      "risk": "low",
+      "notes": "Camera flash / flashlight access"
+    },
+    {
+      "permission": "android.permission.DUMP",
+      "risk": "medium",
+      "notes": "Access to system debug/diagnostic info -- unusual for a sheriff app"
+    },
+    {
+      "permission": "android.permission.BIND_JOB_SERVICE",
+      "risk": "low",
+      "notes": "Allows background job scheduling"
+    }
+  ],
+  "hardcoded_secrets": [
+    {
+      "type": "Google API Key (YouTube + Calendar + Maps)",
+      "value": "AIzaSyASZbllDc_ielyHaBZw120XkaOoeQ11n2Y",
+      "risk": "medium",
+      "notes": "Hardcoded in classes.dex -- used for YouTube Data API v3 and Google Calendar API. Trivially extractable by any user. Used across all OCV apps (same key as Douglas County a83489423)."
+    },
+    {
+      "type": "Google API Key (resources.arsc)",
+      "value": "AIzaSyC7crzw908eoeygsJkElrCEG3ciEngDX3Q",
+      "risk": "medium",
+      "notes": "Second Google API key embedded in resources.arsc (google_api_key resource). May be the Maps SDK key or Firebase-related key. Unique to this app or app group."
+    },
+    {
+      "type": "Firebase App ID",
+      "value": "1:390002740973:android:10df063d42e3952dde06e4",
+      "risk": "low",
+      "notes": "Standard Firebase App ID embedded in resources -- expected but discloses GCP project number 390002740973."
+    },
+    {
+      "type": "Firebase Storage Bucket",
+      "value": "ocvapps8.appspot.com",
+      "risk": "low",
+      "notes": "Storage bucket name disclosed -- could be probed for misconfigured public access rules."
+    },
+    {
+      "type": "AWS Cognito Identity Pool ID",
+      "value": "us-east-1:2793e471-e8b3-4dba-8270-d1a4192c0d17",
+      "risk": "medium",
+      "notes": "Cognito Identity Pool ID in resources.arsc and embedded Amplify config. Enables enumeration of the pool and possible unauthorized temporary credentials if misconfigured."
+    },
+    {
+      "type": "AWS API Gateway Endpoint",
+      "value": "https://oc1rhn99vi.execute-api.us-east-1.amazonaws.com/beta",
+      "risk": "low",
+      "notes": "Lambda/API Gateway beta endpoint disclosed -- reveals OCV backend infrastructure in us-east-1."
+    },
+    {
+      "type": "OCV Internal App ID",
+      "value": "a95889447",
+      "risk": "low",
+      "notes": "Internal OCV agency ID found in resources.arsc and CDN manifest URL. Different from Play Store listing ID a95880402."
+    }
+  ],
+  "report": {
+    "path": "..\\docs\\audits\\ocv\\NV\\Lyon County\\report.json",
+    "sha256": "f4c97ab6fee4baa3c89f446cc18207480d4172d9b284b3f586efe1a848fd1f2d",
+    "finding_count": 17,
+    "permission_count": 17,
+    "hardcoded_secret_count": 7,
+    "overall_risk_rating": "HIGH",
+    "narrative": "The Lyon County NV Sheriff's Office app (com.ocv.a958) is built on the OCV (TheSheriffApp.com) platform and presents itself as a community safety tool for Lyon County residents. Despite this limited stated purpose, the app embeds a substantial surveillance and analytics infrastructure across 16 identified SDK integrations.\n\nThe most significant concern is the app's deep location tracking capability. It combines Google Play Services Location (with semantic location updates and geofencing), AWS IoT real-time data plane connectivity (9 regional IoT endpoints), an AssetTracker module with persistent SQLite GPS logging, and a TagAlong feature that performs continuous trip-level location tracking via the OCV API. The Pinpoint analytics pipeline adds GPS-based user segmentation (SegmentLocation/GPSPointDimension) on top of this. Together these create a comprehensive location surveillance system far exceeding what a county sheriff's community app requires.\n\nThe advertising infrastructure is also notable: Google AdMob with Advertising ID collection is present, including the pagead2.googlesyndication.com tracking pixel and googleadservices.com conversion tracking endpoint. This means the GAID cross-app device identifier is collected alongside precise GPS coordinates, enabling location-based ad profiling of users who install this law enforcement app.\n\nThe app integrates directly with Appriss/VINE inmate notification services and OffenderWatch/iCrimeWatch sex offender registries, proxying these through OCV's backend API rather than linking users to the services directly. This means OCV's servers intermediate all inmate searches and sex offender lookups, creating a centralized log of which users are searching for which inmates.\n\nTwo Google API keys are hardcoded in the APK (one shared across all OCV apps for YouTube/Calendar, one unique to this app group in resources.arsc). An AWS Cognito Identity Pool ID is also embedded, along with a full Amplify configuration pointing to the us-east-1 region.\n\nCompared to the Douglas County (a83489423) audit, the Lyon County app is nearly twice the size (55.7 MB vs 28.8 MB), has 5 DEX files instead of 4, and includes the additional AWS IoT, AssetTracker, TagAlong, and Google Calendar integrations not seen in the smaller app. The permission set is narrower (17 vs 26 -- notably missing READ_SMS, READ_CALL_LOG, RECORD_AUDIO, RECEIVE_SMS, PROCESS_OUTGOING_CALLS, and WRITE_CONTACTS), but the location tracking infrastructure is more extensive due to IoT and TagAlong.\n\nNo data broker SDKs (Kochava, X-Mode/Outlogic, Adjust, AppsFlyer) were detected. No Palantir/Foundry components were found. The 'xmode' string hits were false positives (Android graphics VertexMode class). The 'sentry' hits were false positives (ApprissEntryID and cache entry classes)."
+  },
+  "trace_chain": {
+    "trace_path": "..\\docs\\audits\\ocv\\NV\\Lyon County\\trace.jsonl",
+    "trace_sha256": "2a0c0fbb6463a9759dd5ec68adbe7a2cd347d0b1be666dd4c15dc960a38c4166",
+    "event_count": 21,
+    "first_event_hash": "536d9da7d1f6c0fff34e9408d97e45aa1642a20b3f2e59d9c50f386eb25704b2",
+    "last_event_hash": "f46f6facbad2ba81699bc7c395f9161284a120edd3b83d1f90c65ee1b5997d78",
+    "chain_intact": true
+  },
+  "agent": {
+    "agent_id": "audit-provenance",
+    "run_id": "audit-com.ocv.a958-20260331"
+  }
+}
