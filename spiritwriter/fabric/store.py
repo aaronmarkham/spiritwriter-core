@@ -21,6 +21,12 @@ from pathlib import Path
 from typing import Iterator
 
 from spiritwriter.fabric.shard import MemoryShard, ShardRef, DecayClass
+from spiritwriter.fabric.crypto import EncryptedShard, encrypt_shard, decrypt_shard, DecryptionError
+from spiritwriter.fabric.entitlement import (
+    EntitlementToken, validate_capability, validate_scope,
+    is_expired, get_shard_key, Capability,
+)
+from spiritwriter.fabric.network import NetworkResolver
 
 
 # Chars disallowed in Windows filenames (NTFS/FAT), plus control chars and
@@ -30,12 +36,38 @@ from spiritwriter.fabric.shard import MemoryShard, ShardRef, DecayClass
 _ILLEGAL_REF_CHARS_RE = re.compile(r'[<>:"/\\|?*\x00-\x1f%]')
 _PCT_DECODE_RE = re.compile(r'%([0-9A-Fa-f]{2})')
 
+# Reserved Windows device names — illegal as filenames regardless of
+# extension (CON.ref, com1.anything, etc.). Matched case-insensitively
+# against the part before the first dot.
+_WINDOWS_RESERVED = frozenset({
+    "CON", "PRN", "AUX", "NUL",
+    *(f"COM{i}" for i in range(1, 10)),
+    *(f"LPT{i}" for i in range(1, 10)),
+})
+
 
 def _encode_ref_name(name: str) -> str:
-    """Encode a ref name for safe use as a filename on all platforms."""
-    return _ILLEGAL_REF_CHARS_RE.sub(
+    """Encode a ref name for safe use as a filename on all platforms.
+
+    Handles three Windows-specific constraints:
+      - illegal characters (`<>:"/\\|?*`, control chars) → percent-encoded.
+      - reserved device names (`CON`, `PRN`, `COM1`, ...) → first char of
+        the stem is percent-encoded so the resulting filename no longer
+        matches the reservation.
+      - trailing `.` or space → the offending char is percent-encoded so
+        Windows doesn't silently strip it at the filesystem layer.
+    `%` is in the illegal set so every encoding roundtrips unambiguously.
+    """
+    encoded = _ILLEGAL_REF_CHARS_RE.sub(
         lambda m: f"%{ord(m.group(0)):02X}", name
     )
+    if encoded:
+        stem = encoded.split(".", 1)[0]
+        if stem.upper() in _WINDOWS_RESERVED:
+            encoded = f"%{ord(encoded[0]):02X}{encoded[1:]}"
+        if encoded[-1] in ". ":
+            encoded = f"{encoded[:-1]}%{ord(encoded[-1]):02X}"
+    return encoded
 
 
 def _decode_ref_name(encoded: str) -> str:
@@ -43,12 +75,6 @@ def _decode_ref_name(encoded: str) -> str:
     return _PCT_DECODE_RE.sub(
         lambda m: chr(int(m.group(1), 16)), encoded
     )
-from spiritwriter.fabric.crypto import EncryptedShard, encrypt_shard, decrypt_shard, DecryptionError
-from spiritwriter.fabric.entitlement import (
-    EntitlementToken, validate_capability, validate_scope,
-    is_expired, get_shard_key, Capability,
-)
-from spiritwriter.fabric.network import NetworkResolver
 
 
 class ShardStore:
@@ -245,7 +271,14 @@ class ShardStore:
         return False
 
     def list_refs(self, prefix: str = "") -> list[str]:
-        """List all named refs, optionally filtered by prefix."""
+        """List all named refs, optionally filtered by prefix.
+
+        Ref filenames are percent-decoded on the way out. Note: a pre-existing
+        ref on Linux/macOS whose raw filename happens to contain a `%HH`
+        sequence (e.g. ``already%3Aencoded.ref``) will now be decoded when
+        listed. Such names are vanishingly rare in practice; when produced by
+        this API post-fix, literal `%` is always escaped so roundtrip is safe.
+        """
         refs = [_decode_ref_name(p.stem) for p in self.refs_dir.glob("*.ref")]
         if prefix:
             refs = [r for r in refs if r.startswith(prefix)]

@@ -756,6 +756,31 @@ class TestRefNameEncoding:
         on_disk = sorted(p.name for p in (tmp_path / "store" / "refs").glob("*.ref"))
         assert on_disk == ["project-csp.ref", "snake_case.v2.ref"]
 
+    def test_roundtrip_windows_reserved_device_names(self, tmp_path):
+        """CON, PRN, COM1, ... are illegal on Windows even with an extension."""
+        store = ShardStore(tmp_path / "store")
+        for name in ["CON", "con", "PRN", "COM1", "lpt9", "AUX.log"]:
+            store.set_ref(name, f"val-{name}")
+            assert store.get_ref(name) == f"val-{name}", f"roundtrip failed for {name!r}"
+        listed = store.list_refs()
+        assert "CON" in listed and "PRN" in listed and "COM1" in listed
+        # The on-disk filename must not start with the reserved token.
+        on_disk = sorted(p.name for p in (tmp_path / "store" / "refs").glob("*.ref"))
+        for fname in on_disk:
+            head = fname.split(".", 1)[0].upper()
+            assert head not in {"CON", "PRN", "AUX", "NUL", "COM1", "LPT9"}, (
+                f"on-disk {fname!r} still uses reserved device name"
+            )
+
+    def test_roundtrip_trailing_dot_and_space(self, tmp_path):
+        """Windows silently strips trailing dots / spaces at the FS layer."""
+        store = ShardStore(tmp_path / "store")
+        store.set_ref("trailing-dot.", "a")
+        store.set_ref("trailing-space ", "b")
+        assert store.get_ref("trailing-dot.") == "a"
+        assert store.get_ref("trailing-space ") == "b"
+        assert sorted(store.list_refs()) == ["trailing-dot.", "trailing-space "]
+
 
 class TestMoveScope:
     def test_move_creates_new_shard(self, tmp_path):
