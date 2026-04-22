@@ -210,23 +210,52 @@ class ShardStore:
                 shards.append(shard)
         return shards
 
+    def by_entity(self, entity_key: str) -> list[MemoryShard]:
+        """Get all shards (any scope) with at least one atom for this entity.
+
+        Lets multiple producers each contribute atoms about the same entity
+        (e.g. ``article:{sha256(url)}``) without duplicating each other's
+        content; consumers merge atoms across the returned shards at the
+        entity level.
+
+        Scans all plaintext shards via ``iter_all()``, which explicitly
+        skips encrypted (``.enc.json``) and sealed (``.sealed.json``)
+        payloads by filename — entity lives in atom content and is
+        unreadable without the relevant key.
+        """
+        return [
+            shard for shard in self.iter_all()
+            if any(atom.entity == entity_key for atom in shard.atoms)
+        ]
+
     def list_scopes(self) -> list[str]:
         """List all scopes that have shards."""
         return list(self._load_index().keys())
 
     def iter_all(self) -> Iterator[MemoryShard]:
-        """Iterate all shards in the store."""
+        """Iterate all plaintext shards in the store.
+
+        Encrypted (``.enc.json``) and sealed (``.sealed.json``) payloads
+        are skipped by filename — their contents aren't MemoryShard-shaped.
+        The previous implementation skipped them only by catching the
+        resulting deserialization error, which tied correctness to
+        accidental failure of ``from_json``.
+        """
         for prefix_dir in sorted(self.shards_dir.iterdir()):
             if not prefix_dir.is_dir():
                 continue
             for shard_file in sorted(prefix_dir.iterdir()):
-                if shard_file.suffix == ".json":
-                    try:
-                        yield MemoryShard.from_json(
-                            shard_file.read_text(encoding="utf-8")
-                        )
-                    except Exception:
-                        continue
+                name = shard_file.name
+                if not name.endswith(".json"):
+                    continue
+                if name.endswith((".enc.json", ".sealed.json")):
+                    continue
+                try:
+                    yield MemoryShard.from_json(
+                        shard_file.read_text(encoding="utf-8")
+                    )
+                except Exception:
+                    continue
 
     def count(self) -> int:
         """Total shards in store."""

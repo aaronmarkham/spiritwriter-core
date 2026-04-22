@@ -101,6 +101,11 @@ shard = store.resolve_ref("project-csp")
 # Query by scope
 shards = store.by_scope("project:csp")
 
+# Query by entity — all shards (any scope) with atoms for this entity.
+# Use this when multiple producers contribute atoms about the same entity
+# (e.g. "article:{sha256(url)}") and the consumer merges at the entity level.
+shards = store.by_entity("article:a1b2c3...")
+
 # List everything
 store.list_scopes()   # all scopes
 store.stats()         # summary with counts
