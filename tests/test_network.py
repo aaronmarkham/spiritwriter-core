@@ -291,7 +291,12 @@ class TestSwarmKeyRegistration:
 
 class TestProtocol:
     def test_mock_satisfies_protocol(self):
-        """A mock with the right methods satisfies NetworkResolver."""
-        mock = MagicMock()
-        # runtime_checkable Protocol checks for method existence
+        """A mock spec'd against NetworkResolver satisfies the Protocol.
+
+        Python 3.12+ tightened runtime_checkable isinstance so an
+        unconstrained MagicMock (which answers `hasattr` for every name)
+        no longer passes. A spec'd mock — whose attribute set matches the
+        Protocol's method set — does.
+        """
+        mock = MagicMock(spec=NetworkResolver)
         assert isinstance(mock, NetworkResolver)

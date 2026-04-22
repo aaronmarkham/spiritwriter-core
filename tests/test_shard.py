@@ -721,6 +721,42 @@ class TestListRefs:
         assert refs == ["job:pipe:checkpoint", "job:pipe:current"]
 
 
+class TestRefNameEncoding:
+    """Refs containing Windows-illegal chars round-trip via on-disk encoding."""
+
+    def test_roundtrip_colon(self, tmp_path):
+        store = ShardStore(tmp_path / "store")
+        store.set_ref("job:pipe:current", "abc")
+        assert store.get_ref("job:pipe:current") == "abc"
+        assert store.list_refs() == ["job:pipe:current"]
+        assert store.delete_ref("job:pipe:current") is True
+
+    def test_roundtrip_all_illegal_chars(self, tmp_path):
+        store = ShardStore(tmp_path / "store")
+        # Windows forbids < > : " / \ | ? *
+        tricky = 'weird<>:"/\\|?*name'
+        store.set_ref(tricky, "xyz")
+        assert store.get_ref(tricky) == "xyz"
+        assert store.list_refs() == [tricky]
+
+    def test_percent_sign_is_escaped(self, tmp_path):
+        """A literal `%` in a ref name must roundtrip (not be read as encoding)."""
+        store = ShardStore(tmp_path / "store")
+        store.set_ref("already%3Aencoded", "one")
+        store.set_ref("already:encoded", "two")
+        assert store.get_ref("already%3Aencoded") == "one"
+        assert store.get_ref("already:encoded") == "two"
+        assert sorted(store.list_refs()) == ["already%3Aencoded", "already:encoded"]
+
+    def test_safe_names_stored_unencoded(self, tmp_path):
+        """Portable names must not be rewritten on disk (backward compat)."""
+        store = ShardStore(tmp_path / "store")
+        store.set_ref("project-csp", "abc")
+        store.set_ref("snake_case.v2", "def")
+        on_disk = sorted(p.name for p in (tmp_path / "store" / "refs").glob("*.ref"))
+        assert on_disk == ["project-csp.ref", "snake_case.v2.ref"]
+
+
 class TestMoveScope:
     def test_move_creates_new_shard(self, tmp_path):
         store = ShardStore(tmp_path / "store")
