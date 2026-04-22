@@ -1,0 +1,4 @@
+# Witness bundles are byte-exact — any line-ending conversion breaks the
+# hash chain and self-hashing witness. Treat these files as binary.
+*.jsonl  -text
+*.json   -text

@@ -1,0 +1,406 @@
+{
+  "witness_version": "1.0",
+  "witness_sha256": "0d5c16283d08b2f717331c06553ec54921bec8ac8ca8cbf6df811ce8b2000212",
+  "generated_at": "2026-03-31T05:38:58Z",
+  "input": {
+    "package_name": "com.ocv.a834",
+    "apk_sha256": "6d9a55861c9feb7f7dab0df11a2a3065e2c69aee4594df61c3ef15903456f0ce",
+    "apk_size_bytes": 28793939,
+    "download_source": "apkpure"
+  },
+  "evidence": {
+    "extraction_file_count": 45,
+    "file_hashes": {
+      "classes.dex": "edca74916448a04e2c140c395fcd1c9556e628c67b2d354c1d3a3abdb59329c1",
+      "classes2.dex": "16088a81d38f07b4851d18301bf2f12444da939ca9c5a0f90bea32eb21be1adb",
+      "classes3.dex": "885728d4449ef39710344672be52071d40d4f10420dbf188a5f98a13a90901b5",
+      "classes4.dex": "77af00ddc1ebc419293cbf4e651761ea6fff692fd36dc178e2dacb18f01649b4",
+      "classes5.dex": "3f383ffa14f8e09c30d12ebe23edebe8c5fb6e6564bab5d77785ba33e505db97",
+      "classes6.dex": "ce0354de7284ad0654b87b99237a25a6d76c6df667976e1a02043986a933353a",
+      "AndroidManifest.xml": "c9e1d6af80ba6514156e3b088ebb8b2bd9df0a3c0e162f2d760d77e7d45adf83",
+      "barcode-scanning-common.properties": "98245f350edba9b80b71e4eb7416d2c18e1b3989a8f15fcc8eb04f5a6098c318",
+      "common.properties": "5130de9c460560d4c4c139b4a2788a41391fd2893d68bb018a46a2a43ea3f286",
+      "firebase-analytics.properties": "29b23a7d8b12ee8994b294723041e4e24daa34ab02f34cb43d5f25079b80df68",
+      "firebase-annotations.properties": "972326b7b3ba61a998494be06ce6820c633b5c38382279e81f144c48ea6b5d7f",
+      "firebase-common.properties": "bd36193832e1e27d8dc6e7396143f292d8a9d5ad98ad03ef8c19cca64a103696",
+      "firebase-components.properties": "b79cf96b46189203e0358147a9001ab2349aa50cccbcaea496672a4689f5e8a0",
+      "firebase-datatransport.properties": "deebe9c75831d2c4f1ee19de262751444c65fe9acee690bf4a2c7d36c7a7802c",
+      "firebase-encoders-json.properties": "354e4def95204eb991b805e8f8e2319651e0ed590d1ad6ffe8a5cd4b9ec65db7",
+      "firebase-encoders-proto.properties": "eba792be6ea03f3b6d68eccfd25f3f53a0767657ec12b1b90996b5d5b34a9688",
+      "firebase-encoders.properties": "527438e526e7befb6c04dc394f4e36824a11019c7d6d687c2772a435d22c0e9f",
+      "firebase-iid-interop.properties": "a2862ae5811a268630807c645d5dadc1f15e85b922a2ab0408e984ea5548e102",
+      "firebase-installations-interop.properties": "e18456985c7e2c69b5b0b538643b7a3f60e4357072b2d08fa1b4ad52d10e8f04",
+      "firebase-installations.properties": "66de47b00d792d4cb320ee5acbcfc8b2e63379f3575c26b6c0795d1d52d031e5",
+      "firebase-measurement-connector.properties": "ca7d9dd559c3cf48a087b9d4fc5b7c6eded0c99892297b59758093459d98463a",
+      "firebase-messaging.properties": "d79b127f75ff3f93005d264d94dee4382cdf712f42fc84c466eadcf4e239aaf1",
+      "image.properties": "f152de3e1791dceecf408291e589678059b2f9d33d748dac34b1c87c5738c060",
+      "places.properties": "3b838f598f6e10f2e0626ea2536da9da1c820a59f4d8650bacdf72afae41bfbf",
+      "play-services-ads-identifier.properties": "e62509e4ccec3ae9361c036260befb5208709627bc82b1d6f5a7b12813875181",
+      "play-services-base.properties": "956ac5352b689260a4294059a650eb8d46acadd777a74d729f4cf3c79faf73d2",
+      "play-services-basement.properties": "f97448f9c0e17275238e7bfd89b7374433fa9f73c8cd13012f327f78afb83b6c",
+      "play-services-cloud-messaging.properties": "f8ef7565db66da4890f4be15b2ebc62ac05833f4f5bbbb7deb02eabd5a324021",
+      "play-services-location.properties": "689dde3ecbb3e3920bc1d361b33cc098307ebdcefcd12a6d691a011e65867487",
+      "play-services-maps.properties": "b91d5c33b04266b10b808552d740a69f6ec18972ed1f8bafc18eb8bcd20ae38f",
+      "play-services-measurement-api.properties": "f536f0f85479f1e2ada64337d7c03b230d46ee679c81c430c314c0b8af4327b6",
+      "play-services-measurement-base.properties": "cd81e0aabeed37c1194f6e2834b296d4b3df65a251add594c19da1634cac3e1b",
+      "play-services-measurement-impl.properties": "e5d9698c0f97ec7443439d2dd80a9e5605d1f9fdb7a6ef1e916b21c91c8ceb38",
+      "play-services-measurement-sdk-api.properties": "cc0b55b8baf2d0827a2a6e90e1cfafbc49616df1bb2d58089b61046a52bfd7e4",
+      "play-services-measurement-sdk.properties": "a9fa774e1cdf0e6dd3c54bb09f89dca6ec88b0594f96fce26f5fab9c717a867c",
+      "play-services-measurement.properties": "cd5d198d4d5aaac562898fe64b676420e5e1484db908b1d6c92bca9ece57dfed",
+      "play-services-mlkit-barcode-scanning.properties": "345a05f8a8c435c43a51aeca59cd71ef7886a734b75ca8ede00bfca9d8eff110",
+      "play-services-stats.properties": "6b751c654deb3ac65a878025d2ff2b89fabfa0ebe00ac4152ad3f7a361aed107",
+      "play-services-tasks.properties": "dffd492d60677d27cc216d6687da9477242b7d9447029bf7c260a0147e84ee1f",
+      "transport-api.properties": "e75f0a43308c145c5470418f30b7705738845c39c83bdb694ca5847b56a175bb",
+      "transport-backend-cct.properties": "c558e245601e0883e8baa79a7f1f97c85abf7baf7476ff78f5edd2e5f39a26d4",
+      "transport-runtime.properties": "f0f32f83722de6a4d524d9d607b071c132a9f160ece8efbecbb6f0b6fca02cc6",
+      "vision-common.properties": "17d5d69b33423ed393118678dd5c66d54bef292e6d295c772d3cda2ac280f093",
+      "vision-interfaces.properties": "90fe72f1ce06cc668a033c62aa33b97335e594c44b96cc6c39c888a112ede928",
+      "resources.arsc": "ef2dd8df2ae9aee9863676efe1c0bf4b7027f2e9f74a6427ab30f5637c73203b"
+    },
+    "dex_corpus_sha256": "c02ea7116f4283665d099f9f1cd9407dc5dc213d398bdfcc8a4193a36a77031d",
+    "dex_string_count": 352474,
+    "dex_extraction_params": {
+      "min_length": 8,
+      "pattern": "[\\x20-\\x7e]{8,}"
+    }
+  },
+  "findings": [
+    {
+      "name": "Firebase Analytics (Google Analytics for Firebase)",
+      "category": "analytics",
+      "risk": "medium",
+      "evidence_strings": [
+        "client=firebase-analytics, firebase-analytics_client=21.1.0",
+        "Multiple measurement SDK property files present",
+        "App measurement initialized, version | google_app_id | Lcom/google/android/gms/measurement/internal/* | Lcom/google/android/gms/internal/measurement/*",
+        "Firebase App ID: 1:396507442436:android:428931794b6e4bfa317451"
+      ],
+      "evidence_files": [
+        "firebase-analytics.properties",
+        "play-services-measurement.properties / play-services-measurement-impl.properties",
+        "classes*.dex",
+        "resources.arsc"
+      ],
+      "derivation_event_hash": "7b5b136384a606bbd48bf21bb11bf615c29701cf5585667ae7d91c7c05f18921"
+    },
+    {
+      "name": "Firebase Cloud Messaging (FCM)",
+      "category": "analytics",
+      "risk": "low",
+      "evidence_strings": [
+        "client=firebase-messaging, firebase-messaging_client=23.0.7",
+        "FCM_CLIENT_EVENT_LOGGING | FcmBroadcastProcessor | fire-fcm | FCM_FALLBACK_NOTIFICATION_CHANNEL"
+      ],
+      "evidence_files": [
+        "firebase-messaging.properties",
+        "classes*.dex"
+      ],
+      "derivation_event_hash": "98c298d3e4ae83fc0ef7c8f1914e0194a8a8871f93bbe8b68150a0dcda4df2db"
+    },
+    {
+      "name": "Firebase Installations",
+      "category": "analytics",
+      "risk": "low",
+      "evidence_strings": [
+        "Property file present",
+        "Firebase Installations getId Task has timed out | firebaseinstallations.googleapis.com"
+      ],
+      "evidence_files": [
+        "firebase-installations.properties",
+        "classes*.dex"
+      ],
+      "derivation_event_hash": "b88b55b7fcfb8ef4157f40e41a311b589f30787f38e955ed0026f0eb332b6dd2"
+    },
+    {
+      "name": "Facebook SDK",
+      "category": "analytics",
+      "risk": "medium",
+      "evidence_strings": [
+        "com.facebook.katana | graph.facebook.com | https://www.facebook.com/",
+        "res/drawable/facebook_icon.png | facebook_icon | facebook_box | facebook_messenger"
+      ],
+      "evidence_files": [
+        "classes*.dex",
+        "resources.arsc"
+      ],
+      "derivation_event_hash": "1efb88ee68398ff84597ceeda6da4d5d04e68e5ad3bd09d2fb6855a6ec2d53f5"
+    },
+    {
+      "name": "Google AdMob / Play Services Ads Identifier",
+      "category": "ads",
+      "risk": "high",
+      "evidence_strings": [
+        "client=play-services-ads-identifier, version=18.0.0",
+        "admob | admob_app_id | ca-app-pub- | pagead2.googlesyndication.com | AdvertisingIdClient | getAdvertisingIdInfo | isLimitAdTrackingEnabled"
+      ],
+      "evidence_files": [
+        "play-services-ads-identifier.properties",
+        "classes*.dex"
+      ],
+      "derivation_event_hash": "f3b6fb4ce140fbf1db11e1c24e4c3ea4fff57e5992fc0847880d8b2cf7053cc7"
+    },
+    {
+      "name": "Google Play Services Location",
+      "category": "analytics",
+      "risk": "high",
+      "evidence_strings": [
+        "client=play-services-location, version=21.1.0",
+        "ACCESS_FINE_LOCATION | ACCESS_COARSE_LOCATION | getLocationManager | locationSource | GPSPointDimensionJsonMarshaller | AssetTrackerLocationFormBinding | SegmentLocationJsonUnmarshaller | SEMANTIC_LOCATION_UPDATES_UNREGISTER | onMyLocationButtonClick"
+      ],
+      "evidence_files": [
+        "play-services-location.properties",
+        "classes*.dex"
+      ],
+      "derivation_event_hash": "fe0a4db5286e3efa59d901716ae437b0a6ca257880b037a5893c133d680b7486"
+    },
+    {
+      "name": "Google Maps SDK for Android",
+      "category": "analytics",
+      "risk": "low",
+      "evidence_strings": [
+        "client=play-services-maps, version=18.2.0",
+        "maps.googleapis.com | com.google.android.gms.maps.internal.IMapViewDelegate | MapView | onMyLocationClick | PLACE_SELECTION_SELECT_THIS_LOCATION"
+      ],
+      "evidence_files": [
+        "play-services-maps.properties",
+        "classes*.dex"
+      ],
+      "derivation_event_hash": "41fccd0872c8299898ebea89f6fa752568f74a3012772737c30965a982e25227"
+    },
+    {
+      "name": "BugSnag",
+      "category": "crash_reporting",
+      "risk": "low",
+      "evidence_strings": [
+        "Native C/C++ BugSnag header present",
+        "com.bugsnag.android.* | BugsnagNDK | BugsnagPerformance | com.bugsnag.android.PROJECT_PACKAGES",
+        "https://notify.bugsnag.com | https://sessions.bugsnag.com | https://otlp.bugsnag.com/v1/traces"
+      ],
+      "evidence_files": [
+        "assets/include/bugsnag.h",
+        "classes*.dex",
+        "classes*.dex (URLs)"
+      ],
+      "derivation_event_hash": "283fb1b12fa3f3baa751eb9eb1e3a8767e783480eda856f65208c3359dfccb3c"
+    },
+    {
+      "name": "AWS Amplify + Amazon Pinpoint",
+      "category": "analytics",
+      "risk": "medium",
+      "evidence_strings": [
+        "Lcom/amplifyframework/analytics/pinpoint/* | Lcom/amazonaws/services/pinpoint/AmazonPinpoint | PinpointAppId | com.amazonaws.intent.fcm.NOTIFICATION_OPEN | SwitchMap$com$amazonaws$services$pinpoint$model$ChannelType",
+        "Property file present in APK root"
+      ],
+      "evidence_files": [
+        "classes*.dex",
+        "com/aws-android-sdk-core.properties"
+      ],
+      "derivation_event_hash": "da1e57544944efa3395b9d95c50182bc5497b69da56d73103a025a0e6d5cba59"
+    },
+    {
+      "name": "AWS Cognito",
+      "category": "analytics",
+      "risk": "low",
+      "evidence_strings": [
+        "AWSBasicCognitoIdentityProvider | AWSRefreshingCognitoIdentityProvider | cognito-idp.*.amazonaws.com | cognito-sync.*.amazonaws.com | CognitoPasswordInvalidException"
+      ],
+      "evidence_files": [
+        "classes*.dex"
+      ],
+      "derivation_event_hash": "fd821bf35190a03fe75afea5e0cfeedd18a8cfd2986d497a3245de1865207075"
+    },
+    {
+      "name": "YouTube Data API v3 (Embedded Key)",
+      "category": "analytics",
+      "risk": "medium",
+      "evidence_strings": [
+        "https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&key=AIzaSyASZbllDc_ielyHaBZw120XkaOoeQ11n2Y&maxResults=50&playlistId=",
+        "YoutubeWidget.kt | YoutubePlaylistFragment | com.ocv.core.features.youtube_playlist"
+      ],
+      "evidence_files": [
+        "classes*.dex",
+        "classes*.dex"
+      ],
+      "derivation_event_hash": "3374fa98962c816847514918555fdd58b4ddea8079b3dd17cdc26091af8dcb9f"
+    }
+  ],
+  "permissions": [
+    {
+      "permission": "android.permission.ACCESS_FINE_LOCATION",
+      "risk": "critical",
+      "notes": "Allows precise GPS location tracking"
+    },
+    {
+      "permission": "android.permission.ACCESS_COARSE_LOCATION",
+      "risk": "high",
+      "notes": "Allows approximate location via network/WiFi"
+    },
+    {
+      "permission": "android.permission.READ_PHONE_STATE",
+      "risk": "high",
+      "notes": "Exposes IMEI, IMSI, and device identifiers"
+    },
+    {
+      "permission": "android.permission.READ_PHONE_NUMBERS",
+      "risk": "high",
+      "notes": "Reads user's phone number"
+    },
+    {
+      "permission": "android.permission.GET_ACCOUNTS",
+      "risk": "medium",
+      "notes": "Lists Google/device accounts on the device"
+    },
+    {
+      "permission": "android.permission.READ_CONTACTS",
+      "risk": "high",
+      "notes": "Reads device contacts list"
+    },
+    {
+      "permission": "android.permission.WRITE_CONTACTS",
+      "risk": "high",
+      "notes": "Modifies device contacts list"
+    },
+    {
+      "permission": "android.permission.RECORD_AUDIO",
+      "risk": "high",
+      "notes": "Microphone access"
+    },
+    {
+      "permission": "android.permission.CAMERA",
+      "risk": "medium",
+      "notes": "Camera access (likely for barcode scanning \u00e2\u20ac\u201d barcode-scanning SDK present)"
+    },
+    {
+      "permission": "android.permission.READ_CALL_LOG",
+      "risk": "high",
+      "notes": "Reads incoming/outgoing call history"
+    },
+    {
+      "permission": "android.permission.PROCESS_OUTGOING_CALLS",
+      "risk": "high",
+      "notes": "Can intercept or redirect outgoing calls"
+    },
+    {
+      "permission": "android.permission.READ_SMS",
+      "risk": "high",
+      "notes": "Reads SMS messages"
+    },
+    {
+      "permission": "android.permission.RECEIVE_SMS",
+      "risk": "high",
+      "notes": "Intercepts incoming SMS messages"
+    },
+    {
+      "permission": "android.permission.SEND_SMS",
+      "risk": "medium",
+      "notes": "Can send SMS messages (potential cost incurral)"
+    },
+    {
+      "permission": "android.permission.READ_CALENDAR",
+      "risk": "medium",
+      "notes": "Reads calendar events"
+    },
+    {
+      "permission": "android.permission.WRITE_CALENDAR",
+      "risk": "medium",
+      "notes": "Modifies calendar events"
+    },
+    {
+      "permission": "android.permission.ACCESS_MEDIA_LOCATION",
+      "risk": "medium",
+      "notes": "Reads GPS EXIF data from photos \u00e2\u20ac\u201d location exfiltration via images"
+    },
+    {
+      "permission": "android.permission.READ_EXTERNAL_STORAGE",
+      "risk": "medium",
+      "notes": "Reads files on external/shared storage"
+    },
+    {
+      "permission": "android.permission.WRITE_EXTERNAL_STORAGE",
+      "risk": "medium",
+      "notes": "Writes files to external/shared storage"
+    },
+    {
+      "permission": "android.permission.RECEIVE_BOOT_COMPLETED",
+      "risk": "medium",
+      "notes": "App auto-starts on device reboot \u00e2\u20ac\u201d persistent background execution"
+    },
+    {
+      "permission": "android.permission.INTERNET",
+      "risk": "low",
+      "notes": "Standard network access"
+    },
+    {
+      "permission": "android.permission.FOREGROUND_SERVICE",
+      "risk": "low",
+      "notes": "Runs persistent foreground service"
+    },
+    {
+      "permission": "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+      "risk": "low",
+      "notes": "Foreground service for media playback"
+    },
+    {
+      "permission": "android.permission.POST_NOTIFICATIONS",
+      "risk": "low",
+      "notes": "Standard push notification permission"
+    },
+    {
+      "permission": "android.permission.VIBRATE",
+      "risk": "low",
+      "notes": "Vibration for notifications"
+    },
+    {
+      "permission": "android.permission.WAKE_LOCK",
+      "risk": "low",
+      "notes": "Keeps CPU awake for background processing"
+    }
+  ],
+  "hardcoded_secrets": [
+    {
+      "type": "Google API Key (YouTube Data API v3)",
+      "value": "AIzaSyASZbllDc_ielyHaBZw120XkaOoeQ11n2Y",
+      "risk": "medium",
+      "notes": "Hardcoded in classes.dex \u00e2\u20ac\u201d extractable by any user. May be abused for quota theft or data scraping against the app's YouTube playlist."
+    },
+    {
+      "type": "Firebase App ID",
+      "value": "1:396507442436:android:428931794b6e4bfa317451",
+      "risk": "low",
+      "notes": "Standard Firebase App ID embedded in resources \u00e2\u20ac\u201d expected but discloses GCP project number 396507442436."
+    },
+    {
+      "type": "Firebase Storage Bucket",
+      "value": "ocvapps5.firebasestorage.app",
+      "risk": "low",
+      "notes": "Storage bucket name disclosed \u00e2\u20ac\u201d could be probed for misconfigured public access rules."
+    },
+    {
+      "type": "OCV Content CDN Endpoint",
+      "value": "https://cdn.myocv.com/ocvapps/a83489423/public/int_manifestMenu.json",
+      "risk": "low",
+      "notes": "App configuration manifest served over CDN \u00e2\u20ac\u201d discloses internal OCV app ID a83489423."
+    }
+  ],
+  "report": {
+    "path": "..\\docs\\audits\\ocv\\NV\\Douglas County\\report.json",
+    "sha256": "b663a3018ff8af7bb3449dc771ef5ec1ba9afb0e6dfeccbc987df7c8a05927e9",
+    "finding_count": 11,
+    "permission_count": 26,
+    "hardcoded_secret_count": 4,
+    "overall_risk_rating": "HIGH",
+    "narrative": "com.ocv.a834 is a community/church mobile app built on the OCV (Online Church Vision) platform. It embeds an unusually wide set of SDKs and declares a large number of sensitive permissions relative to its apparent purpose. The tracker stack includes Firebase Analytics + FCM (Google), Facebook SDK, Google AdMob (with Advertising ID collection), AWS Amplify + Amazon Pinpoint (a second independent analytics pipeline), BugSnag (crash and performance), and Google Maps/Location. The two most significant concerns are: (1) The simultaneous collection of precise GPS location (ACCESS_FINE_LOCATION) combined with AdMob Advertising ID collection \u00e2\u20ac\u201d together these enable precise location-based ad profiling; and (2) The declaration of READ_SMS, READ_CALL_LOG, READ_CONTACTS, RECORD_AUDIO, and PROCESS_OUTGOING_CALLS permissions, which are highly sensitive and difficult to justify for a church community app. A Google YouTube API key is hardcoded in the DEX bytecode and is trivially extractable, creating a quota-abuse risk. No data broker SDKs (Kochava, X-Mode/Outlogic) were detected."
+  },
+  "trace_chain": {
+    "trace_path": "..\\docs\\audits\\ocv\\NV\\Douglas County\\trace.jsonl",
+    "trace_sha256": "d0042e238fb39a760d71f8fadb9c013dff253b4eec9418b7d83786ddf59bd1a9",
+    "event_count": 15,
+    "first_event_hash": "75db5a0f1f8bce43210811dd2543b928501210ec368b28d6521e8794d523d2d0",
+    "last_event_hash": "36da3a0b769662fb690fb74a3a7664cb47e87c1aa2d71ad4b546730d286a5fb1",
+    "chain_intact": true
+  },
+  "agent": {
+    "agent_id": "audit-provenance",
+    "run_id": "audit-com.ocv.a834-20260331"
+  }
+}

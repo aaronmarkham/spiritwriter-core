@@ -1,0 +1,472 @@
+{
+  "package_name": "com.ocv.a834",
+  "audit_date": "2026-03-29",
+  "apk_size_bytes": 28793939,
+  "findings": [
+    {
+      "name": "Firebase Analytics (Google Analytics for Firebase)",
+      "sdk_version": "21.1.0",
+      "category": "analytics",
+      "risk": "medium",
+      "evidence": [
+        {
+          "file": "firebase-analytics.properties",
+          "match": "client=firebase-analytics, firebase-analytics_client=21.1.0"
+        },
+        {
+          "file": "play-services-measurement.properties / play-services-measurement-impl.properties",
+          "match": "Multiple measurement SDK property files present"
+        },
+        {
+          "file": "classes*.dex",
+          "match": "App measurement initialized, version | google_app_id | Lcom/google/android/gms/measurement/internal/* | Lcom/google/android/gms/internal/measurement/*"
+        },
+        {
+          "file": "resources.arsc",
+          "match": "Firebase App ID: 1:396507442436:android:428931794b6e4bfa317451"
+        }
+      ],
+      "endpoints": [
+        "https://firebaseinstallations.googleapis.com",
+        "https://www.googleapis.com/auth/userinfo.profile"
+      ],
+      "data_collected": [
+        "App usage events",
+        "User engagement sessions",
+        "Device identifiers (Firebase Installation ID)",
+        "Screen views and user flows",
+        "Advertising ID (GAID) via play-services-ads-identifier"
+      ]
+    },
+    {
+      "name": "Firebase Cloud Messaging (FCM)",
+      "sdk_version": "23.0.7",
+      "category": "analytics",
+      "risk": "low",
+      "evidence": [
+        {
+          "file": "firebase-messaging.properties",
+          "match": "client=firebase-messaging, firebase-messaging_client=23.0.7"
+        },
+        {
+          "file": "classes*.dex",
+          "match": "FCM_CLIENT_EVENT_LOGGING | FcmBroadcastProcessor | fire-fcm | FCM_FALLBACK_NOTIFICATION_CHANNEL"
+        }
+      ],
+      "endpoints": [
+        "https://fcm.googleapis.com"
+      ],
+      "data_collected": [
+        "FCM push notification tokens",
+        "Device registration tokens",
+        "Push notification delivery receipts"
+      ]
+    },
+    {
+      "name": "Firebase Installations",
+      "sdk_version": "N/A (firebase-installations.properties present)",
+      "category": "analytics",
+      "risk": "low",
+      "evidence": [
+        {
+          "file": "firebase-installations.properties",
+          "match": "Property file present"
+        },
+        {
+          "file": "classes*.dex",
+          "match": "Firebase Installations getId Task has timed out | firebaseinstallations.googleapis.com"
+        }
+      ],
+      "endpoints": [
+        "https://firebaseinstallations.googleapis.com"
+      ],
+      "data_collected": [
+        "Firebase Installation ID (persistent per-app-install identifier)"
+      ]
+    },
+    {
+      "name": "Facebook SDK",
+      "sdk_version": "Unknown",
+      "category": "analytics",
+      "risk": "medium",
+      "evidence": [
+        {
+          "file": "classes*.dex",
+          "match": "com.facebook.katana | graph.facebook.com | https://www.facebook.com/"
+        },
+        {
+          "file": "resources.arsc",
+          "match": "res/drawable/facebook_icon.png | facebook_icon | facebook_box | facebook_messenger"
+        }
+      ],
+      "endpoints": [
+        "https://graph.facebook.com",
+        "https://www.facebook.com/"
+      ],
+      "data_collected": [
+        "App events sent to Facebook",
+        "Facebook login identity (if used)",
+        "Potential sharing of user behavior to Meta advertising network"
+      ]
+    },
+    {
+      "name": "Google AdMob / Play Services Ads Identifier",
+      "sdk_version": "18.0.0 (ads-identifier)",
+      "category": "ads",
+      "risk": "high",
+      "evidence": [
+        {
+          "file": "play-services-ads-identifier.properties",
+          "match": "client=play-services-ads-identifier, version=18.0.0"
+        },
+        {
+          "file": "classes*.dex",
+          "match": "admob | admob_app_id | ca-app-pub- | pagead2.googlesyndication.com | AdvertisingIdClient | getAdvertisingIdInfo | isLimitAdTrackingEnabled"
+        }
+      ],
+      "endpoints": [
+        "https://pagead2.googlesyndication.com/pagead/gen_204?id=gmob-apps"
+      ],
+      "data_collected": [
+        "Google Advertising ID (GAID) \u00e2\u20ac\u201d persistent cross-app device identifier",
+        "Limit Ad Tracking status",
+        "Behavioral data for targeted advertising",
+        "App usage signals for ad optimization"
+      ]
+    },
+    {
+      "name": "Google Play Services Location",
+      "sdk_version": "21.1.0",
+      "category": "analytics",
+      "risk": "high",
+      "evidence": [
+        {
+          "file": "play-services-location.properties",
+          "match": "client=play-services-location, version=21.1.0"
+        },
+        {
+          "file": "classes*.dex",
+          "match": "ACCESS_FINE_LOCATION | ACCESS_COARSE_LOCATION | getLocationManager | locationSource | GPSPointDimensionJsonMarshaller | AssetTrackerLocationFormBinding | SegmentLocationJsonUnmarshaller | SEMANTIC_LOCATION_UPDATES_UNREGISTER | onMyLocationButtonClick"
+        }
+      ],
+      "endpoints": [
+        "https://www.googleapis.com/auth/games.firstparty (location-adjacent)"
+      ],
+      "data_collected": [
+        "GPS coordinates (fine location via ACCESS_FINE_LOCATION)",
+        "Network-based location (coarse location via ACCESS_COARSE_LOCATION)",
+        "Location history / semantic location updates"
+      ]
+    },
+    {
+      "name": "Google Maps SDK for Android",
+      "sdk_version": "18.2.0",
+      "category": "analytics",
+      "risk": "low",
+      "evidence": [
+        {
+          "file": "play-services-maps.properties",
+          "match": "client=play-services-maps, version=18.2.0"
+        },
+        {
+          "file": "classes*.dex",
+          "match": "maps.googleapis.com | com.google.android.gms.maps.internal.IMapViewDelegate | MapView | onMyLocationClick | PLACE_SELECTION_SELECT_THIS_LOCATION"
+        }
+      ],
+      "endpoints": [
+        "https://maps.googleapis.com/"
+      ],
+      "data_collected": [
+        "Map tile requests (may include viewport location)",
+        "Places search queries"
+      ]
+    },
+    {
+      "name": "BugSnag",
+      "sdk_version": "Unknown (NDK + Performance SDK present)",
+      "category": "crash_reporting",
+      "risk": "low",
+      "evidence": [
+        {
+          "file": "assets/include/bugsnag.h",
+          "match": "Native C/C++ BugSnag header present"
+        },
+        {
+          "file": "classes*.dex",
+          "match": "com.bugsnag.android.* | BugsnagNDK | BugsnagPerformance | com.bugsnag.android.PROJECT_PACKAGES"
+        },
+        {
+          "file": "classes*.dex (URLs)",
+          "match": "https://notify.bugsnag.com | https://sessions.bugsnag.com | https://otlp.bugsnag.com/v1/traces"
+        }
+      ],
+      "endpoints": [
+        "https://notify.bugsnag.com",
+        "https://sessions.bugsnag.com",
+        "https://otlp.bugsnag.com/v1/traces"
+      ],
+      "data_collected": [
+        "Crash stack traces",
+        "ANR (Application Not Responding) events",
+        "Device state and metadata at crash time",
+        "App sessions and performance spans (via OTLP/traces)",
+        "User breadcrumb navigation trail"
+      ]
+    },
+    {
+      "name": "AWS Amplify + Amazon Pinpoint",
+      "sdk_version": "AWS Android SDK (aws-android-sdk-core.properties present)",
+      "category": "analytics",
+      "risk": "medium",
+      "evidence": [
+        {
+          "file": "classes*.dex",
+          "match": "Lcom/amplifyframework/analytics/pinpoint/* | Lcom/amazonaws/services/pinpoint/AmazonPinpoint | PinpointAppId | com.amazonaws.intent.fcm.NOTIFICATION_OPEN | SwitchMap$com$amazonaws$services$pinpoint$model$ChannelType"
+        },
+        {
+          "file": "com/aws-android-sdk-core.properties",
+          "match": "Property file present in APK root"
+        }
+      ],
+      "endpoints": [
+        "https://pinpoint.{region}.amazonaws.com",
+        "https://analytics.pinpoint.{region}.amazonaws.com"
+      ],
+      "data_collected": [
+        "Custom analytics events",
+        "User engagement and session data",
+        "Push notification open/conversion tracking",
+        "User endpoint attributes (device, demographics)"
+      ]
+    },
+    {
+      "name": "AWS Cognito",
+      "sdk_version": "AWS Android SDK",
+      "category": "analytics",
+      "risk": "low",
+      "evidence": [
+        {
+          "file": "classes*.dex",
+          "match": "AWSBasicCognitoIdentityProvider | AWSRefreshingCognitoIdentityProvider | cognito-idp.*.amazonaws.com | cognito-sync.*.amazonaws.com | CognitoPasswordInvalidException"
+        }
+      ],
+      "endpoints": [
+        "https://cognito-idp.{region}.amazonaws.com",
+        "https://cognito-sync.{region}.amazonaws.com"
+      ],
+      "data_collected": [
+        "User identity tokens (JWT)",
+        "User pool attributes",
+        "Cross-device identity sync via Cognito Sync"
+      ]
+    },
+    {
+      "name": "YouTube Data API v3 (Embedded Key)",
+      "sdk_version": "N/A (REST API)",
+      "category": "analytics",
+      "risk": "medium",
+      "evidence": [
+        {
+          "file": "classes*.dex",
+          "match": "https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&key=AIzaSyASZbllDc_ielyHaBZw120XkaOoeQ11n2Y&maxResults=50&playlistId="
+        },
+        {
+          "file": "classes*.dex",
+          "match": "YoutubeWidget.kt | YoutubePlaylistFragment | com.ocv.core.features.youtube_playlist"
+        }
+      ],
+      "endpoints": [
+        "https://www.googleapis.com/youtube/v3/playlistItems",
+        "https://www.youtube.com/embed/",
+        "https://youtu.be/"
+      ],
+      "data_collected": [
+        "YouTube playlist metadata and video data",
+        "NOTE: Google API key AIzaSyASZbllDc_ielyHaBZw120XkaOoeQ11n2Y is HARDCODED in the APK and publicly extractable"
+      ]
+    }
+  ],
+  "permissions": [
+    {
+      "permission": "android.permission.ACCESS_FINE_LOCATION",
+      "risk": "critical",
+      "notes": "Allows precise GPS location tracking"
+    },
+    {
+      "permission": "android.permission.ACCESS_COARSE_LOCATION",
+      "risk": "high",
+      "notes": "Allows approximate location via network/WiFi"
+    },
+    {
+      "permission": "android.permission.READ_PHONE_STATE",
+      "risk": "high",
+      "notes": "Exposes IMEI, IMSI, and device identifiers"
+    },
+    {
+      "permission": "android.permission.READ_PHONE_NUMBERS",
+      "risk": "high",
+      "notes": "Reads user's phone number"
+    },
+    {
+      "permission": "android.permission.GET_ACCOUNTS",
+      "risk": "medium",
+      "notes": "Lists Google/device accounts on the device"
+    },
+    {
+      "permission": "android.permission.READ_CONTACTS",
+      "risk": "high",
+      "notes": "Reads device contacts list"
+    },
+    {
+      "permission": "android.permission.WRITE_CONTACTS",
+      "risk": "high",
+      "notes": "Modifies device contacts list"
+    },
+    {
+      "permission": "android.permission.RECORD_AUDIO",
+      "risk": "high",
+      "notes": "Microphone access"
+    },
+    {
+      "permission": "android.permission.CAMERA",
+      "risk": "medium",
+      "notes": "Camera access (likely for barcode scanning \u00e2\u20ac\u201d barcode-scanning SDK present)"
+    },
+    {
+      "permission": "android.permission.READ_CALL_LOG",
+      "risk": "high",
+      "notes": "Reads incoming/outgoing call history"
+    },
+    {
+      "permission": "android.permission.PROCESS_OUTGOING_CALLS",
+      "risk": "high",
+      "notes": "Can intercept or redirect outgoing calls"
+    },
+    {
+      "permission": "android.permission.READ_SMS",
+      "risk": "high",
+      "notes": "Reads SMS messages"
+    },
+    {
+      "permission": "android.permission.RECEIVE_SMS",
+      "risk": "high",
+      "notes": "Intercepts incoming SMS messages"
+    },
+    {
+      "permission": "android.permission.SEND_SMS",
+      "risk": "medium",
+      "notes": "Can send SMS messages (potential cost incurral)"
+    },
+    {
+      "permission": "android.permission.READ_CALENDAR",
+      "risk": "medium",
+      "notes": "Reads calendar events"
+    },
+    {
+      "permission": "android.permission.WRITE_CALENDAR",
+      "risk": "medium",
+      "notes": "Modifies calendar events"
+    },
+    {
+      "permission": "android.permission.ACCESS_MEDIA_LOCATION",
+      "risk": "medium",
+      "notes": "Reads GPS EXIF data from photos \u00e2\u20ac\u201d location exfiltration via images"
+    },
+    {
+      "permission": "android.permission.READ_EXTERNAL_STORAGE",
+      "risk": "medium",
+      "notes": "Reads files on external/shared storage"
+    },
+    {
+      "permission": "android.permission.WRITE_EXTERNAL_STORAGE",
+      "risk": "medium",
+      "notes": "Writes files to external/shared storage"
+    },
+    {
+      "permission": "android.permission.RECEIVE_BOOT_COMPLETED",
+      "risk": "medium",
+      "notes": "App auto-starts on device reboot \u00e2\u20ac\u201d persistent background execution"
+    },
+    {
+      "permission": "android.permission.INTERNET",
+      "risk": "low",
+      "notes": "Standard network access"
+    },
+    {
+      "permission": "android.permission.FOREGROUND_SERVICE",
+      "risk": "low",
+      "notes": "Runs persistent foreground service"
+    },
+    {
+      "permission": "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+      "risk": "low",
+      "notes": "Foreground service for media playback"
+    },
+    {
+      "permission": "android.permission.POST_NOTIFICATIONS",
+      "risk": "low",
+      "notes": "Standard push notification permission"
+    },
+    {
+      "permission": "android.permission.VIBRATE",
+      "risk": "low",
+      "notes": "Vibration for notifications"
+    },
+    {
+      "permission": "android.permission.WAKE_LOCK",
+      "risk": "low",
+      "notes": "Keeps CPU awake for background processing"
+    }
+  ],
+  "hardcoded_secrets": [
+    {
+      "type": "Google API Key (YouTube Data API v3)",
+      "value": "AIzaSyASZbllDc_ielyHaBZw120XkaOoeQ11n2Y",
+      "risk": "medium",
+      "notes": "Hardcoded in classes.dex \u00e2\u20ac\u201d extractable by any user. May be abused for quota theft or data scraping against the app's YouTube playlist."
+    },
+    {
+      "type": "Firebase App ID",
+      "value": "1:396507442436:android:428931794b6e4bfa317451",
+      "risk": "low",
+      "notes": "Standard Firebase App ID embedded in resources \u00e2\u20ac\u201d expected but discloses GCP project number 396507442436."
+    },
+    {
+      "type": "Firebase Storage Bucket",
+      "value": "ocvapps5.firebasestorage.app",
+      "risk": "low",
+      "notes": "Storage bucket name disclosed \u00e2\u20ac\u201d could be probed for misconfigured public access rules."
+    },
+    {
+      "type": "OCV Content CDN Endpoint",
+      "value": "https://cdn.myocv.com/ocvapps/a83489423/public/int_manifestMenu.json",
+      "risk": "low",
+      "notes": "App configuration manifest served over CDN \u00e2\u20ac\u201d discloses internal OCV app ID a83489423."
+    }
+  ],
+  "summary": {
+    "total_trackers_found": 11,
+    "data_broker_sdks": 0,
+    "critical_risk_items": 1,
+    "high_risk_items": 3,
+    "medium_risk_items": 5,
+    "low_risk_items": 5,
+    "critical_permissions": [
+      "ACCESS_FINE_LOCATION"
+    ],
+    "high_risk_permissions": [
+      "ACCESS_COARSE_LOCATION",
+      "READ_PHONE_STATE",
+      "READ_PHONE_NUMBERS",
+      "READ_CONTACTS",
+      "WRITE_CONTACTS",
+      "RECORD_AUDIO",
+      "READ_CALL_LOG",
+      "PROCESS_OUTGOING_CALLS",
+      "READ_SMS",
+      "RECEIVE_SMS"
+    ],
+    "overall_risk_rating": "HIGH",
+    "narrative": "com.ocv.a834 is a community/church mobile app built on the OCV (Online Church Vision) platform. It embeds an unusually wide set of SDKs and declares a large number of sensitive permissions relative to its apparent purpose. The tracker stack includes Firebase Analytics + FCM (Google), Facebook SDK, Google AdMob (with Advertising ID collection), AWS Amplify + Amazon Pinpoint (a second independent analytics pipeline), BugSnag (crash and performance), and Google Maps/Location. The two most significant concerns are: (1) The simultaneous collection of precise GPS location (ACCESS_FINE_LOCATION) combined with AdMob Advertising ID collection \u00e2\u20ac\u201d together these enable precise location-based ad profiling; and (2) The declaration of READ_SMS, READ_CALL_LOG, READ_CONTACTS, RECORD_AUDIO, and PROCESS_OUTGOING_CALLS permissions, which are highly sensitive and difficult to justify for a church community app. A Google YouTube API key is hardcoded in the DEX bytecode and is trivially extractable, creating a quota-abuse risk. No data broker SDKs (Kochava, X-Mode/Outlogic) were detected."
+  }
+}

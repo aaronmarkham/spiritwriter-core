@@ -1,0 +1,708 @@
+{
+  "package_name": "com.ocv.a878",
+  "audit_date": "2026-03-30",
+  "apk_size_bytes": 66637721,
+  "findings": [
+    {
+      "name": "Firebase Analytics (Google Analytics for Firebase)",
+      "sdk_version": "21.1.0",
+      "category": "analytics",
+      "risk": "medium",
+      "evidence": [
+        {
+          "file": "firebase-analytics.properties",
+          "match": "client=firebase-analytics, firebase-analytics_client=21.1.0"
+        },
+        {
+          "file": "play-services-measurement.properties / play-services-measurement-impl.properties",
+          "match": "Multiple measurement SDK property files present (measurement, measurement-api, measurement-base, measurement-impl, measurement-sdk, measurement-sdk-api), all version 21.1.0"
+        },
+        {
+          "file": "classes*.dex",
+          "match": "google_app_id | google_analytics_adid_collection_enabled | app-measurement.com | AppMeasurementService | AppMeasurementReceiver | AppMeasurementJobService"
+        },
+        {
+          "file": "resources.arsc",
+          "match": "Firebase App ID: 1:266648684703:android:ed0bdc073d7e8fc767faaa"
+        }
+      ],
+      "endpoints": [
+        "https://app-measurement.com/a",
+        "https://firebase.google.com/support/privacy/init-options"
+      ],
+      "data_collected": [
+        "App usage events",
+        "User engagement sessions",
+        "Device identifiers (Firebase Installation ID)",
+        "Screen views and user flows",
+        "Advertising ID (GAID) via play-services-ads-identifier"
+      ]
+    },
+    {
+      "name": "Firebase Cloud Messaging (FCM)",
+      "sdk_version": "23.0.7",
+      "category": "analytics",
+      "risk": "low",
+      "evidence": [
+        {
+          "file": "firebase-messaging.properties",
+          "match": "client=firebase-messaging, firebase-messaging_client=23.0.7"
+        },
+        {
+          "file": "classes*.dex",
+          "match": "Firebase-Messaging-Intent-Handle | FirebaseMessagingService | com.google.firebase.MESSAGING_EVENT | Push3ListenerService | Push3NotificationActionService"
+        },
+        {
+          "file": "AndroidManifest.xml",
+          "match": "com.google.firebase.messaging.FirebaseMessagingService | com.google.firebase.iid.FirebaseInstanceIdReceiver | com.ocv.core.features.push_3.Push3ListenerService"
+        }
+      ],
+      "endpoints": [
+        "https://fcm.googleapis.com"
+      ],
+      "data_collected": [
+        "FCM push notification tokens",
+        "Device registration tokens",
+        "Push notification delivery receipts",
+        "Push notification open/interaction events"
+      ]
+    },
+    {
+      "name": "Firebase Installations",
+      "sdk_version": "17.0.1",
+      "category": "analytics",
+      "risk": "low",
+      "evidence": [
+        {
+          "file": "firebase-installations.properties",
+          "match": "client=firebase-installations, firebase-installations_client=17.0.1"
+        },
+        {
+          "file": "classes*.dex",
+          "match": "Goog-Firebase-Installations-Auth | FIREBASE_INSTALLATIONS_API_DOMAIN | FIREBASE_INSTALLATIONS_API_VERSION"
+        }
+      ],
+      "endpoints": [
+        "https://firebaseinstallations.googleapis.com"
+      ],
+      "data_collected": [
+        "Firebase Installation ID (persistent per-app-install identifier)"
+      ]
+    },
+    {
+      "name": "Facebook SDK",
+      "sdk_version": "2.7.6 (aws-android-sdk-auth-facebook)",
+      "category": "analytics",
+      "risk": "medium",
+      "evidence": [
+        {
+          "file": "classes*.dex",
+          "match": "com.amazonaws:aws-android-sdk-auth-facebook:2.7.6 | com.amazonaws.mobile.auth.facebook.FacebookButton | com.facebook.katana | FacebookSignInProvider | FacebookResponseModel"
+        },
+        {
+          "file": "classes*.dex",
+          "match": "facebookLink | facebookPostID | /facebook (API path)"
+        }
+      ],
+      "endpoints": [
+        "https://www.facebook.com/"
+      ],
+      "data_collected": [
+        "Facebook login identity (if user authenticates via Facebook)",
+        "App events sent to Facebook",
+        "Facebook post data ingested and displayed in app"
+      ]
+    },
+    {
+      "name": "Google AdMob / Play Services Ads Identifier",
+      "sdk_version": "18.0.0 (ads-identifier)",
+      "category": "ads",
+      "risk": "high",
+      "evidence": [
+        {
+          "file": "play-services-ads-identifier.properties",
+          "match": "client=play-services-ads-identifier, version=18.0.0"
+        },
+        {
+          "file": "classes*.dex",
+          "match": "admob_app_id | linked_admob_app_id | ALTER TABLE apps ADD COLUMN admob_app_id TEXT | AdvertisingIdClient | getAdvertisingIdInfo | last_advertising_id_reset | Unable to get advertising id"
+        },
+        {
+          "file": "classes*.dex",
+          "match": "ca-app-pub- pattern | pagead2.googlesyndication.com/pagead/gen_204?id=gmob-apps | googleadservices.com/pagead/conversion/app/deeplink?id_type=adid"
+        }
+      ],
+      "endpoints": [
+        "https://pagead2.googlesyndication.com/pagead/gen_204?id=gmob-apps",
+        "https://www.googleadservices.com/pagead/conversion/app/deeplink?id_type=adid&sdk_version=%s&rdid=%s&bundleid=%s&retry=%s"
+      ],
+      "data_collected": [
+        "Google Advertising ID (GAID) -- persistent cross-app device identifier",
+        "Ad tracking/limit ad tracking status",
+        "App conversion data for Google Ads campaigns",
+        "Deep link attribution data tied to device advertising ID"
+      ]
+    },
+    {
+      "name": "Google Play Services Location",
+      "sdk_version": "21.1.0",
+      "category": "analytics",
+      "risk": "high",
+      "evidence": [
+        {
+          "file": "play-services-location.properties",
+          "match": "client=play-services-location, version=21.1.0"
+        },
+        {
+          "file": "AndroidManifest.xml",
+          "match": "android.permission.ACCESS_FINE_LOCATION | android.permission.ACCESS_COARSE_LOCATION"
+        },
+        {
+          "file": "classes*.dex",
+          "match": "TagAlongMapFragment$startLocationUpdates | AssetTrackerLocationDAO | AssetTrackerLocation | OffenderWatchMapFragBinding | SexOffendersMapFragment"
+        }
+      ],
+      "endpoints": [],
+      "data_collected": [
+        "GPS coordinates (fine location via ACCESS_FINE_LOCATION)",
+        "Network-based location (coarse location via ACCESS_COARSE_LOCATION)",
+        "Location data uploaded to OCV TagAlong sessions (https://api.myocv.com/apps/tagalong/session)",
+        "Location data correlated with sex offender proximity maps"
+      ]
+    },
+    {
+      "name": "Google Maps SDK for Android",
+      "sdk_version": "18.2.0",
+      "category": "analytics",
+      "risk": "low",
+      "evidence": [
+        {
+          "file": "play-services-maps.properties",
+          "match": "client=play-services-maps, version=18.2.0"
+        },
+        {
+          "file": "classes*.dex",
+          "match": "maps.googleapis.com | OffenderWatchMapFrag | SexOffendersMapFragment | TagAlongMapFragment"
+        },
+        {
+          "file": "AndroidManifest.xml",
+          "match": "com.google.android.maps.v2.API_KEY"
+        }
+      ],
+      "endpoints": [
+        "https://maps.googleapis.com/"
+      ],
+      "data_collected": [
+        "Map tile requests (may include viewport location)",
+        "Places search queries via Places SDK 2.4.0"
+      ]
+    },
+    {
+      "name": "BugSnag",
+      "sdk_version": "Unknown (NDK + Performance SDK + OTLP tracing)",
+      "category": "crash_reporting",
+      "risk": "medium",
+      "evidence": [
+        {
+          "file": "AndroidManifest.xml",
+          "match": "com.bugsnag.android.API_KEY | com.ocv.a878.BugsnagPerformanceProvider | com.bugsnag.performance.android.API_KEY"
+        },
+        {
+          "file": "classes*.dex",
+          "match": "com.bugsnag.android.* (extensive SDK) | BugsnagPerformance | BugsnagNDK | Android Bugsnag Notifier | DeviceIdStore | DeviceIdFilePersistence"
+        },
+        {
+          "file": "classes*.dex (URLs)",
+          "match": "https://notify.bugsnag.com | https://sessions.bugsnag.com | https://otlp.bugsnag.com/v1/traces"
+        }
+      ],
+      "endpoints": [
+        "https://notify.bugsnag.com",
+        "https://sessions.bugsnag.com",
+        "https://otlp.bugsnag.com/v1/traces",
+        "https://docs.bugsnag.com"
+      ],
+      "data_collected": [
+        "Crash stack traces and ANR events",
+        "Device state and metadata at crash time",
+        "Persistent device ID (DeviceIdStore/DeviceIdFilePersistence)",
+        "App sessions and performance spans (via OTLP/traces)",
+        "User breadcrumb navigation trail",
+        "Root detection results (checkBuildProps, checkBuildTags, checkRootBinaries, checkSuExists)"
+      ]
+    },
+    {
+      "name": "AWS Amplify + Amazon Pinpoint",
+      "sdk_version": "aws-android-sdk-core 2.16.13",
+      "category": "analytics",
+      "risk": "high",
+      "evidence": [
+        {
+          "file": "fabric/com.amazonaws.aws-android-sdk-core.properties",
+          "match": "fabric-identifier=com.amazonaws.aws-android-sdk-core, fabric-version=2.16.13"
+        },
+        {
+          "file": "classes*.dex",
+          "match": "com.amplifyframework.analytics.pinpoint | AWSPinpointAnalyticsPlugin | AWSPinpointAnalyticsPluginConfiguration | PinpointAppId | AutoEventSubmitter | AutoSessionTracker | pinpoint.us-east-1.amazonaws.com"
+        },
+        {
+          "file": "classes*.dex",
+          "match": "Hardcoded AWS config template: {\"plugins\":{\"awsCognitoAuthPlugin\": { \"IdentityManager\": {}, \"Default\": { \"Region\": \"us-east-1\" }, \"CredentialsProvider\": { \"CognitoIdentity\": { \"Default\": { \"PoolId\": \"..."
+        }
+      ],
+      "endpoints": [
+        "https://pinpoint.us-east-1.amazonaws.com",
+        "https://oc1rhn99vi.execute-api.us-east-1.amazonaws.com/beta"
+      ],
+      "data_collected": [
+        "Custom analytics events (AutoEventSubmitter)",
+        "Session start/stop tracking (AutoSessionTracker)",
+        "User engagement and session duration",
+        "Push notification open/conversion tracking",
+        "User endpoint attributes (device, demographics, location)",
+        "User profile analytics (AnalyticsEvent, UserProfile, UserProfile.Location)"
+      ]
+    },
+    {
+      "name": "AWS Cognito",
+      "sdk_version": "aws-android-sdk-auth-userpools 2.7.6",
+      "category": "analytics",
+      "risk": "medium",
+      "evidence": [
+        {
+          "file": "classes*.dex",
+          "match": "com.amazonaws:aws-android-sdk-auth-userpools:2.7.6 | CognitoUserPoolsSignInProvider | CognitoIdentityProviderDeviceCache | AWSCognitoUserPoolTokens"
+        },
+        {
+          "file": "classes*.dex",
+          "match": "Cognito Identity Pool ID: us-east-1:2793e471-e8b3-4dba-8270-d1a4192c0d17 | awsCognitoAuthPlugin config embedded"
+        },
+        {
+          "file": "AndroidManifest.xml",
+          "match": "com.amazonaws.mobile.auth.ui.SignInActivity | com.amazonaws.mobile.auth.userpools.MFAActivity | SignUpActivity | SignUpConfirmActivity | ForgotPasswordActivity | ForceChangePasswordActivity"
+        }
+      ],
+      "endpoints": [
+        "https://cognito-idp.us-east-1.amazonaws.com",
+        "https://cognito-identity.us-east-1.amazonaws.com"
+      ],
+      "data_collected": [
+        "User identity tokens (JWT)",
+        "User pool attributes",
+        "Device cache for persistent auth (CognitoIdentityProviderDeviceCache)",
+        "Cross-device identity sync"
+      ]
+    },
+    {
+      "name": "AWS IoT",
+      "sdk_version": "Bundled with aws-android-sdk-core 2.16.13",
+      "category": "surveillance",
+      "risk": "medium",
+      "evidence": [
+        {
+          "file": "classes*.dex",
+          "match": "AWSIotClient | data.iot.us-east-1.amazonaws.com | iot.us-east-1.amazonaws.com | iot.us-west-2.amazonaws.com | iot.eu-west-1.amazonaws.com (17 regional IoT endpoints)"
+        }
+      ],
+      "endpoints": [
+        "https://data.iot.us-east-1.amazonaws.com",
+        "https://iot.us-east-1.amazonaws.com"
+      ],
+      "data_collected": [
+        "IoT device telemetry and state data",
+        "MQTT topic subscriptions",
+        "NOTE: IoT SDK presence suggests potential for real-time device tracking/push beyond standard FCM"
+      ]
+    },
+    {
+      "name": "Appriss VINE",
+      "sdk_version": "N/A (REST API integration)",
+      "category": "surveillance",
+      "risk": "high",
+      "evidence": [
+        {
+          "file": "classes*.dex",
+          "match": "ApprissVineDetailFragment | ApprissVineSearchFragment | ApprissInmateItem | ApprissInmateDate | ApprissInmateImage | ApprissEntryID | ApprissVineFeed | apprissRegistrationDetailFeatureID"
+        },
+        {
+          "file": "classes*.dex",
+          "match": "vine.prod3.myocv.com (list, search, charges, register endpoints) | vinelink.com | vinelink.vineapps.com/search/person/registration"
+        }
+      ],
+      "endpoints": [
+        "https://vine.prod3.myocv.com/list/",
+        "https://vine.prod3.myocv.com/search/",
+        "https://vine.prod3.myocv.com/charges/",
+        "https://vine.prod3.myocv.com/register/",
+        "https://vinelink.com/classic/#/home",
+        "https://vinelink.vineapps.com/search/person/registration",
+        "http://www.vinelink.com/vinelink/servlet/SubjectSearch?siteID="
+      ],
+      "data_collected": [
+        "Inmate search queries (name-based lookup)",
+        "Inmate booking details (title, dates, images, charges)",
+        "VINE victim notification registrations",
+        "User registration for custody status alerts"
+      ]
+    },
+    {
+      "name": "OffenderWatch",
+      "sdk_version": "N/A (REST API integration)",
+      "category": "surveillance",
+      "risk": "high",
+      "evidence": [
+        {
+          "file": "classes*.dex",
+          "match": "OffenderWatchController | OffenderWatchFeed | OffenderWatchPin | OffenderWatchDataObject | OffenderWatchCountyObject | SexOffendersDetailFragment | SexOffendersMapFragment | SexOffendersListFragment"
+        },
+        {
+          "file": "classes*.dex",
+          "match": "Tier I/II/III Sex Offender classifications | Sexually Oriented Offender | (Pre AWA) Sexually Oriented Offender | OffenderWatch Safety App"
+        },
+        {
+          "file": "classes*.dex",
+          "match": "icrimewatch.net/register | icrimewatch.net/register_offender.php?offid="
+        }
+      ],
+      "endpoints": [
+        "https://www.icrimewatch.net/register",
+        "https://www.icrimewatch.net/register_offender.php?offid=",
+        "https://cdn.myocv.com/ocvapps/a22936830/public/page_offenderWatchSafetyApp.json"
+      ],
+      "data_collected": [
+        "Sex offender registry data (names, locations, tiers, photos)",
+        "Map pin locations of registered offenders",
+        "User search queries for offenders by county/location",
+        "User proximity to mapped offender locations (combined with GPS)",
+        "iCrimeWatch cross-reference of offender records"
+      ]
+    },
+    {
+      "name": "iCrimeWatch",
+      "sdk_version": "N/A (REST API integration)",
+      "category": "surveillance",
+      "risk": "high",
+      "evidence": [
+        {
+          "file": "classes*.dex",
+          "match": "OffenderWatchController | OffenderWatchFeed | OffenderWatchPin | OffenderWatchDataObject | OffenderWatchCountyObject | SexOffendersDetailFragment | SexOffendersMapFragment | SexOffendersListFragment"
+        },
+        {
+          "file": "classes*.dex",
+          "match": "Tier I/II/III Sex Offender classifications | Sexually Oriented Offender | (Pre AWA) Sexually Oriented Offender | OffenderWatch Safety App"
+        },
+        {
+          "file": "classes*.dex",
+          "match": "icrimewatch.net/register | icrimewatch.net/register_offender.php?offid="
+        }
+      ],
+      "endpoints": [
+        "https://www.icrimewatch.net/register",
+        "https://www.icrimewatch.net/register_offender.php?offid=",
+        "https://cdn.myocv.com/ocvapps/a22936830/public/page_offenderWatchSafetyApp.json"
+      ],
+      "data_collected": [
+        "Sex offender registry data (names, locations, tiers, photos)",
+        "Map pin locations of registered offenders",
+        "User search queries for offenders by county/location",
+        "User proximity to mapped offender locations (combined with GPS)",
+        "iCrimeWatch cross-reference of offender records"
+      ]
+    },
+    {
+      "name": "TagAlong (Real-Time Location Sharing)",
+      "sdk_version": "N/A (OCV platform feature)",
+      "category": "surveillance",
+      "risk": "critical",
+      "evidence": [
+        {
+          "file": "classes*.dex",
+          "match": "TagAlongMapFragment | TagAlongParser | TagAlongDialog | TagAlongTripsFragment | DroppedPin | DroppedPinsAdapter | Trip | UserView | startLocationUpdates | postAddPoint | postStartSession | postCloseSession | getSession"
+        },
+        {
+          "file": "classes*.dex",
+          "match": "https://api.myocv.com/apps/tagalong/add/ | https://api.myocv.com/apps/tagalong/session/ | https://api.myocv.com/apps/tagalong/session?appID="
+        },
+        {
+          "file": "AndroidManifest.xml",
+          "match": "android.permission.ACCESS_FINE_LOCATION required for real-time tracking"
+        }
+      ],
+      "endpoints": [
+        "https://api.myocv.com/apps/tagalong/add/",
+        "https://api.myocv.com/apps/tagalong/session/",
+        "https://api.myocv.com/apps/tagalong/session?appID="
+      ],
+      "data_collected": [
+        "Real-time GPS location coordinates uploaded to OCV servers",
+        "Location session history (trips with start/stop timestamps)",
+        "Dropped pins with user annotations",
+        "Multi-user location sharing (UserView model) -- group tracking",
+        "Continuous location updates during active sessions"
+      ]
+    },
+    {
+      "name": "AssetTracker (GPS Object/Person Tracking)",
+      "sdk_version": "N/A (OCV platform feature)",
+      "category": "surveillance",
+      "risk": "medium",
+      "evidence": [
+        {
+          "file": "classes*.dex",
+          "match": "AssetTrackerLocation | DynamicAssetTrackerFragment | DynamicAssetTrackerViewModel | AssetTrackerLocationDAO | AssetTrackerShareFragmentAdapter | EquipmentScreen | AddScreen | itemActionDialog"
+        },
+        {
+          "file": "classes*.dex",
+          "match": "CREATE TABLE IF NOT EXISTS AssetTrackerLocation (uid, location_title, address) | CREATE TABLE IF NOT EXISTS AssetTracker (uid, item_name, room_name, item_description, serial_number, location_title, address, image_one_filepath...)"
+        }
+      ],
+      "endpoints": [],
+      "data_collected": [
+        "Equipment/asset inventory with locations and addresses",
+        "Serial numbers and item descriptions",
+        "Photos of tracked items (image filepath fields)",
+        "Local SQLite database with asset location history"
+      ]
+    },
+    {
+      "name": "YouTube Data API v3 (Embedded Key)",
+      "sdk_version": "N/A (REST API)",
+      "category": "analytics",
+      "risk": "medium",
+      "evidence": [
+        {
+          "file": "classes*.dex",
+          "match": "https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&key=AIzaSyASZbllDc_ielyHaBZw120XkaOoeQ11n2Y&maxResults=50&playlistId="
+        },
+        {
+          "file": "classes*.dex",
+          "match": "Google Calendar API also using same key: events?key=AIzaSyASZbllDc_ielyHaBZw120XkaOoeQ11n2Y&singleEvents=true"
+        }
+      ],
+      "endpoints": [
+        "https://www.googleapis.com/youtube/v3/playlistItems",
+        "https://www.googleapis.com/calendar/v3/calendars/",
+        "https://www.youtube.com/embed/"
+      ],
+      "data_collected": [
+        "YouTube playlist metadata and video data",
+        "Google Calendar event data",
+        "NOTE: Google API key AIzaSyASZbllDc_ielyHaBZw120XkaOoeQ11n2Y is HARDCODED in the APK and publicly extractable"
+      ]
+    },
+    {
+      "name": "Google Data Transport",
+      "sdk_version": "3.1.6",
+      "category": "analytics",
+      "risk": "low",
+      "evidence": [
+        {
+          "file": "transport-backend-cct.properties",
+          "match": "client=transport-backend-cct, transport-backend-cct_client=3.1.6"
+        },
+        {
+          "file": "transport-runtime.properties",
+          "match": "client=transport-runtime, transport-runtime_client=3.1.6"
+        },
+        {
+          "file": "AndroidManifest.xml",
+          "match": "backend:com.google.android.datatransport.cct.CctBackendFactory | TransportBackendDiscovery | JobInfoSchedulerService | AlarmManagerSchedulerBroadcastReceiver"
+        }
+      ],
+      "endpoints": [],
+      "data_collected": [
+        "Queued analytics event transport layer",
+        "Batched data upload scheduling via JobScheduler/AlarmManager"
+      ]
+    },
+    {
+      "name": "Google ML Kit Barcode Scanning",
+      "sdk_version": "18.3.0",
+      "category": "analytics",
+      "risk": "low",
+      "evidence": [
+        {
+          "file": "play-services-mlkit-barcode-scanning.properties",
+          "match": "client=play-services-mlkit-barcode-scanning, version=18.3.0"
+        },
+        {
+          "file": "barcode-scanning-common.properties",
+          "match": "client=barcode-scanning-common, version=17.0.0"
+        },
+        {
+          "file": "AndroidManifest.xml",
+          "match": "com.google.mlkit.vision.DEPENDENCIES | io.github.g00fy2.quickie.QRScannerActivity"
+        }
+      ],
+      "endpoints": [],
+      "data_collected": [
+        "Barcode/QR code scan results processed locally"
+      ]
+    }
+  ],
+  "permissions": [
+    {
+      "permission": "android.permission.ACCESS_FINE_LOCATION",
+      "risk": "critical",
+      "notes": "Allows precise GPS location tracking -- used by TagAlong real-time tracking, OffenderWatch sex offender maps, and weather radar"
+    },
+    {
+      "permission": "android.permission.ACCESS_COARSE_LOCATION",
+      "risk": "high",
+      "notes": "Allows approximate location via network/WiFi triangulation"
+    },
+    {
+      "permission": "android.permission.READ_PHONE_STATE",
+      "risk": "high",
+      "notes": "Exposes IMEI, IMSI, and device identifiers -- enables device fingerprinting"
+    },
+    {
+      "permission": "android.permission.READ_CONTACTS",
+      "risk": "high",
+      "notes": "Reads device contacts list -- no obvious justification for a sheriff's office community app"
+    },
+    {
+      "permission": "android.permission.CALL_PHONE",
+      "risk": "high",
+      "notes": "Can initiate phone calls without user dialing -- present for 'call sheriff' feature but overprivileged"
+    },
+    {
+      "permission": "android.permission.CAMERA",
+      "risk": "medium",
+      "notes": "Camera access -- used for barcode scanning (ML Kit) and asset tracker photo capture"
+    },
+    {
+      "permission": "android.permission.READ_EXTERNAL_STORAGE",
+      "risk": "medium",
+      "notes": "Reads files on external/shared storage"
+    },
+    {
+      "permission": "android.permission.WRITE_EXTERNAL_STORAGE",
+      "risk": "medium",
+      "notes": "Writes files to external/shared storage"
+    },
+    {
+      "permission": "android.permission.POST_NOTIFICATIONS",
+      "risk": "low",
+      "notes": "Standard push notification permission (Android 13+)"
+    },
+    {
+      "permission": "android.permission.ACCESS_NETWORK_STATE",
+      "risk": "low",
+      "notes": "Standard network connectivity detection"
+    },
+    {
+      "permission": "android.permission.ACCESS_WIFI_STATE",
+      "risk": "low",
+      "notes": "WiFi network state detection"
+    },
+    {
+      "permission": "android.permission.INTERNET",
+      "risk": "low",
+      "notes": "Standard network access"
+    },
+    {
+      "permission": "android.permission.VIBRATE",
+      "risk": "low",
+      "notes": "Vibration for notifications"
+    },
+    {
+      "permission": "android.permission.WAKE_LOCK",
+      "risk": "low",
+      "notes": "Keeps CPU awake for background processing"
+    },
+    {
+      "permission": "android.permission.USE_BIOMETRIC",
+      "risk": "low",
+      "notes": "Biometric authentication (fingerprint/face)"
+    },
+    {
+      "permission": "android.permission.USE_FINGERPRINT",
+      "risk": "low",
+      "notes": "Legacy fingerprint API (deprecated, USE_BIOMETRIC is successor)"
+    },
+    {
+      "permission": "android.permission.BIND_JOB_SERVICE",
+      "risk": "low",
+      "notes": "Background job scheduling"
+    },
+    {
+      "permission": "android.permission.DUMP",
+      "risk": "medium",
+      "notes": "Access to system dump data -- unusual for a consumer app, may expose system diagnostics"
+    },
+    {
+      "permission": "android.permission.FLASHLIGHT",
+      "risk": "low",
+      "notes": "Camera flash LED control"
+    },
+    {
+      "permission": "android.permission.ACTION_VIEW",
+      "risk": "low",
+      "notes": "Standard intent action (not a real permission -- likely manifest artifact)"
+    }
+  ],
+  "hardcoded_secrets": [
+    {
+      "type": "Google API Key (YouTube Data API v3 + Google Calendar API)",
+      "value": "AIzaSyASZbllDc_ielyHaBZw120XkaOoeQ11n2Y",
+      "risk": "medium",
+      "notes": "Hardcoded in classes.dex AND AndroidManifest.xml (com.google.android.maps.v2.API_KEY). Shared across YouTube, Calendar, and Maps APIs. Extractable by any user. May be abused for quota theft or data scraping."
+    },
+    {
+      "type": "Firebase App ID",
+      "value": "1:266648684703:android:ed0bdc073d7e8fc767faaa",
+      "risk": "low",
+      "notes": "Standard Firebase App ID embedded in resources.arsc. Discloses GCP project number 266648684703."
+    },
+    {
+      "type": "Firebase Storage Bucket",
+      "value": "ocvapps6-376415.firebasestorage.app",
+      "risk": "low",
+      "notes": "Storage bucket name disclosed in resources.arsc. Could be probed for misconfigured public access rules."
+    },
+    {
+      "type": "AWS Cognito Identity Pool ID",
+      "value": "us-east-1:2793e471-e8b3-4dba-8270-d1a4192c0d17",
+      "risk": "high",
+      "notes": "Hardcoded Cognito Identity Pool ID in DEX bytecode. An attacker can use this to obtain temporary AWS credentials via GetId/GetCredentialsForIdentity if the pool allows unauthenticated access, potentially accessing Pinpoint, IoT, or other AWS services."
+    },
+    {
+      "type": "Bugsnag API Key",
+      "value": "05b547fae8f4d6d779dfade1003ebd88",
+      "risk": "low",
+      "notes": "Bugsnag project API key in AndroidManifest.xml meta-data. Could be used to send fake crash reports to the project."
+    },
+    {
+      "type": "AWS API Gateway Endpoint",
+      "value": "https://oc1rhn99vi.execute-api.us-east-1.amazonaws.com/beta",
+      "risk": "medium",
+      "notes": "Exposed AWS API Gateway beta endpoint. Discloses internal API infrastructure. 'beta' stage suggests development/testing endpoint that may have weaker access controls."
+    },
+    {
+      "type": "GCM Sender ID / GCP Project Number",
+      "value": "266648684703",
+      "risk": "low",
+      "notes": "Firebase/GCM sender ID in resources.arsc. Required for push notifications but discloses GCP project number."
+    }
+  ],
+  "summary": {
+    "total_trackers_found": 19,
+    "data_broker_sdks": 0,
+    "critical_risk_items": 1,
+    "high_risk_items": 5,
+    "medium_risk_items": 7,
+    "low_risk_items": 5,
+    "critical_permissions": [
+      "ACCESS_FINE_LOCATION"
+    ],
+    "high_risk_permissions": [
+      "ACCESS_COARSE_LOCATION",
+      "READ_PHONE_STATE",
+      "READ_CONTACTS",
+      "CALL_PHONE"
+    ],
+    "overall_risk_rating": "HIGH",
+    "narrative": "com.ocv.a878 is the official Coffee County GA Sheriff's Office community app, built on the OCV (Our Community Voice) white-label platform. It is marketed as a public safety tool, but the app contains a substantial surveillance and analytics infrastructure that goes far beyond what community members would expect.\n\nThe app bundles 18 distinct tracker and analytics components across three independent data pipelines: Google (Firebase Analytics + FCM + AdMob advertising ID), Amazon (Amplify + Pinpoint + Cognito + IoT), and Bugsnag (crash + performance + OTLP tracing). This means user behavior data flows to at least three separate corporate analytics backends simultaneously.\n\nThe most concerning feature is TagAlong, a real-time GPS location sharing system that uploads continuous location coordinates to OCV's servers (api.myocv.com). Combined with the ACCESS_FINE_LOCATION permission, this gives the app the ability to track a user's precise movements and share them with other users in the same session. For a sheriff's office app, this creates an uncomfortable dynamic: community members who install the app to receive public safety alerts are opting into a system that can track their physical movements.\n\nThe app also integrates two criminal justice databases directly: Appriss VINE (victim notification and inmate search, with full booking details, charges, and inmate photos via vine.prod3.myocv.com) and OffenderWatch/iCrimeWatch (sex offender registry with map-based proximity alerts, offender tiers, and photos). While these serve legitimate public safety purposes, they also mean the app is pulling in and displaying sensitive criminal justice data alongside advertising ID collection and analytics tracking.\n\nThe Google Advertising ID (GAID) is actively collected through the play-services-ads-identifier SDK, and AdMob infrastructure is present in the DEX bytecode. This means the app collects a persistent cross-app advertising identifier that can be used to build behavioral profiles, even though this is a government sheriff's office app. The googleadservices.com deep link conversion tracking endpoint confirms the app is instrumented for Google Ads campaign attribution.\n\nHardcoded secrets are a significant concern. A single Google API key (AIzaSyASZbllDc_ielyHaBZw120XkaOoeQ11n2Y) is shared across YouTube, Calendar, and Maps APIs and appears in both the manifest and DEX bytecode. More critically, an AWS Cognito Identity Pool ID (us-east-1:2793e471-e8b3-4dba-8270-d1a4192c0d17) is embedded in the DEX, which could allow an attacker to obtain temporary AWS credentials if the pool permits unauthenticated access. An AWS API Gateway 'beta' endpoint is also exposed.\n\nThe permission set demands READ_PHONE_STATE (which exposes device identifiers like IMEI), READ_CONTACTS (reads the user's address book), and CALL_PHONE (can initiate calls without the dialer). None of these are well-justified for a community safety app.\n\nNo data broker SDKs (Kochava, X-Mode/Outlogic, Comscore) or Palantir/Foundry components were detected. The AssetTracker feature with local SQLite storage of equipment serial numbers and locations is notable but appears to be a general OCV platform capability rather than a surveillance-specific tool.\n\nIn summary: a resident of Coffee County GA who installs this app to get weather alerts and sheriff's office news is unknowingly opting into real-time location tracking, advertising ID collection, triple-pipeline analytics reporting, and an app that has permission to read their contacts and phone state. The app's surveillance capabilities significantly exceed what a reasonable person would expect from a county sheriff's community engagement tool."
+  }
+}

@@ -19,6 +19,7 @@ Read the relevant skill for your task:
 | **entitlements** | Encrypt shards, grant scoped access tokens | `skills/entitlements/SKILL.md` |
 | **studio** | Package and run sub-agent jobs with budget tracking | `skills/studio/SKILL.md` |
 | **network** | Publish/resolve shards over IPFS, private swarm config | `skills/network/SKILL.md` |
+| **audit** | Traced security audit of Android apps — findings + hash-chain + witness | `skills/audit/SKILL.md` |
 
 ## Module Map
 
@@ -31,6 +32,7 @@ spiritwriter/
   llm/         — LLM provider abstraction
   fabric/      — Shards, store, emitter, crypto, entitlements, studio jobs, network resolver
     backends/  — Network backends (IPFS/Kubo)
+  audit/       — Traced Android APK security audits (provenance, registry, verify)
   trace/       — Deprecated shim re-exporting fabric/ (removed in 0.6.0)
   stopwords.py — Centralized stopword list
 ```
