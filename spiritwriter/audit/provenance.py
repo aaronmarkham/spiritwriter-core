@@ -14,26 +14,18 @@ Events:
 
 from __future__ import annotations
 
-import hashlib
 import json
-import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from spiritwriter.audit._util import (
+    dex_string_pattern,
+    extract_dex_strings,
+    sha256_bytes,
+    sha256_file,
+)
 from spiritwriter.fabric.emitter import TraceEmitter, verify_chain
-
-
-def _sha256_file(path: str | Path) -> str:
-    h = hashlib.sha256()
-    with open(path, "rb") as f:
-        for chunk in iter(lambda: f.read(65536), b""):
-            h.update(chunk)
-    return h.hexdigest()
-
-
-def _sha256_bytes(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
 
 
 def _canonical_json_str(obj: Any) -> str:
@@ -53,7 +45,7 @@ def emit_audit_input(
     return emitter.emit(
         "audit_input_registered",
         package_name=package_name,
-        apk_sha256=_sha256_file(apk_path),
+        apk_sha256=sha256_file(apk_path),
         apk_size_bytes=apk_path.stat().st_size,
         download_source=download_source,
     )
@@ -80,7 +72,7 @@ def emit_audit_evidence(
         for path in extraction_dir.glob(pattern):
             if path.is_file():
                 rel = str(path.relative_to(extraction_dir)).replace("\\", "/")
-                file_hashes[rel] = _sha256_file(path)
+                file_hashes[rel] = sha256_file(path)
 
     return emitter.emit(
         "audit_evidence_extracted",
@@ -106,13 +98,11 @@ def emit_audit_strings(
     dex_names: list[str] = []
     for dex in dex_files:
         dex_names.append(dex.name)
-        data = dex.read_bytes()
-        strings = re.findall(rb"[\x20-\x7e]{" + str(min_length).encode() + rb",}", data)
-        all_strings.update(s.decode("ascii", errors="replace") for s in strings)
+        all_strings.update(extract_dex_strings(dex, min_length))
 
     sorted_strings = sorted(all_strings)
     corpus = "\n".join(sorted_strings).encode("utf-8")
-    corpus_sha256 = _sha256_bytes(corpus)
+    corpus_sha256 = sha256_bytes(corpus)
 
     event = emitter.emit(
         "audit_strings_extracted",
@@ -121,7 +111,7 @@ def emit_audit_strings(
         total_strings=len(sorted_strings),
         extraction_params={
             "min_length": min_length,
-            "pattern": f"[\\x20-\\x7e]{{{min_length},}}",
+            "pattern": dex_string_pattern(min_length).decode("ascii"),
         },
     )
     return event, sorted_strings
@@ -154,7 +144,7 @@ def emit_audit_report(
     return emitter.emit(
         "audit_report_generated",
         report_path=str(report_path),
-        report_sha256=_sha256_file(report_path),
+        report_sha256=sha256_file(report_path),
         finding_count=len(report.get("findings", [])),
         permission_count=len(report.get("permissions", [])),
     )
@@ -178,7 +168,8 @@ def generate_witness(
         events = [json.loads(line) for line in f if line.strip()]
 
     chain_intact = verify_chain(events)
-    report = json.load(open(report_path, "r", encoding="utf-8"))
+    with open(report_path, "r", encoding="utf-8") as f:
+        report = json.load(f)
 
     input_evt = next((e for e in events if e["type"] == "audit_input_registered"), None)
     evidence_evt = next((e for e in events if e["type"] == "audit_evidence_extracted"), None)
@@ -230,7 +221,7 @@ def generate_witness(
 
     witness["report"] = {
         "path": str(report_path),
-        "sha256": _sha256_file(report_path),
+        "sha256": sha256_file(report_path),
         "finding_count": len(report.get("findings", [])),
         "permission_count": len(report.get("permissions", [])),
         "hardcoded_secret_count": len(report.get("hardcoded_secrets", [])),
@@ -240,7 +231,7 @@ def generate_witness(
 
     witness["trace_chain"] = {
         "trace_path": str(trace_path),
-        "trace_sha256": _sha256_file(trace_path),
+        "trace_sha256": sha256_file(trace_path),
         "event_count": len(events),
         "first_event_hash": events[0]["hash"] if events else None,
         "last_event_hash": events[-1]["hash"] if events else None,
@@ -254,7 +245,7 @@ def generate_witness(
         }
 
     canonical = _canonical_json_str(witness)
-    witness["witness_sha256"] = _sha256_bytes(canonical.encode("utf-8"))
+    witness["witness_sha256"] = sha256_bytes(canonical.encode("utf-8"))
 
     return witness
 
@@ -310,7 +301,8 @@ def trace_existing_audit(
 
     emit_audit_strings(emitter, extraction_dir)
 
-    report = json.load(open(report_path, "r", encoding="utf-8"))
+    with open(report_path, "r", encoding="utf-8") as f:
+        report = json.load(f)
     for finding in report.get("findings", []):
         evidence_fh = {}
         for ev in finding.get("evidence", []):

@@ -58,18 +58,27 @@ APK workspace lives outside the repo (e.g. `/tmp/audit_workspace/` on
 macOS/Linux, `C:\tmp\audit_workspace\` on Windows). Never commit APKs
 or extraction dirs.
 
+Pull the APK from any source you have rights to analyse — Google Play
+via `gplaydl` or similar, a corporate MDM export, an on-device `adb
+pull`, or a third-party mirror. The exact mechanism is out of scope
+for this skill; what matters is that `apk_path` on disk is the bytes
+you want the witness to attest to.
+
 ```python
-import requests, zipfile
+# Example: adb pull from a device (requires USB debugging authorized)
+# adb shell pm path com.example.app    # → package:/data/app/.../base.apk
+# adb pull /data/app/.../base.apk ./com.example.app.apk
+
+import zipfile
 pkg = "com.example.app"
-r = requests.get(
-    f"https://d.apkpure.net/b/APK/{pkg}?version=latest",
-    headers={"User-Agent": "Mozilla/5.0", "Referer": "https://apkpure.com/"},
-    timeout=120,
-)
-with open(f"{pkg}.apk", "wb") as f:
-    f.write(r.content)
 zipfile.ZipFile(f"{pkg}.apk").extractall(f"{pkg}_extracted/")
 ```
+
+**Third-party mirrors (APKPure, etc.)** are often convenient but their
+terms of service typically restrict automated downloads and sometimes
+redistribution. Check the mirror's ToS and your jurisdiction before
+scripting bulk downloads, and prefer the Play Store, MDM, or on-device
+pulls for anything you intend to publish findings about.
 
 ### Step 2 — Scan with a subagent
 

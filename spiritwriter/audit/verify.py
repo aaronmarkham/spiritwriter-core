@@ -19,19 +19,11 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import re
 import sys
 from pathlib import Path
 
+from spiritwriter.audit._util import extract_dex_strings, sha256_file
 from spiritwriter.fabric.emitter import verify_chain
-
-
-def _sha256_file(path: Path) -> str:
-    h = hashlib.sha256()
-    with open(path, "rb") as f:
-        for chunk in iter(lambda: f.read(65536), b""):
-            h.update(chunk)
-    return h.hexdigest()
 
 
 def verify_l1(audit_dir: Path) -> list[str]:
@@ -60,11 +52,11 @@ def verify_l1(audit_dir: Path) -> list[str]:
         )
     witness["witness_sha256"] = claimed
 
-    report_sha256 = _sha256_file(report_path)
+    report_sha256 = sha256_file(report_path)
     if witness.get("report", {}).get("sha256") != report_sha256:
         issues.append("report.json hash mismatch")
 
-    trace_sha256 = _sha256_file(trace_path)
+    trace_sha256 = sha256_file(trace_path)
     if witness.get("trace_chain", {}).get("trace_sha256") != trace_sha256:
         issues.append("trace.jsonl hash mismatch")
 
@@ -108,7 +100,7 @@ def verify_l3(audit_dir: Path, apk_path: Path, extraction_dir: Path) -> list[str
     witness = json.loads(witness_path.read_text(encoding="utf-8"))
 
     if apk_path.exists():
-        apk_sha256 = _sha256_file(apk_path)
+        apk_sha256 = sha256_file(apk_path)
         expected = witness.get("input", {}).get("apk_sha256")
         if expected and apk_sha256 != expected:
             issues.append(
@@ -123,7 +115,7 @@ def verify_l3(audit_dir: Path, apk_path: Path, extraction_dir: Path) -> list[str
         if not full_path.exists():
             issues.append(f"evidence file missing: {rel_path}")
             continue
-        actual_hash = _sha256_file(full_path)
+        actual_hash = sha256_file(full_path)
         if actual_hash != expected_hash:
             issues.append(f"evidence file hash mismatch: {rel_path}")
 
@@ -145,9 +137,7 @@ def verify_l4(audit_dir: Path, extraction_dir: Path) -> list[str]:
 
     all_strings: set[str] = set()
     for dex in sorted(extraction_dir.glob("classes*.dex")):
-        data = dex.read_bytes()
-        strings = re.findall(rb"[\x20-\x7e]{" + str(min_length).encode() + rb",}", data)
-        all_strings.update(s.decode("ascii", errors="replace") for s in strings)
+        all_strings.update(extract_dex_strings(dex, min_length))
 
     prop_strings: dict[str, set[str]] = {}
     for prop in extraction_dir.glob("*.properties"):

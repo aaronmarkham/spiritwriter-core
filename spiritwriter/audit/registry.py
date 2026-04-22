@@ -93,7 +93,17 @@ def validate_report(
     issues: list[dict[str, Any]] = []
 
     for finding in report.get("findings", []):
-        candidate = {"finding_name": finding["name"]}
+        name = finding.get("name")
+        if not name:
+            issues.append(
+                {
+                    "finding": "",
+                    "issue": "malformed_finding",
+                    "note": "Finding is missing a 'name' field — cannot resolve.",
+                }
+            )
+            continue
+        candidate = {"finding_name": name}
         result = registry.resolve(candidate)
 
         if result.tier == ResolutionTier.T1_EXACT:
@@ -106,7 +116,7 @@ def validate_report(
             if canonical_cat and finding.get("category") != canonical_cat:
                 issues.append(
                     {
-                        "finding": finding["name"],
+                        "finding": name,
                         "issue": "category_mismatch",
                         "expected": canonical_cat,
                         "got": finding.get("category"),
@@ -117,7 +127,7 @@ def validate_report(
             if canonical_risk and finding.get("risk") != canonical_risk:
                 issues.append(
                     {
-                        "finding": finding["name"],
+                        "finding": name,
                         "issue": "risk_mismatch",
                         "expected": canonical_risk,
                         "got": finding.get("risk"),
@@ -131,7 +141,7 @@ def validate_report(
             stored = _parse_fields(entity)
             issues.append(
                 {
-                    "finding": finding["name"],
+                    "finding": name,
                     "issue": "name_drift",
                     "canonical": stored.get("finding_name"),
                     "confidence": result.confidence,
@@ -142,7 +152,7 @@ def validate_report(
         else:
             issues.append(
                 {
-                    "finding": finding["name"],
+                    "finding": name,
                     "issue": "unknown_finding",
                     "note": "Not in canonical registry. Review for addition.",
                 }

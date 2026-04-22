@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
 import zipfile
 from pathlib import Path
 
@@ -270,23 +269,160 @@ REFERENCE_WITNESSES_DIR = (
 )
 
 
-@pytest.mark.parametrize(
-    "relpath",
-    [
-        "NV/Lyon County",
-        "NV/Douglas County",
-        "FL/Monroe County",
-        "FL/Franklin County",
-        "GA/Coffee County",
-        "GA/Floyd County",
-        "GA/Liberty County",
-        "TX/Chambers County",
-    ],
-)
+BUNDLED_WITNESSES = [
+    "NV/Lyon County",
+    "NV/Douglas County",
+    "FL/Monroe County",
+    "FL/Franklin County",
+    "GA/Coffee County",
+    "GA/Floyd County",
+    "GA/Liberty County",
+    "TX/Chambers County",
+]
+
+
+def test_all_bundled_witnesses_present():
+    """Guard against a broken checkout / sparse fetch silently skipping
+    all parametrized witness tests below."""
+    missing = [p for p in BUNDLED_WITNESSES if not (REFERENCE_WITNESSES_DIR / p).exists()]
+    assert not missing, f"bundled witness dirs missing: {missing}"
+
+
+@pytest.mark.parametrize("relpath", BUNDLED_WITNESSES)
 def test_bundled_witness_l1_l2_pass(relpath):
     """Each shipped reference witness must verify L1+L2 cleanly."""
     audit_dir = REFERENCE_WITNESSES_DIR / relpath
-    if not audit_dir.exists():
-        pytest.skip(f"reference witness not present: {relpath}")
     assert verify_l1(audit_dir) == [], f"L1 failed for {relpath}"
     assert verify_l2(audit_dir) == [], f"L2 failed for {relpath}"
+
+
+# ── L3 + L4 verification ────────────────────────────────────────────
+
+def test_verify_l3_passes_on_fresh_bundle(fake_apk, fake_report):
+    """L3 (evidence provenance) passes right after trace generation."""
+    apk, extraction = fake_apk
+    trace_existing_audit(
+        package_name="com.example.app",
+        apk_path=apk,
+        extraction_dir=extraction,
+        report_path=fake_report,
+    )
+    from spiritwriter.audit import verify_l3
+
+    issues = verify_l3(fake_report.parent, apk, extraction)
+    assert issues == []
+
+
+def test_verify_l3_detects_apk_tamper(fake_apk, fake_report):
+    apk, extraction = fake_apk
+    trace_existing_audit(
+        package_name="com.example.app",
+        apk_path=apk,
+        extraction_dir=extraction,
+        report_path=fake_report,
+    )
+    # Rewrite the APK with different bytes after the witness is sealed
+    apk.write_bytes(b"PK\x03\x04different contents")
+
+    from spiritwriter.audit import verify_l3
+
+    issues = verify_l3(fake_report.parent, apk, extraction)
+    assert any("APK hash mismatch" in i for i in issues)
+
+
+def test_verify_l3_detects_extraction_tamper(fake_apk, fake_report):
+    apk, extraction = fake_apk
+    trace_existing_audit(
+        package_name="com.example.app",
+        apk_path=apk,
+        extraction_dir=extraction,
+        report_path=fake_report,
+    )
+    # Mutate a claimed evidence file (classes.dex) after witnessing
+    (extraction / "classes.dex").write_bytes(b"MUTATED DEX")
+
+    from spiritwriter.audit import verify_l3
+
+    issues = verify_l3(fake_report.parent, apk, extraction)
+    assert any("classes.dex" in i for i in issues)
+
+
+def test_verify_l4_passes_on_fresh_bundle(fake_apk, fake_report):
+    """L4 (finding derivability) passes when evidence strings are in DEX."""
+    apk, extraction = fake_apk
+    trace_existing_audit(
+        package_name="com.example.app",
+        apk_path=apk,
+        extraction_dir=extraction,
+        report_path=fake_report,
+    )
+    from spiritwriter.audit import verify_l4
+
+    issues = verify_l4(fake_report.parent, extraction)
+    assert issues == []
+
+
+def test_verify_l4_detects_non_derivable_evidence(fake_apk, tmp_path):
+    """If a report claims an evidence string that isn't actually in the
+    DEX, L4 must flag it."""
+    apk, extraction = fake_apk
+    report_path = tmp_path / "audits" / "MyCity" / "report.json"
+    report_path.parent.mkdir(parents=True)
+    report = {
+        "target": "com.example.app",
+        "platform": "custom",
+        "audit_date": "2026-04-22",
+        "findings": [
+            {
+                "name": "Firebase Analytics (Google Analytics for Firebase)",
+                "category": "analytics",
+                "risk": "medium",
+                "evidence": [
+                    {
+                        "file": "classes.dex",
+                        "match": "this_string_is_definitely_not_in_the_dex_9f8a7b6c5d4e",
+                    }
+                ],
+            }
+        ],
+        "permissions": [],
+        "hardcoded_secrets": [],
+        "summary": {},
+    }
+    report_path.write_text(json.dumps(report, indent=2))
+
+    trace_existing_audit(
+        package_name="com.example.app",
+        apk_path=apk,
+        extraction_dir=extraction,
+        report_path=report_path,
+    )
+    from spiritwriter.audit import verify_l4
+
+    issues = verify_l4(report_path.parent, extraction)
+    assert any("not derivable" in i for i in issues)
+
+
+def test_verify_auto_runs_l3_l4_when_apk_provided(fake_apk, fake_report):
+    """The top-level verify() should auto-enable L3+L4 when apk/extraction
+    are supplied."""
+    apk, extraction = fake_apk
+    trace_existing_audit(
+        package_name="com.example.app",
+        apk_path=apk,
+        extraction_dir=extraction,
+        report_path=fake_report,
+    )
+    results = verify(fake_report.parent, apk, extraction)
+    assert set(results.keys()) == {"L1", "L2", "L3", "L4"}
+    assert all(v == [] for v in results.values())
+
+
+# ── Robustness ──────────────────────────────────────────────────────
+
+def test_validate_report_handles_missing_name(seeded_registry):
+    """A malformed finding (no 'name') should be flagged, not crash."""
+    report = {"findings": [{"category": "analytics", "risk": "low"}]}
+    issues = validate_report(report, seeded_registry)
+    assert len(issues) == 1
+    assert issues[0]["issue"] == "malformed_finding"
