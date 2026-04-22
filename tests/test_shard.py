@@ -721,6 +721,67 @@ class TestListRefs:
         assert refs == ["job:pipe:checkpoint", "job:pipe:current"]
 
 
+class TestRefNameEncoding:
+    """Refs containing Windows-illegal chars round-trip via on-disk encoding."""
+
+    def test_roundtrip_colon(self, tmp_path):
+        store = ShardStore(tmp_path / "store")
+        store.set_ref("job:pipe:current", "abc")
+        assert store.get_ref("job:pipe:current") == "abc"
+        assert store.list_refs() == ["job:pipe:current"]
+        assert store.delete_ref("job:pipe:current") is True
+
+    def test_roundtrip_all_illegal_chars(self, tmp_path):
+        store = ShardStore(tmp_path / "store")
+        # Windows forbids < > : " / \ | ? *
+        tricky = 'weird<>:"/\\|?*name'
+        store.set_ref(tricky, "xyz")
+        assert store.get_ref(tricky) == "xyz"
+        assert store.list_refs() == [tricky]
+
+    def test_percent_sign_is_escaped(self, tmp_path):
+        """A literal `%` in a ref name must roundtrip (not be read as encoding)."""
+        store = ShardStore(tmp_path / "store")
+        store.set_ref("already%3Aencoded", "one")
+        store.set_ref("already:encoded", "two")
+        assert store.get_ref("already%3Aencoded") == "one"
+        assert store.get_ref("already:encoded") == "two"
+        assert sorted(store.list_refs()) == ["already%3Aencoded", "already:encoded"]
+
+    def test_safe_names_stored_unencoded(self, tmp_path):
+        """Portable names must not be rewritten on disk (backward compat)."""
+        store = ShardStore(tmp_path / "store")
+        store.set_ref("project-csp", "abc")
+        store.set_ref("snake_case.v2", "def")
+        on_disk = sorted(p.name for p in (tmp_path / "store" / "refs").glob("*.ref"))
+        assert on_disk == ["project-csp.ref", "snake_case.v2.ref"]
+
+    def test_roundtrip_windows_reserved_device_names(self, tmp_path):
+        """CON, PRN, COM1, ... are illegal on Windows even with an extension."""
+        store = ShardStore(tmp_path / "store")
+        for name in ["CON", "con", "PRN", "COM1", "lpt9", "AUX.log"]:
+            store.set_ref(name, f"val-{name}")
+            assert store.get_ref(name) == f"val-{name}", f"roundtrip failed for {name!r}"
+        listed = store.list_refs()
+        assert "CON" in listed and "PRN" in listed and "COM1" in listed
+        # The on-disk filename must not start with the reserved token.
+        on_disk = sorted(p.name for p in (tmp_path / "store" / "refs").glob("*.ref"))
+        for fname in on_disk:
+            head = fname.split(".", 1)[0].upper()
+            assert head not in {"CON", "PRN", "AUX", "NUL", "COM1", "LPT9"}, (
+                f"on-disk {fname!r} still uses reserved device name"
+            )
+
+    def test_roundtrip_trailing_dot_and_space(self, tmp_path):
+        """Windows silently strips trailing dots / spaces at the FS layer."""
+        store = ShardStore(tmp_path / "store")
+        store.set_ref("trailing-dot.", "a")
+        store.set_ref("trailing-space ", "b")
+        assert store.get_ref("trailing-dot.") == "a"
+        assert store.get_ref("trailing-space ") == "b"
+        assert sorted(store.list_refs()) == ["trailing-dot.", "trailing-space "]
+
+
 class TestMoveScope:
     def test_move_creates_new_shard(self, tmp_path):
         store = ShardStore(tmp_path / "store")

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 from typing import Iterator
 
@@ -26,6 +27,54 @@ from spiritwriter.fabric.entitlement import (
     is_expired, get_shard_key, Capability,
 )
 from spiritwriter.fabric.network import NetworkResolver
+
+
+# Chars disallowed in Windows filenames (NTFS/FAT), plus control chars and
+# `%` itself (so encoded names round-trip unambiguously). Names using only
+# portable characters are stored as-is — existing refs on Linux/macOS keep
+# their old on-disk form. Only problematic names get percent-encoded.
+_ILLEGAL_REF_CHARS_RE = re.compile(r'[<>:"/\\|?*\x00-\x1f%]')
+_PCT_DECODE_RE = re.compile(r'%([0-9A-Fa-f]{2})')
+
+# Reserved Windows device names — illegal as filenames regardless of
+# extension (CON.ref, com1.anything, etc.). Matched case-insensitively
+# against the part before the first dot.
+_WINDOWS_RESERVED = frozenset({
+    "CON", "PRN", "AUX", "NUL",
+    *(f"COM{i}" for i in range(1, 10)),
+    *(f"LPT{i}" for i in range(1, 10)),
+})
+
+
+def _encode_ref_name(name: str) -> str:
+    """Encode a ref name for safe use as a filename on all platforms.
+
+    Handles three Windows-specific constraints:
+      - illegal characters (`<>:"/\\|?*`, control chars) → percent-encoded.
+      - reserved device names (`CON`, `PRN`, `COM1`, ...) → first char of
+        the stem is percent-encoded so the resulting filename no longer
+        matches the reservation.
+      - trailing `.` or space → the offending char is percent-encoded so
+        Windows doesn't silently strip it at the filesystem layer.
+    `%` is in the illegal set so every encoding roundtrips unambiguously.
+    """
+    encoded = _ILLEGAL_REF_CHARS_RE.sub(
+        lambda m: f"%{ord(m.group(0)):02X}", name
+    )
+    if encoded:
+        stem = encoded.split(".", 1)[0]
+        if stem.upper() in _WINDOWS_RESERVED:
+            encoded = f"%{ord(encoded[0]):02X}{encoded[1:]}"
+        if encoded[-1] in ". ":
+            encoded = f"{encoded[:-1]}%{ord(encoded[-1]):02X}"
+    return encoded
+
+
+def _decode_ref_name(encoded: str) -> str:
+    """Reverse of _encode_ref_name — recover the original ref name."""
+    return _PCT_DECODE_RE.sub(
+        lambda m: chr(int(m.group(1), 16)), encoded
+    )
 
 
 class ShardStore:
@@ -187,18 +236,21 @@ class ShardStore:
 
     # === Named Refs (like git branches) ===
 
+    def _ref_path(self, name: str) -> Path:
+        """Build the on-disk path for a ref, encoding unsafe chars."""
+        return self.refs_dir / f"{_encode_ref_name(name)}.ref"
+
     def set_ref(self, name: str, shard_id: str) -> None:
         """Set a named reference pointing to a shard.
 
         Use for "latest project context" pointers that update
         as new shards supersede old ones.
         """
-        ref_path = self.refs_dir / f"{name}.ref"
-        ref_path.write_text(shard_id, encoding="utf-8")
+        self._ref_path(name).write_text(shard_id, encoding="utf-8")
 
     def get_ref(self, name: str) -> str | None:
         """Resolve a named reference to a shard_id."""
-        ref_path = self.refs_dir / f"{name}.ref"
+        ref_path = self._ref_path(name)
         if ref_path.exists():
             return ref_path.read_text(encoding="utf-8").strip()
         return None
@@ -212,15 +264,22 @@ class ShardStore:
 
     def delete_ref(self, name: str) -> bool:
         """Remove a named ref. Returns True if it existed."""
-        ref_path = self.refs_dir / f"{name}.ref"
+        ref_path = self._ref_path(name)
         if ref_path.exists():
             ref_path.unlink()
             return True
         return False
 
     def list_refs(self, prefix: str = "") -> list[str]:
-        """List all named refs, optionally filtered by prefix."""
-        refs = [p.stem for p in self.refs_dir.glob("*.ref")]
+        """List all named refs, optionally filtered by prefix.
+
+        Ref filenames are percent-decoded on the way out. Note: a pre-existing
+        ref on Linux/macOS whose raw filename happens to contain a `%HH`
+        sequence (e.g. ``already%3Aencoded.ref``) will now be decoded when
+        listed. Such names are vanishingly rare in practice; when produced by
+        this API post-fix, literal `%` is always escaped so roundtrip is safe.
+        """
+        refs = [_decode_ref_name(p.stem) for p in self.refs_dir.glob("*.ref")]
         if prefix:
             refs = [r for r in refs if r.startswith(prefix)]
         return sorted(refs)
