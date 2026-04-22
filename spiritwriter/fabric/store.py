@@ -210,6 +210,23 @@ class ShardStore:
                 shards.append(shard)
         return shards
 
+    def by_entity(self, entity_key: str) -> list[MemoryShard]:
+        """Get all shards (any scope) with at least one atom for this entity.
+
+        Lets multiple producers each contribute atoms about the same entity
+        (e.g. ``article:{sha256(url)}``) without duplicating each other's
+        content; consumers merge atoms across the returned shards at the
+        entity level.
+
+        Scans all plaintext shards in the store. Encrypted/sealed shards
+        are skipped — entity is a property of atom content, which is
+        unavailable without decryption.
+        """
+        return [
+            shard for shard in self.iter_all()
+            if any(atom.entity == entity_key for atom in shard.atoms)
+        ]
+
     def list_scopes(self) -> list[str]:
         """List all scopes that have shards."""
         return list(self._load_index().keys())

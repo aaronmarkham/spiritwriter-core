@@ -388,6 +388,55 @@ class TestShardStore:
         scopes = store.list_scopes()
         assert set(scopes) == {"project:csp", "user:prefs"}
 
+    def test_by_entity_across_scopes(self, store):
+        entity = "article:abc123"
+        bias_shard = MemoryShard(
+            atoms=[ShardAtom(text="left-leaning", kind=AtomKind.FACT,
+                             entity=entity, key="bias", value="left")],
+            scope="service:perseus",
+            origin="agent:perseus",
+        )
+        rights_shard = MemoryShard(
+            atoms=[ShardAtom(text="published in TX", kind=AtomKind.FACT,
+                             entity=entity, key="jurisdiction", value="TX")],
+            scope="service:frio",
+            origin="agent:frio",
+        )
+        unrelated = MemoryShard(
+            atoms=[ShardAtom(text="other", kind=AtomKind.FACT,
+                             entity="article:zzz", key="bias", value="right")],
+            scope="service:perseus",
+            origin="agent:perseus",
+        )
+        store.put(bias_shard)
+        store.put(rights_shard)
+        store.put(unrelated)
+
+        shards = store.by_entity(entity)
+        assert len(shards) == 2
+        assert {s.shard_id for s in shards} == {bias_shard.shard_id, rights_shard.shard_id}
+
+    def test_by_entity_matches_any_atom(self, store):
+        entity = "user:alice"
+        multi = MemoryShard(
+            atoms=[
+                ShardAtom(text="unrelated", kind=AtomKind.FACT, entity="user:bob"),
+                ShardAtom(text="alice's role", kind=AtomKind.FACT,
+                          entity=entity, key="role", value="admin"),
+            ],
+            scope="project:test",
+            origin="agent:test",
+        )
+        store.put(multi)
+
+        shards = store.by_entity(entity)
+        assert len(shards) == 1
+        assert shards[0].shard_id == multi.shard_id
+
+    def test_by_entity_no_match(self, store):
+        store.put(self._make_shard("unrelated", "project:test"))
+        assert store.by_entity("article:missing") == []
+
     def test_named_refs(self, store):
         shard = self._make_shard()
         store.put(shard)
