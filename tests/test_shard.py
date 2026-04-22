@@ -437,6 +437,31 @@ class TestShardStore:
         store.put(self._make_shard("unrelated", "project:test"))
         assert store.by_entity("article:missing") == []
 
+    def test_by_entity_skips_encrypted_shards(self, store):
+        """Encrypted shards must not surface via entity scan — their
+        atom contents are unreadable without the key."""
+        from spiritwriter.fabric.crypto import generate_job_key
+
+        entity = "article:secret"
+        plaintext = MemoryShard(
+            atoms=[ShardAtom(text="public atom", kind=AtomKind.FACT,
+                             entity=entity, key="k", value="v")],
+            scope="service:public",
+            origin="agent:a",
+        )
+        encrypted_source = MemoryShard(
+            atoms=[ShardAtom(text="private atom", kind=AtomKind.FACT,
+                             entity=entity, key="k2", value="v2")],
+            scope="service:private",
+            origin="agent:b",
+        )
+        store.put(plaintext)
+        store.encrypt_and_store(encrypted_source, generate_job_key())
+
+        shards = store.by_entity(entity)
+        assert len(shards) == 1
+        assert shards[0].shard_id == plaintext.shard_id
+
     def test_named_refs(self, store):
         shard = self._make_shard()
         store.put(shard)
