@@ -41,6 +41,8 @@ from spiritwriter.fabric.canonicalize import (
     CanonicalRegistry,
     canonicalize_batch,
     normalize_name,
+    normalize_date,
+    age_to_bucket,
     fuzzy_score,
 )
 
@@ -89,6 +91,8 @@ __all__ = [
     "CanonicalRegistry",
     "canonicalize_batch",
     "normalize_name",
+    "normalize_date",
+    "age_to_bucket",
     "fuzzy_score",
     "verify_chain",
     "render_trace",
