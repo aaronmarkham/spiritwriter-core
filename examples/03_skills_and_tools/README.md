@@ -22,32 +22,83 @@ recorded in the trace chain with input/output hashes.
 python examples/03_skills_and_tools/run.py
 ```
 
-## What to look at
+## Example output
 
-1. **`traces/agent.jsonl`** — the single trace chain. Walk through it
-   and notice the pattern:
-   ```
-   skill_invoked (search_flights)
-     tool_called (flight_search_api)
-     tool_result (flight_search_api)
-   skill_invoked (check_weather)
-     tool_called (weather_api)
-     tool_result (weather_api)
-   skill_invoked (search_hotels)
-     tool_called (hotel_search_api)
-     tool_result (hotel_search_api)
-   skill_invoked (draft_itinerary)
-   skill_result (draft_itinerary)
-   ```
+### Event sequence (`traces/agent.jsonl`)
 
-2. **Input/output hashes** — each event includes a hash of its inputs
-   or outputs. If you re-run the demo, the hashes are identical (same
-   canned data). In production, these let you verify that the agent
-   consumed the data it claims.
+The trace captures every skill invocation and tool call with input/output
+hashes. Re-run the demo and the hashes are identical (deterministic canned
+data). In production, these let you verify what the agent consumed.
 
-3. **No tool calls for `draft_itinerary`** — it's a pure synthesis step.
-   The trace makes this distinction visible: skills that call external
-   tools vs. skills that just reason over existing data.
+```
+shard_created
+SKILL  search_flights   (input: 893fc469...)
+  TOOL flight_search_api  (args: 893fc469...)
+  TOOL flight_search_api -> (output: d8668f3a...)
+SKILL  check_weather    (input: 2086e1d9...)
+  TOOL weather_api        (args: 2086e1d9...)
+  TOOL weather_api      -> (output: bf3adaed...)
+SKILL  search_hotels    (input: e5e9f48d...)
+  TOOL hotel_search_api   (args: e5e9f48d...)
+  TOOL hotel_search_api -> (output: 389988d0...)
+SKILL  draft_itinerary  (input: e1c1692b...)
+SKILL  draft_itinerary -> (output: 23aa8042...)
+shard_created
+```
+
+Notice `draft_itinerary` has no `tool_called`/`tool_result` — it's a pure
+synthesis step. The trace makes this distinction visible: skills that call
+external tools vs. skills that reason over existing data.
+
+### Sample result
+
+```
+Weekend Trip to Portland, OR
+===================================
+
+Flight: Alaska SFO 17:00 -> PDX 19:05 ($129)
+Hotel: Jupiter Hotel ($142/night, 4.1 stars)
+
+Weather:
+  Saturday: Partly cloudy, 68F/52F
+  Sunday: Sunny, 72F/54F
+
+Estimated total: $413
+```
+
+### Workflow diagram
+
+```mermaid
+graph TD
+    classDef ok fill:#2d6a4f,stroke:#1b4332,color:#fff
+    classDef shard fill:#023e8a,stroke:#03045e,color:#fff
+
+    N0["shard_created"]:::ok
+    N1["skill_invoked<br/>search_flights"]:::ok
+    N0 --> N1
+    N2["tool_called<br/>flight_search_api"]:::shard
+    N1 --> N2
+    N3["tool_result"]:::shard
+    N2 --> N3
+    N4["skill_invoked<br/>check_weather"]:::ok
+    N3 --> N4
+    N5["tool_called<br/>weather_api"]:::shard
+    N4 --> N5
+    N6["tool_result"]:::shard
+    N5 --> N6
+    N7["skill_invoked<br/>search_hotels"]:::ok
+    N6 --> N7
+    N8["tool_called<br/>hotel_search_api"]:::shard
+    N7 --> N8
+    N9["tool_result"]:::shard
+    N8 --> N9
+    N10["skill_invoked<br/>draft_itinerary"]:::ok
+    N9 --> N10
+    N11["skill_result<br/>draft_itinerary"]:::ok
+    N10 --> N11
+    N12["shard_created"]:::ok
+    N11 --> N12
+```
 
 ## Takeaway
 

@@ -27,7 +27,7 @@ import tempfile
 from pathlib import Path
 
 from spiritwriter.fabric.shard import (
-    MemoryShard, ShardAtom, AtomKind, DecayClass, _canonical_json, _sha256,
+    MemoryShard, ShardAtom, AtomKind, DecayClass,
 )
 from spiritwriter.fabric.store import ShardStore
 from spiritwriter.fabric.emitter import TraceEmitter, verify_chain
@@ -63,14 +63,10 @@ HOTEL_DATA = {
 }
 
 
-def _input_hash(data) -> str:
-    """Hash function inputs for trace reproducibility."""
-    return _sha256(_canonical_json(data))
-
-
-def _output_hash(data) -> str:
-    """Hash function outputs for trace integrity."""
-    return _sha256(_canonical_json(data))
+def _data_hash(data) -> str:
+    """SHA-256 hash of canonical JSON — used for trace input/output hashes."""
+    raw = json.dumps(data, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(raw).hexdigest()
 
 
 # ── Tool stubs (simulate HTTP calls) ────────────────────────────────
@@ -95,13 +91,13 @@ def tool_hotel_search(location: str, checkin: str, checkout: str) -> dict:
 def skill_search_flights(tracer: TraceEmitter, origin: str, dest: str, date: str) -> dict:
     """Skill: search for flights. Calls the flight search tool."""
     skill_input = {"origin": origin, "dest": dest, "date": date}
-    tracer.emit("skill_invoked", skill_name="search_flights", input_hash=_input_hash(skill_input))
+    tracer.emit("skill_invoked", skill_name="search_flights", input_hash=_data_hash(skill_input))
 
     # Call the underlying tool
     tool_args = {"origin": origin, "dest": dest, "date": date}
-    tracer.emit("tool_called", tool_name="flight_search_api", argument_hash=_input_hash(tool_args))
+    tracer.emit("tool_called", tool_name="flight_search_api", argument_hash=_data_hash(tool_args))
     result = tool_flight_search(origin, dest, date)
-    tracer.emit("tool_result", tool_name="flight_search_api", output_hash=_output_hash(result))
+    tracer.emit("tool_result", tool_name="flight_search_api", output_hash=_data_hash(result))
 
     return result
 
@@ -109,12 +105,12 @@ def skill_search_flights(tracer: TraceEmitter, origin: str, dest: str, date: str
 def skill_check_weather(tracer: TraceEmitter, location: str, days: int) -> dict:
     """Skill: check weather forecast. Calls the weather API tool."""
     skill_input = {"location": location, "days": days}
-    tracer.emit("skill_invoked", skill_name="check_weather", input_hash=_input_hash(skill_input))
+    tracer.emit("skill_invoked", skill_name="check_weather", input_hash=_data_hash(skill_input))
 
     tool_args = {"location": location, "days": days}
-    tracer.emit("tool_called", tool_name="weather_api", argument_hash=_input_hash(tool_args))
+    tracer.emit("tool_called", tool_name="weather_api", argument_hash=_data_hash(tool_args))
     result = tool_weather_api(location, days)
-    tracer.emit("tool_result", tool_name="weather_api", output_hash=_output_hash(result))
+    tracer.emit("tool_result", tool_name="weather_api", output_hash=_data_hash(result))
 
     return result
 
@@ -122,12 +118,12 @@ def skill_check_weather(tracer: TraceEmitter, location: str, days: int) -> dict:
 def skill_search_hotels(tracer: TraceEmitter, location: str, checkin: str, checkout: str) -> dict:
     """Skill: search for hotels. Calls the hotel search tool."""
     skill_input = {"location": location, "checkin": checkin, "checkout": checkout}
-    tracer.emit("skill_invoked", skill_name="search_hotels", input_hash=_input_hash(skill_input))
+    tracer.emit("skill_invoked", skill_name="search_hotels", input_hash=_data_hash(skill_input))
 
     tool_args = {"location": location, "checkin": checkin, "checkout": checkout}
-    tracer.emit("tool_called", tool_name="hotel_search_api", argument_hash=_input_hash(tool_args))
+    tracer.emit("tool_called", tool_name="hotel_search_api", argument_hash=_data_hash(tool_args))
     result = tool_hotel_search(location, checkin, checkout)
-    tracer.emit("tool_result", tool_name="hotel_search_api", output_hash=_output_hash(result))
+    tracer.emit("tool_result", tool_name="hotel_search_api", output_hash=_data_hash(result))
 
     return result
 
@@ -146,7 +142,7 @@ def skill_draft_itinerary(
         "hotel_count": len(hotels.get("hotels", [])),
         "preferences": preferences,
     }
-    tracer.emit("skill_invoked", skill_name="draft_itinerary", input_hash=_input_hash(skill_input))
+    tracer.emit("skill_invoked", skill_name="draft_itinerary", input_hash=_data_hash(skill_input))
 
     # "Synthesize" the itinerary (mock — no LLM)
     best_flight = min(flights["flights"], key=lambda f: f["price"])
@@ -165,14 +161,15 @@ def skill_draft_itinerary(
         itinerary += f"  {day['day']}: {day['condition']}, {day['high']}F/{day['low']}F\n"
     itinerary += f"\nEstimated total: ${best_flight['price'] + best_hotel['rate'] * 2}"
 
-    tracer.emit("skill_result", skill_name="draft_itinerary", output_hash=_output_hash(itinerary))
+    tracer.emit("skill_result", skill_name="draft_itinerary", output_hash=_data_hash(itinerary))
     return itinerary
 
 
 # ── Main ────────────────────────────────────────────────────────────
 
-def main() -> int:
-    output_dir = Path(__file__).parent / "traces"
+def main(output_dir: Path | None = None) -> int:
+    if output_dir is None:
+        output_dir = Path(__file__).parent / "traces"
     output_dir.mkdir(parents=True, exist_ok=True)
 
     with tempfile.TemporaryDirectory() as td:

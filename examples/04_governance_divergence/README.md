@@ -23,29 +23,38 @@ every violation and the parent catches the divergence.
 python examples/04_governance_divergence/run.py
 ```
 
-## What to look at
+## Example output
 
 ### Side-by-side: Run A vs Run B
 
 **Run A** (well-behaved):
 ```
-capability_checked: web:search [allowed]
-capability_checked: shard:read [allowed]
-budget_spent: $0.05 (web_search)
-budget_spent: $0.03 (summarize)
-studio_job_completed: spent $0.08
+[Y] capability_checked: shard:read
+    shard_decrypted (content)
+    shard_decrypted (task)
+    studio_job_started
+[Y] capability_checked: web:search
+[Y] capability_checked: shard:read
+[$] budget_spent: $0.05 (web_search)
+[$] budget_spent: $0.03 (summarize)
+    shard_created
+[+] studio_job_completed: spent $0.08
 ```
 
 **Run B** (off the rails):
 ```
-capability_checked: upload:youtube [DENIED]
-capability_denied: upload:youtube
-capability_checked: exec:run [DENIED]
-capability_denied: exec:run
-budget_spent: $0.05 (web_search)
-budget_spent: $0.10 (analyze_document)
-budget_exceeded: tried $0.50, already spent $0.15, budget $0.25
-studio_job_failed: Budget exceeded
+[Y] capability_checked: shard:read
+    shard_decrypted (content)
+    shard_decrypted (task)
+    studio_job_started
+[N] capability_checked: upload:youtube
+[!] capability_denied: upload:youtube
+[N] capability_checked: exec:run
+[!] capability_denied: exec:run
+[$] budget_spent: $0.05 (web_search)
+[$] budget_spent: $0.10 (analyze_document)
+[!] budget_exceeded: tried $0.50, already spent $0.15, budget $0.25
+[X] studio_job_failed: Budget exceeded
 ```
 
 ### Key governance events in Run B
@@ -63,9 +72,77 @@ studio_job_failed: Budget exceeded
 
 ### Parent response
 
-The parent reads Run B's trace, finds 3 governance violations
-(`capability_denied` x2, `budget_exceeded`), emits `subagent_failed`,
-and falls back to Run A's result. All of this is in the parent's trace.
+The parent reads Run B's trace, finds governance violations, emits
+`subagent_failed`, and falls back to Run A's result:
+
+```
+[+] subagent_completed: worker-a (accepted)
+[!] subagent_failed: 4 violations (capability_denied, capability_denied, budget_exceeded, studio_job_failed)
+[>] fallback_applied: Run B governance violations detected, using run-a
+```
+
+### Run A workflow (well-behaved)
+
+```mermaid
+graph TD
+    classDef ok fill:#2d6a4f,stroke:#1b4332,color:#fff
+    classDef shard fill:#023e8a,stroke:#03045e,color:#fff
+    classDef spend fill:#e85d04,stroke:#dc2f02,color:#fff
+
+    N0["Cap Check: shard:read<br/>allowed"]:::ok
+    N1["Decrypt: content"]:::shard
+    N0 --> N1
+    N2["Decrypt: task"]:::shard
+    N1 --> N2
+    N3["Job Started"]:::ok
+    N2 --> N3
+    N4["Cap Check: web:search<br/>allowed"]:::ok
+    N3 --> N4
+    N5["Cap Check: shard:read<br/>allowed"]:::ok
+    N4 --> N5
+    N6["web_search<br/>$0.05"]:::spend
+    N5 --> N6
+    N7["summarize<br/>$0.03"]:::spend
+    N6 --> N7
+    N8["shard_created"]:::ok
+    N7 --> N8
+    N9["Job Complete<br/>spent: $0.08"]:::ok
+    N8 --> N9
+```
+
+### Run B workflow (off the rails)
+
+```mermaid
+graph TD
+    classDef ok fill:#2d6a4f,stroke:#1b4332,color:#fff
+    classDef fail fill:#9d0208,stroke:#6a040f,color:#fff
+    classDef shard fill:#023e8a,stroke:#03045e,color:#fff
+    classDef spend fill:#e85d04,stroke:#dc2f02,color:#fff
+
+    N0["Cap Check: shard:read<br/>allowed"]:::ok
+    N1["Decrypt: content"]:::shard
+    N0 --> N1
+    N2["Decrypt: task"]:::shard
+    N1 --> N2
+    N3["Job Started"]:::ok
+    N2 --> N3
+    N4["Cap Check: upload:youtube<br/>DENIED"]:::fail
+    N3 --> N4
+    N5["capability_denied"]:::fail
+    N4 --> N5
+    N6["Cap Check: exec:run<br/>DENIED"]:::fail
+    N5 --> N6
+    N7["capability_denied"]:::fail
+    N6 --> N7
+    N8["web_search<br/>$0.05"]:::spend
+    N7 --> N8
+    N9["analyze_document<br/>$0.10"]:::spend
+    N8 --> N9
+    N10["budget_exceeded"]:::fail
+    N9 --> N10
+    N11["Job Failed<br/>Budget exceeded<br/>spent: $0.15"]:::fail
+    N10 --> N11
+```
 
 ## Takeaway
 

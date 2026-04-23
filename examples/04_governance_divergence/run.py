@@ -159,8 +159,9 @@ def run_b_bad_agent(task_text: str, store: ShardStore, trace_path: str) -> Memor
 
 # ── Main: parent runs both and compares ─────────────────────────────
 
-def main() -> int:
-    output_dir = Path(__file__).parent / "traces"
+def main(output_dir: Path | None = None) -> int:
+    if output_dir is None:
+        output_dir = Path(__file__).parent / "traces"
     output_dir.mkdir(parents=True, exist_ok=True)
 
     with tempfile.TemporaryDirectory() as td:

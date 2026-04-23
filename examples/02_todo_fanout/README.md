@@ -22,23 +22,65 @@ single assembly shard with lineage back to each source.
 python examples/02_todo_fanout/run.py
 ```
 
-## What to look at
+## Example output
 
-1. **`traces/parent.jsonl`** — notice the repeating pattern:
-   `entitlement_granted` -> `studio_job_packaged` -> `spawn_with_shards` ->
-   `subagent_completed`, four times. Then a final `shard_created` for the
-   assembly.
+### Parent trace pattern (`traces/parent.jsonl`)
 
-2. **`traces/child_*.jsonl`** — four independent trace chains. Each starts
-   with capability checks and shard decryption, does its work, and ends
-   with `studio_job_completed`.
+The parent repeats this pattern four times (once per subagent), then
+creates the assembly shard:
 
-3. **Lineage** in the output — the assembly shard's atoms each have a
-   `source_ref` pointing at the result shard that produced them. You can
-   walk the chain: assembly atom -> result shard -> todo atom content hash.
+```
+shard_created          ← todo-list shard
+  entitlement_granted  ← grant to worker-summarize_section_a ($0.25)
+  studio_job_packaged  ← content + task shards
+  spawn_with_shards    ← dispatch subagent
+  subagent_completed   ← result received
+  entitlement_granted  ← grant to worker-summarize_section_b ($0.25)
+  ...                  ← repeat for all 4 workers
+shard_created          ← assembly shard (4 atoms)
+```
 
-4. **`input.md`** — the bundled document the subagents "process". In a
-   real system this would be a research paper, codebase, or dataset.
+### Lineage
+
+The assembly shard's atoms each carry a `source_ref` pointing at the
+result shard that produced them — you can walk the full chain:
+
+```
+assembly atom "result.summarize_section_a" -> source: 65117c83...
+assembly atom "result.summarize_section_b" -> source: 2fbe44b9...
+assembly atom "result.extract_entities_c"  -> source: 05bc9e26...
+assembly atom "result.extract_entities_d"  -> source: ce5b273a...
+```
+
+### Workflow diagram
+
+```mermaid
+graph TD
+    classDef ok fill:#2d6a4f,stroke:#1b4332,color:#fff
+    classDef entitle fill:#7b2cbf,stroke:#5a189a,color:#fff
+    classDef shard fill:#023e8a,stroke:#03045e,color:#fff
+
+    N0["shard_created<br/>todo-list (4 items)"]:::ok
+    N1["Entitlement Granted<br/>to: worker-summarize_section_a<br/>budget: $0.25"]:::entitle
+    N0 --> N1
+    N2["Job Packaged"]:::shard
+    N1 --> N2
+    N3["spawn_with_shards"]:::ok
+    N2 --> N3
+    N4["subagent_completed"]:::ok
+    N3 --> N4
+    N5["Entitlement Granted<br/>to: worker-summarize_section_b<br/>budget: $0.25"]:::entitle
+    N4 --> N5
+    N6["...repeat x2 more..."]:::ok
+    N5 --> N6
+    N7["shard_created<br/>assembly (4 atoms)"]:::ok
+    N6 --> N7
+```
+
+### Input document
+
+**`input.md`** contains the bundled document the subagents "process". In a
+real system this would be a research paper, codebase, or dataset.
 
 ## Takeaway
 

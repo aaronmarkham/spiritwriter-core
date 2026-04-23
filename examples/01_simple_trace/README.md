@@ -23,20 +23,57 @@ a result shard, and the parent records completion.
 python examples/01_simple_trace/run.py
 ```
 
-## What to look at
+## Example output
 
-1. **`traces/parent.jsonl`** — open it. Each line is a JSON event. Notice
-   `prev_event_hash` linking each event to the prior one. The `hash` field
-   is a SHA-256 of the event content — change one byte and `verify_chain`
-   fails.
+### Parent trace (`traces/parent.jsonl`)
 
-2. **`traces/child.jsonl`** — the subagent's independent chain. It starts
-   with `capability_checked` (was it allowed to read the shards?), then
-   `shard_decrypted` (it unlocked them with the entitlement key), then
-   `budget_spent` and `studio_job_completed`.
+Each line is a JSON event. Notice `prev_event_hash` linking each event to
+the prior one — change one byte and `verify_chain` fails.
 
-3. **`traces/workflow.mmd`** — paste into https://mermaid.live to see the
-   parent's workflow as a flowchart.
+```json
+{"type": "shard_created", "run_id": "parent-run-001", "agent_id": "orchestrator", "prev_event_hash": null, "shard_id": "1010b5a0...", "scope": "demo:request", "atom_count": 2, "hash": "1ae4dfd1..."}
+{"type": "entitlement_granted", "prev_event_hash": "1ae4dfd1...", "granted_to": "summarizer", "capabilities": ["shard:read", "shard:write", ...], "budget_usd": 0.5, "hash": "e79b237c..."}
+{"type": "studio_job_packaged", "prev_event_hash": "e79b237c...", "content_shard_id": "dba4c900...", "task_shard_id": "d238667e...", ...}
+{"type": "spawn_with_shards", ...}
+{"type": "subagent_completed", ...}
+{"type": "shard_resolved", ...}
+```
+
+### Child trace (`traces/child.jsonl`)
+
+The subagent's independent chain — starts with capability checks, decrypts
+the shards with its entitlement key, does the work, and records completion.
+
+```json
+{"type": "capability_checked", "run_id": "child-run-001", "agent_id": "summarizer", "capability": "shard:read", "allowed": true, ...}
+{"type": "shard_decrypted", "scope": "demo:content", ...}
+{"type": "shard_decrypted", "scope": "demo:task", ...}
+{"type": "studio_job_started", ...}
+{"type": "budget_spent", ...}
+{"type": "shard_created", ...}
+{"type": "studio_job_completed", "spent_usd": 0.03, ...}
+```
+
+### Workflow diagram
+
+```mermaid
+graph TD
+    classDef ok fill:#2d6a4f,stroke:#1b4332,color:#fff
+    classDef entitle fill:#7b2cbf,stroke:#5a189a,color:#fff
+    classDef shard fill:#023e8a,stroke:#03045e,color:#fff
+
+    N0["shard_created"]:::ok
+    N1["Entitlement Granted<br/>to: summarizer<br/>budget: $0.50"]:::entitle
+    N0 --> N1
+    N2["Job Packaged<br/>content + task shards"]:::shard
+    N1 --> N2
+    N3["spawn_with_shards"]:::ok
+    N2 --> N3
+    N4["subagent_completed"]:::ok
+    N3 --> N4
+    N5["shard_resolved"]:::ok
+    N4 --> N5
+```
 
 ## Takeaway
 

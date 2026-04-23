@@ -102,8 +102,9 @@ def run_subagent(
     return result
 
 
-def main() -> int:
-    output_dir = Path(__file__).parent / "traces"
+def main(output_dir: Path | None = None) -> int:
+    if output_dir is None:
+        output_dir = Path(__file__).parent / "traces"
     output_dir.mkdir(parents=True, exist_ok=True)
 
     with tempfile.TemporaryDirectory() as td:
