@@ -104,6 +104,19 @@ with CanonicalRegistry("/tmp/people.db", schema) as registry:
 | [Integration Guide](docs/integration-guide.md) | How frio, perseus-news, and claude-studio-producer use it |
 | [API Reference](docs/api-reference.md) | Complete public API surface |
 
+## Examples
+
+The `examples/` directory contains self-contained demos that exercise the fabric APIs end-to-end — no LLM calls, no network, just Python functions composing shards, traces, entitlements, and studio jobs. Each demo runs with `python examples/NN_xxx/run.py` and exits 0.
+
+| Demo | What it shows |
+|------|---------------|
+| [01_simple_trace](examples/01_simple_trace/) | Parent packages a job, spawns a subagent, receives a result shard — two independent hash-chained traces |
+| [02_todo_fanout](examples/02_todo_fanout/) | Compound request split into 4 subagents, each writing a result shard with `source_ref` lineage, assembled by the parent |
+| [03_skills_and_tools](examples/03_skills_and_tools/) | Agent uses skills and tools to plan a trip; every invocation recorded with input/output hashes |
+| [04_governance_divergence](examples/04_governance_divergence/) | Same job run twice — Run A behaves, Run B exceeds budget and capabilities; parent detects violations via trace |
+
+Run the test suite with `python -m pytest tests/test_demos.py -v`.
+
 ## Benchmarks
 
 ```bash
