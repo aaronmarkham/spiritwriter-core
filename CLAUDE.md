@@ -21,6 +21,10 @@ Read the relevant skill for your task:
 | **network** | Publish/resolve shards over IPFS, private swarm config | `skills/network/SKILL.md` |
 | **audit** | Traced security audit of Android apps — findings + hash-chain + witness | `skills/audit/SKILL.md` |
 
+## Examples
+
+`examples/` has four self-contained fabric demos (no LLM, no network). Run any demo with `python examples/NN_xxx/run.py`. Tests: `python -m pytest tests/test_demos.py -v`.
+
 ## Module Map
 
 ```
