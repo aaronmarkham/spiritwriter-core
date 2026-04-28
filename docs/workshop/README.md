@@ -1,8 +1,8 @@
 # Workshop: Adding AI Agents to a Security Audit Pipeline
 
-Five lessons on building reliable AI agent pipelines, using [Frio](https://github.com/aaronmarkham/frio) (a jail roster monitoring system) as a running example. The workshop covers how to set up, verify, and improve agent-driven workflows where you need to trust the output.
+Five lessons on building reliable AI agent pipelines, drawn from real incidents building [Frio](https://github.com/aaronmarkham/frio)'s audit pipeline across 20 OCV apps and 5 states. Every lesson starts with something that broke and shows the fix.
 
-Each lesson introduces a concept, walks through configuration or implementation, and includes a checklist and troubleshooting guidance. The lessons build on each other: environment setup → tool verification → prompt engineering → provenance tracing → continuous improvement.
+The lessons build on each other: environment setup -> tool verification -> prompt engineering -> provenance tracing -> continuous improvement.
 
 ## Lessons
 
@@ -20,6 +20,6 @@ Each lesson introduces a concept, walks through configuration or implementation,
 
 ## Context
 
-These lessons use Frio's audit pipeline as the running example. The pipeline discovers sheriff's office mobile apps (OCV platform), downloads APKs, extracts evidence using Rizin binary analysis, classifies findings against a canonical registry, and generates cryptographic provenance chains via spiritwriter.
+These lessons use Frio's audit pipeline as the running example. The pipeline discovers sheriff's office mobile apps (OCV platform), downloads APKs, extracts evidence using [Rizin](https://rizin.re/) binary analysis, classifies findings against a canonical registry, and generates cryptographic provenance chains via spiritwriter.
 
 You don't need Frio to follow along — the patterns apply to any pipeline where you're dispatching AI agents to do structured work and need to trust the output.

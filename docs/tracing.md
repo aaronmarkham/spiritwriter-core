@@ -1,6 +1,6 @@
 # Tracing & Provenance
 
-The **TraceEmitter** produces hash-chained JSONL event logs — a tamper-evident audit trail for agent actions, shard lifecycle, and entitlement usage.
+The **TraceEmitter** produces hash-chained JSONL event logs — a tamper-evident audit trail covering agent actions, shard lifecycle, and entitlement usage.
 
 ## Design
 
@@ -114,7 +114,7 @@ emitter.budget_spent(
 
 ## Studio Job Events
 
-For tracking sub-agent production jobs:
+Track sub-agent production jobs through the full lifecycle:
 
 ```python
 # Job packaged (ready to spawn)
@@ -151,7 +151,7 @@ emitter.studio_job_failed(
 
 ## Decision Extraction
 
-Record decisions extracted from conversations:
+Capture decisions extracted from conversations for provenance:
 
 ```python
 emitter.decision_extracted(
@@ -229,7 +229,7 @@ Each line in the JSONL file:
 
 ## Typical Trace Chain
 
-A complete production job traces as:
+A complete production job trace, end to end:
 
 ```
 studio_job_packaged

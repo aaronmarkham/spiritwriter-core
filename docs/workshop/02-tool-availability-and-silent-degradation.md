@@ -1,10 +1,10 @@
 # Lesson 2: Tool Availability & Silent Degradation
 
-> Agents adapt — which is usually good, but in security analysis means they'll silently downgrade their methodology without telling you.
+> Agents adapt — which is usually good. In security analysis, it means they silently downgrade their methodology without telling you.
 
 ## What you'll learn
 
-In this lesson you'll learn how to prevent agents from silently falling back to weaker analysis methods when a required tool is unavailable. You'll classify your tools into tiers and add verification steps that force the agent to fail loudly rather than produce incomplete results.
+After this lesson you'll know how to classify your tools into tiers, add verification steps that force the agent to fail loudly when a required tool is missing, and detect degraded runs after the fact.
 
 ## Prerequisites
 
@@ -15,22 +15,22 @@ In this lesson you'll learn how to prevent agents from silently falling back to 
 
 ### Why agents fall back silently
 
-LLMs are trained to be helpful. When a tool isn't available, the agent's instinct is to find an alternative approach rather than stop. This is usually a feature — you want an agent that works around minor obstacles.
+LLMs are trained to be helpful. When a tool isn't available, the agent's instinct is to find another way rather than stop. For dev work, that's a feature — you want an agent that works around minor obstacles.
 
-But in security analysis, methodology matters. A weaker analysis method doesn't just produce fewer findings — it produces a report that *looks* equally authoritative but has blind spots. The consumer of the report has no way to know the methodology was downgraded.
+For security analysis, it's a disaster. A weaker analysis method doesn't just produce fewer findings — it produces a report that *looks* equally authoritative but has blind spots. The consumer has no way to know the methodology was downgraded.
 
 ### Binary analysis vs. string matching
 
-To make this concrete, consider two approaches to analyzing an Android APK:
+Two approaches to analyzing an Android APK, and the gap between them:
 
 | Method | What it finds | What it misses |
 |--------|--------------|----------------|
 | **Binary analysis** (e.g., [Rizin](https://rizin.re/) `rz-bin`) | DEX class names, method signatures, symbol tables, linked native libraries | — |
 | **String matching** (regex/grep fallback) | String literals containing known SDK package names | Obfuscated code, native libraries, SDK components without recognizable string patterns |
 
-[Rizin](https://rizin.re/) is a binary analysis framework. Its `rz-bin` tool can parse DEX bytecode, extract symbol tables, identify linked libraries, and dump structured data from compiled binaries. This gives high-confidence findings because you're examining what the code actually contains, not guessing from string patterns.
+[Rizin](https://rizin.re/) is a binary analysis framework. Its `rz-bin` tool parses DEX bytecode, extracts symbol tables, identifies linked libraries, and dumps structured data from compiled binaries. High-confidence findings, because you're examining what the code actually contains — not guessing from string patterns.
 
-If `rz-bin` isn't available and the agent falls back to regex-based analysis (grepping for patterns like `com.google.firebase` or `amazonaws.com`), the output looks complete — same report structure, same JSON format, findings listed with names and risk levels. But the findings are shallower, and you wouldn't notice unless you compared against a Rizin-powered run.
+If `rz-bin` isn't available and the agent falls back to regex (grepping for patterns like `com.google.firebase` or `amazonaws.com`), the output looks complete — same report structure, same JSON format, findings listed with names and risk levels. But the findings are shallower, and you wouldn't notice unless you compared against a Rizin-powered run.
 
 ## Step 1: Classify your tools into tiers
 
@@ -55,7 +55,7 @@ Example classification for an APK audit pipeline:
 
 ## Step 2: Add tool verification to your prompt
 
-Add a verification preamble to your skill or prompt that checks for Required tools before doing any work. The agent should abort with an explicit error if something is missing.
+Add a verification preamble to your skill or prompt that checks for Required tools before doing any work:
 
 ```
 BEFORE STARTING ANY WORK, verify the following tools are available:
@@ -71,7 +71,7 @@ BEFORE STARTING ANY WORK, verify the following tools are available:
 Do NOT fall back to alternative analysis methods. If rz-bin is unavailable, the audit cannot proceed.
 ```
 
-The key line is: **"Do NOT fall back to alternative analysis methods."** Without this, the agent will try to be helpful and find a workaround.
+That last line is the one that matters: **"Do NOT fall back to alternative analysis methods."** Without it, the agent will be helpful and find a workaround. That's exactly what you don't want.
 
 ## Step 3: Add verification to your skill file
 
@@ -109,19 +109,19 @@ done
 echo "All tools verified. Proceeding."
 ```
 
-This catches problems before the agent even starts, saving time and API costs.
+This catches problems before the agent even starts — saves time and API costs.
 
 ## Step 5: Detect degradation in completed runs
 
-If you're reviewing output from an agent that already ran, look for these signals:
+Reviewing output from an agent that already ran? Look for these signals:
 
 1. **Missing tool references in trace logs.** If the agent was supposed to use `rz-bin` but the trace shows only `grep` and `strings` commands, the methodology was downgraded.
 
-2. **Finding count is lower than expected.** If a known-bad APK produces 5 findings instead of the usual 8-12, suspect a weaker analysis method.
+2. **Finding count is lower than expected.** A known-bad APK produces 5 findings instead of the usual 8-12? Suspect a weaker analysis method.
 
-3. **No binary-specific findings.** Rizin finds things like native library linkage and obfuscated class names that regex can't. If all findings are string-match patterns (`com.google.firebase`, `com.facebook.sdk`), the analysis was likely regex-only.
+3. **No binary-specific findings.** Rizin finds native library linkage and obfuscated class names that regex can't. If every finding is a string-match pattern (`com.google.firebase`, `com.facebook.sdk`), the analysis was likely regex-only.
 
-4. **Provenance trace shows the method.** If you're using spiritwriter (see [Lesson 4](04-trace-as-verification-layer.md)), the audit emits an `audit_strings_extracted` trace event recording the extraction method and results. Examining this event reveals whether binary analysis actually happened — even if the final report looks complete.
+4. **Provenance trace shows the method.** With spiritwriter (see [Lesson 4](04-trace-as-verification-layer.md)), the audit emits an `audit_strings_extracted` trace event recording the extraction method and results. That event reveals whether binary analysis actually happened — even if the final report looks complete.
 
 ## Checklist
 
@@ -131,6 +131,10 @@ If you're reviewing output from an agent that already ran, look for these signal
 - [ ] Include explicit "do NOT fall back" instructions for Required tools
 - [ ] Run `pre-flight.sh` (or equivalent) before dispatching agents
 - [ ] After runs, check trace logs for tool usage (did it actually call what you expected?)
+
+## What comes next
+
+Tools are verified, the agent won't silently downgrade. But here's the next problem: you dispatch two parallel agents with the same prompt and the same skill file, and they produce different outputs. One generates all the deliverables. The other skips provenance files because it ran out of turns. Same instructions, different results. That's [Lesson 3](03-prompt-ambiguity-and-nondeterministic-output.md).
 
 ---
 

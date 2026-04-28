@@ -4,7 +4,7 @@
 
 ## What you'll learn
 
-In this lesson you'll combine everything from Lessons 1-4 into a pipeline that measures its own quality and improves over time. You'll define a scoring function, create prompt variants, run them against the same batch, and use trace data to pick a winner.
+After this lesson you'll combine everything from Lessons 1-4 into a pipeline that measures its own quality and improves over time. You'll define a scoring function, create prompt variants, run them against the same batch, and use trace data to pick a winner.
 
 ## Prerequisites
 
@@ -14,14 +14,14 @@ In this lesson you'll combine everything from Lessons 1-4 into a pipeline that m
 
 ## Where you are
 
-By this point in the workshop, you have:
+By this point in the workshop:
 
 1. **A reproducible agent environment** (Lesson 1) — permissions, PATH, working directory
 2. **Tool verification** (Lesson 2) — required tools checked before work begins
 3. **Explicit deliverables** (Lesson 3) — prompts that specify what MUST be produced
 4. **Trace verification** (Lesson 4) — cryptographic proof of what actually happened
 
-Now you'll combine them into a pipeline that measures its own quality and improves over time.
+Now combine them into a pipeline that measures its own quality.
 
 ## Step 1: Define a scoring function
 
@@ -76,7 +76,7 @@ done
 wait
 ```
 
-Running all variants against the same batch ensures differences in output reflect prompt quality, not data variance.
+Same batch for all variants ensures differences in output reflect prompt quality, not data variance.
 
 ## Step 4: Score and compare
 
@@ -114,7 +114,7 @@ Variant A: mean=0.90  min=0.70  [GAPS]
 
 ## Step 5: Promote the winner and record the decision
 
-The winning variant becomes your new baseline skill file. Record the decision in the trace chain so there's provenance for why this version was chosen:
+The winning variant becomes the new baseline skill file. Record the decision in the trace chain — provenance for why this version was chosen:
 
 ```python
 emitter.emit(
@@ -123,7 +123,7 @@ emitter.emit(
     reason="100% completeness across all runs",
     comparison_data=results,
     previous_baseline="A",
-    improvement="mean score 0.90 → 1.00",
+    improvement="mean score 0.90 -> 1.00",
 )
 ```
 
@@ -151,12 +151,12 @@ The same framework works for any pipeline parameter:
 7. Repeat with new variants
 ```
 
-Each iteration through this loop:
+Each iteration:
 - Produces measurable data about what works
 - Records the decision and evidence in the trace chain
 - Gives you a provenance trail for your pipeline's evolution
 
-Over time, you're not just running agents — you're building evidence for which configurations produce reliable results for your specific use case.
+Over time, you're not running agents and hoping — you're building evidence for which configurations produce reliable results for your specific use case.
 
 ## Summary: the five-lesson arc
 
@@ -165,10 +165,10 @@ Over time, you're not just running agents — you're building evidence for which
 | 1. Environment | Permissions blocked, tools missing | Explicit PATH, permission mode | Verify the agent's world before dispatching |
 | 2. Silent degradation | Required tool missing, agent fell back silently | Tool-check preamble, fail loudly | Don't let agents downgrade methodology |
 | 3. Non-determinism | Same prompt, different outputs | Explicit deliverables, generous turns | Same prompt != same output |
-| 4. Trace verification | Manual checking doesn't scale | Plan → validate → gap-detect | Make verification part of the provenance |
+| 4. Trace verification | Manual checking doesn't scale | Plan -> validate -> gap-detect | Make verification part of the provenance |
 | 5. Self-improvement | Static prompts, no measurement | A/B test with trace scoring | Measure, compare, promote, repeat |
 
-Each lesson builds on the previous one. Together, they turn a fragile "run agent and hope" workflow into a pipeline you can measure and improve systematically.
+Each lesson builds on the previous one. Together, they turn a "run agent and hope" workflow into a pipeline you can measure and improve systematically.
 
 ## Checklist
 

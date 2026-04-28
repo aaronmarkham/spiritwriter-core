@@ -4,7 +4,7 @@
 
 ## What you'll learn
 
-In this lesson you'll set up Claude Code to run agents headlessly from the CLI or from within an IDE session. You'll configure permissions, ensure the right tools are on the PATH, and verify everything works before dispatching real work.
+After this lesson you'll have a working headless agent setup: Claude Code running from the CLI with the right permissions, external tools on the PATH, and a smoke test that proves everything works before you dispatch real work.
 
 ## Prerequisites
 
@@ -16,16 +16,16 @@ In this lesson you'll set up Claude Code to run agents headlessly from the CLI o
 
 ### Modes of running Claude Code agents
 
-Claude Code can run agents in two ways:
+Claude Code runs agents two ways:
 
 1. **Interactive mode** — the default. You chat with Claude in a terminal or IDE, and it asks permission before running commands.
 2. **Headless mode** (`claude -p`) — Claude runs as an independent process with no interactive prompts. This is what you use for automation, batch processing, and unattended pipelines.
 
-There's also a **Task tool** (subagent) mode available inside interactive sessions. Subagents spawned this way inherit the parent session's permission restrictions and can't request additional permissions interactively. For batch work, headless mode is more reliable.
+There's also a **Task tool** (subagent) mode inside interactive sessions. Subagents inherit the parent's permission restrictions and can't request additional permissions at runtime. For batch work, headless mode is more reliable.
 
 ### Permission system
 
-Claude Code gates access to tools like `Bash`, `WebFetch`, and `WebSearch` through a permission system. In interactive mode, you're prompted to approve each tool. In headless mode, you need to pre-configure permissions using one of:
+Claude Code gates tool access — `Bash`, `WebFetch`, `WebSearch` — through a permission system. In interactive mode, you approve each tool call. In headless mode, pre-configure permissions using one of:
 
 - `--permission-mode bypassPermissions` — allows all tools (use for trusted automation)
 - `--allowedTools "Bash,Read,Write,Edit,Grep,Glob"` — explicit allowlist
@@ -36,7 +36,7 @@ If your project has a `settings.local.json` with a tool allowlist, subagents spa
 
 ## Step 1: Identify your tools
 
-Before launching an agent, list every external tool it will need. For a security audit pipeline using [Rizin](https://rizin.re/) (a binary analysis framework for examining compiled executables), the list might be:
+Before launching an agent, list every external tool it will need. For a security audit pipeline using [Rizin](https://rizin.re/) (a binary analysis framework for examining compiled executables):
 
 | Tool | Purpose | Install |
 |------|---------|---------|
@@ -49,17 +49,17 @@ Before launching an agent, list every external tool it will need. For a security
 
 A headless `claude -p` process gets a minimal PATH (`/usr/bin:/bin`). Homebrew tools, pip-installed CLIs, and language runtimes are **not** available unless you explicitly include them.
 
-Check what the agent would see versus what your shell sees:
+Check what the agent sees versus what your shell sees:
 
 ```bash
 # What your shell has
 which rz-bin   # /opt/homebrew/bin/rz-bin ✓
 
-# What a headless agent would have (minimal PATH)
+# What a headless agent gets (minimal PATH)
 env -i PATH=/usr/bin:/bin which rz-bin   # not found ✗
 ```
 
-Build a PATH string that includes every directory your tools live in. The exact paths depend on your platform:
+Build a PATH string that includes every directory your tools live in:
 
 | Platform | Typical tool directories |
 |----------|------------------------|
@@ -79,13 +79,13 @@ The agent starts in whatever directory you launch it from. If your skill or prom
 cd /path/to/project && claude -p "..."
 ```
 
-**CLI vs. IDE behavior:** The CLI has no problem navigating outside the starting directory tree (e.g., `../parent-folder`). However, the IDE extension may produce errors or unexpected behavior if the target directory isn't part of the current workspace. See the [Claude Code docs](https://docs.anthropic.com/en/docs/claude-code) for current details on workspace scoping.
+**CLI vs. IDE behavior:** The CLI navigates outside the starting directory tree without issue (e.g., `../parent-folder`). The IDE extension may produce errors if the target directory isn't part of the current workspace. See the [Claude Code docs](https://docs.anthropic.com/en/docs/claude-code) for current details on workspace scoping.
 
 **Rule:** Always launch from the project root. Use absolute paths in prompts when referencing specific files.
 
 ## Step 4: Invoke a headless agent
 
-Here's how to invoke an agent directly from the CLI with the correct permissions, PATH, and tool configuration:
+Here's the full invocation with correct permissions, PATH, and tool configuration:
 
 ```bash
 cd /path/to/project && \
@@ -101,14 +101,14 @@ cd /path/to/project && \
 
 Key flags:
 - `--append-system-prompt-file` loads a file and appends it to the default system prompt (vs `--system-prompt` which replaces it). Note: `claude --help` lists `--append-system-prompt <prompt>` for inline text; the `-file` variant is documented in the `--bare` section and accepts a file path.
-- `--output-format stream-json --verbose` gives you real-time progress (plain `json` buffers everything until completion)
+- `--output-format stream-json --verbose` gives real-time progress (`json` alone buffers everything until completion)
 - `--max-turns 120` gives the agent room to work — see [Lesson 3](03-prompt-ambiguity-and-nondeterministic-output.md) for sizing guidance
 
 You can also teach your IDE's Claude Code session to invoke agents this way — have it run headless `claude -p` subprocesses with your specific prompts and settings.
 
 ## Step 5: Test with a trivial command
 
-Before dispatching real work, verify the environment with a quick smoke test:
+Before dispatching real work, verify the environment with a smoke test:
 
 ```bash
 claude -p "Run: which rz-bin && which curl && echo OK" \
@@ -138,7 +138,7 @@ Before dispatching any agent:
 Permission denied: Bash tool not in allowed list
 ```
 
-This happens when the permission system blocks a tool the agent needs. Common causes:
+The permission system blocked a tool the agent needs. Common causes:
 - Using Task tool subagents that inherit a restrictive `settings.local.json`
 - Forgetting `--permission-mode bypassPermissions` or `--allowedTools` in headless mode
 
@@ -169,11 +169,11 @@ The headless process has a minimal PATH. Tools that work in your terminal don't 
 }
 ```
 
-Then all `claude -p` invocations from that project will inherit the PATH automatically. The remaining examples in this workshop use the inline `--settings` flag for explicitness, but a project-level settings file is recommended for production use.
+All `claude -p` invocations from that project inherit the PATH automatically. The remaining examples in this workshop use the inline `--settings` flag for explicitness, but a project-level settings file is the better choice for production.
 
-## Why this matters for security work
+## What comes next
 
-In a standard dev workflow, a missing tool means a build fails and you fix it. In a security audit pipeline, a missing tool means the agent adapts — and you may not notice. That's [Lesson 2](02-tool-availability-and-silent-degradation.md).
+The environment is set up. But what happens when a required tool is missing and the agent doesn't tell you? It adapts — finds a workaround, produces a report that looks fine, and you never notice the analysis was shallow. That's [Lesson 2](02-tool-availability-and-silent-degradation.md).
 
 ---
 
