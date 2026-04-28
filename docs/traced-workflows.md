@@ -1,86 +1,73 @@
-# Building Traced Workflows with Spiritwriter
+# Building Traced Workflows
 
-How to add provenance tracking, checkpoints, and resume to any multi-stage pipeline.
+A long-running multi-stage pipeline crashes halfway through. The choices are: restart from scratch (lose hours of work), or restart from where it left off (need to know what completed, what didn't, and what state to resume from). The **traced workflow pattern** gives you both — a tamper-evident receipt for every stage, and a checkpoint shard at every boundary so resume is a one-line lookup.
 
-## Overview
+The recipe: wrap each stage with two `emit()` calls (started, completed), persist a checkpoint shard between stages, and verify the chain at the end. About two lines of glue per stage; the helpers are written once.
 
-A traced workflow wraps your existing business logic with:
-- **Hash-chained trace events** — tamper-evident receipts for every stage
-- **Checkpoint shards** — resumable state between stages
-- **Budget tracking** — cost per stage, per agent
-- **Provenance reports** — Mermaid diagrams showing the full pipeline lineage
+## What You Get
 
-Build cost: ~50 lines of glue on top of your existing logic. The tracing infrastructure is all library calls.
+- **Hash-chained trace events** — tamper-evident receipt for every stage, every LLM call, every shard hand-off.
+- **Checkpoint shards** — resumable state between stages, scoped with `DecayClass.CHECKPOINT` so they auto-prune after 4 hours.
+- **Budget tracking** — per-stage and per-agent spend, with hard caps that raise instead of silently overspending.
+- **Provenance reports** — Mermaid diagrams (workflow / genealogy / multi-agent) rendered from the same trace JSONL.
 
-## Prerequisites
-
-```bash
-pip install -e /path/to/spiritwriter-core
-```
-
-Read the relevant skills for deeper reference:
-- `skills/shards/SKILL.md` — shard format, storage, hydration
-- `skills/trace/SKILL.md` — trace events, hash chains, visualization
-- `skills/studio/SKILL.md` — job packaging, budget tracking (optional)
-- `skills/entitlements/SKILL.md` — scoped access control (optional)
+The cost is roughly 50 lines of glue on top of your existing logic. None of it is novel — every primitive lives in [spiritwriter.fabric](../spiritwriter/fabric).
 
 ## Quick Start
 
-### 1. Define Your Stages
+The minimum viable traced workflow has five moving parts: stage list, store, emitter, per-stage emit pair, and final verification.
+
+### Define the Stages
 
 ```python
 STAGES = ["ingest", "extract", "generate", "validate", "assemble"]
 ```
 
-### 2. Set Up Store and Emitter
+### Set Up Store and Emitter
 
 ```python
 from spiritwriter.fabric.emitter import TraceEmitter
 from spiritwriter.fabric.store import ShardStore
 
 store = ShardStore("/path/to/shards")
-emitter = TraceEmitter(agent_id="my-pipeline", output_path="run.jsonl")
+emitter = TraceEmitter(
+    run_id="my-pipeline-2026-04-28",   # any string identifying this run
+    agent_id="my-pipeline",
+    out_path="run.jsonl",
+)
 ```
 
-### 3. Wrap Each Stage
+`TraceEmitter` writes JSONL append-only. One emitter per output file — multiple producers writing to the same path will interleave lines and break chain verification.
 
-Before and after your existing logic, add two lines:
+### Wrap Each Stage
+
+Two `emit()` calls bracket each stage's existing logic. `emit()` takes the event type and arbitrary keyword fields:
 
 ```python
-# Before
-emitter.emit("stage_started", {"stage": "extract", "input_ref": input_shard.shard_id})
+emitter.emit("stage_started", stage="extract", input_ref=input_shard.shard_id)
 
-# ... your existing logic here ...
+# ...your existing logic here...
 
-# After
-emitter.emit("stage_completed", {"stage": "extract", "output_ref": output_shard.shard_id})
+emitter.emit("stage_completed", stage="extract", output_ref=output_shard.shard_id)
 ```
 
-### 4. Write Checkpoints
+### Write a Checkpoint Shard
 
-After each stage, persist state as a shard:
+After each stage, persist resume state as a `CHECKPOINT`-class shard:
 
 ```python
 from spiritwriter.fabric.shard import MemoryShard, ShardAtom, AtomKind, DecayClass
 
 checkpoint = MemoryShard(
     atoms=[
-        ShardAtom(
-            text="Stage complete",
-            kind=AtomKind.CHECKPOINT,
-            key="stage",
-            value="extract_complete",
-        ),
-        ShardAtom(
-            text="Reference to intermediate output",
-            kind=AtomKind.CONTEXT,
-            key="output_shard_ref",
-            value=output_shard.shard_id,
-        ),
+        ShardAtom(text="Stage complete", kind=AtomKind.CHECKPOINT,
+                  key="stage", value="extract_complete"),
+        ShardAtom(text="Reference to intermediate output", kind=AtomKind.CONTEXT,
+                  key="output_shard_ref", value=output_shard.shard_id),
     ],
     scope="jobs:in-progress",
     origin="my-pipeline",
-    decay_class=DecayClass.CHECKPOINT,  # 4 hours
+    decay_class=DecayClass.CHECKPOINT,   # auto-prune after 4 hours
     tags=["checkpoint", "my-pipeline"],
 )
 
@@ -88,48 +75,52 @@ ref = store.put(checkpoint)
 store.set_ref("job:my-pipeline:checkpoint", ref.shard_id)
 ```
 
-### 5. Resume from Checkpoints
+The named ref is what makes resume work — it's a stable handle the next process can look up regardless of what shard ID got minted.
 
-On startup, check where you left off:
+### Resume from Checkpoints
+
+On startup, find the last completed stage and resume after it:
 
 ```python
-def get_resume_stage(store, stages, job_ref="job:my-pipeline:checkpoint"):
-    """Find which stage to resume from."""
-    shard = store.resolve_ref(job_ref)
+def get_resume_stage(store, stages, ref_name="job:my-pipeline:checkpoint"):
+    """Return (next_stage_to_run, checkpoint_shard_or_None)."""
+    shard = store.resolve_ref(ref_name)
     if shard is None:
-        return stages[0], None  # start from beginning
+        return stages[0], None    # nothing to resume from
 
     atom = shard.get_atom("stage")
     if atom is None:
         return stages[0], None
 
-    # "extract_complete" → resume from next stage after "extract"
     completed = atom.value.replace("_complete", "")
     if completed in stages:
         next_idx = stages.index(completed) + 1
         if next_idx < len(stages):
             return stages[next_idx], shard
-    
+
     return stages[0], None
 ```
 
-### 6. Verify Chain and Generate Report
+### Verify and Render
 
 After all stages complete:
 
 ```python
 from spiritwriter.fabric.emitter import verify_chain
-from spiritwriter.fabric.visualize import render_trace
+from spiritwriter.fabric.visualize import load_trace, render_trace
 
-# Verify no tampering
 events = emitter.get_events()
-assert verify_chain(events), "Trace chain integrity check failed!"
+assert verify_chain(events), "Trace chain integrity check failed"
 
-# Generate Mermaid provenance diagram
-mermaid_code = render_trace("run.jsonl", diagram_type="workflow")
+# Render as Mermaid — render_trace takes events, not a path
+mermaid_code = render_trace(events, diagram_type="workflow")
 ```
 
+`render_trace` accepts the diagram types `"workflow"`, `"genealogy"`, and `"multi-agent"` (note the hyphen). For an arbitrary trace file produced elsewhere, use `load_trace(path)` first.
+
 ## Complete Pipeline Template
+
+Copy this and customize the stage handlers:
 
 ```python
 """Traced workflow template — copy and customize."""
@@ -142,10 +133,9 @@ from spiritwriter.fabric.visualize import render_trace
 
 STAGES = ["ingest", "extract", "generate", "validate", "assemble"]
 
-# Map stage names to your actual functions
 STAGE_HANDLERS = {
-    "ingest": lambda store, prev: do_ingest(store, prev),
-    "extract": lambda store, prev: do_extract(store, prev),
+    "ingest":   lambda store, prev: do_ingest(store, prev),
+    "extract":  lambda store, prev: do_extract(store, prev),
     "generate": lambda store, prev: do_generate(store, prev),
     "validate": lambda store, prev: do_validate(store, prev),
     "assemble": lambda store, prev: do_assemble(store, prev),
@@ -153,21 +143,12 @@ STAGE_HANDLERS = {
 
 
 def write_checkpoint(store, stage, result_ref, pipeline_name):
-    """Write a checkpoint shard after a stage completes."""
     checkpoint = MemoryShard(
         atoms=[
-            ShardAtom(
-                text=f"Stage {stage} complete",
-                kind=AtomKind.CHECKPOINT,
-                key="stage",
-                value=f"{stage}_complete",
-            ),
-            ShardAtom(
-                text="Output reference",
-                kind=AtomKind.CONTEXT,
-                key="output_ref",
-                value=result_ref,
-            ),
+            ShardAtom(text=f"Stage {stage} complete", kind=AtomKind.CHECKPOINT,
+                      key="stage", value=f"{stage}_complete"),
+            ShardAtom(text="Output reference", kind=AtomKind.CONTEXT,
+                      key="output_ref", value=result_ref),
         ],
         scope="jobs:in-progress",
         origin=pipeline_name,
@@ -180,78 +161,63 @@ def write_checkpoint(store, stage, result_ref, pipeline_name):
 
 
 def get_resume_stage(store, stages, pipeline_name):
-    """Determine which stage to resume from."""
     shard = store.resolve_ref(f"job:{pipeline_name}:checkpoint")
     if shard is None:
         return stages[0], None
-
     atom = shard.get_atom("stage")
     if atom is None:
         return stages[0], None
-
     completed = atom.value.replace("_complete", "")
     if completed in stages:
         next_idx = stages.index(completed) + 1
         if next_idx < len(stages):
             return stages[next_idx], shard
-
     return stages[0], None
 
 
 def run_pipeline(store_path, trace_path, pipeline_name="my-pipeline"):
-    """Run a traced pipeline with checkpoint/resume."""
     store = ShardStore(store_path)
-    emitter = TraceEmitter(agent_id=pipeline_name, output_path=trace_path)
+    emitter = TraceEmitter(
+        run_id=f"{pipeline_name}-run",
+        agent_id=pipeline_name,
+        out_path=trace_path,
+    )
 
     resume_stage, checkpoint = get_resume_stage(store, STAGES, pipeline_name)
     print(f"Resuming from: {resume_stage}")
 
-    emitter.emit("pipeline_started", {
-        "pipeline": pipeline_name,
-        "resume_from": resume_stage,
-    })
+    emitter.emit("pipeline_started", pipeline=pipeline_name, resume_from=resume_stage)
 
     prev = checkpoint
     for stage in STAGES[STAGES.index(resume_stage):]:
-        # Emit receipt: starting
-        emitter.emit("stage_started", {
-            "stage": stage,
-            "input_ref": prev.shard_id if prev else None,
-        })
+        emitter.emit("stage_started",
+                     stage=stage,
+                     input_ref=prev.shard_id if prev else None)
 
-        # Run the actual work
         try:
             result_ref = STAGE_HANDLERS[stage](store, prev)
         except Exception as e:
-            emitter.emit("stage_failed", {"stage": stage, "error": str(e)})
+            emitter.emit("stage_failed", stage=stage, error=str(e))
             raise
 
-        # Write checkpoint + emit receipt: completed
         prev = write_checkpoint(store, stage, result_ref, pipeline_name)
-        emitter.emit("stage_completed", {
-            "stage": stage,
-            "output_ref": result_ref,
-            "checkpoint_ref": prev.shard_id,
-        })
+        emitter.emit("stage_completed",
+                     stage=stage,
+                     output_ref=result_ref,
+                     checkpoint_ref=prev.shard_id)
 
         print(f"  ✓ {stage} complete")
 
-    # Clean up checkpoint, write result ref
     store.delete_ref(f"job:{pipeline_name}:checkpoint")
     store.set_ref(f"job:{pipeline_name}:result", result_ref)
 
-    emitter.emit("pipeline_completed", {
-        "pipeline": pipeline_name,
-        "result_ref": result_ref,
-    })
+    emitter.emit("pipeline_completed", pipeline=pipeline_name, result_ref=result_ref)
 
-    # Verify chain integrity
     events = emitter.get_events()
     chain_ok = verify_chain(events)
     print(f"  Chain integrity: {'✓' if chain_ok else '✗'} ({len(events)} events)")
 
-    # Generate provenance report
-    mermaid = render_trace(trace_path, diagram_type="workflow")
+    mermaid = render_trace(events, diagram_type="workflow")
 
     return {
         "result_ref": result_ref,
@@ -261,128 +227,123 @@ def run_pipeline(store_path, trace_path, pipeline_name="my-pipeline"):
     }
 ```
 
+The `delete_ref` + `set_ref` pair at the end is deliberate: clear the checkpoint pointer (so a re-run starts fresh) and store a stable handle to the final result.
+
 ## Multi-Agent Pipelines
 
-Different stages can be run by different agents/models:
+Different stages can run on different models or agents. Map stage names to agent identifiers:
 
 ```python
-# Stage → agent mapping
 AGENT_MAP = {
-    "ingest": "haiku",       # cheap, mechanical
-    "extract": "haiku",      # structured extraction
-    "generate": "sonnet",    # creative script writing
-    "validate": "opus",      # quality judgment
-    "assemble": "local",     # deterministic, no LLM
+    "ingest":   "haiku",    # cheap, mechanical
+    "extract":  "haiku",    # structured extraction
+    "generate": "sonnet",   # creative work
+    "validate": "opus",     # quality judgment
+    "assemble": "local",    # deterministic, no LLM
 }
 ```
 
-Each agent gets its own TraceEmitter with its `agent_id`. The trace events show exactly which model did which stage:
+Give each agent its own `TraceEmitter` with its `agent_id`. The trace events show exactly which agent did what:
 
 ```
-stage_started  {agent: "haiku",  stage: "extract"}
-stage_completed {agent: "haiku",  stage: "extract", cost: 0.005}
-stage_started  {agent: "sonnet", stage: "generate"}
-stage_completed {agent: "sonnet", stage: "generate", cost: 0.02}
+stage_started   {agent_id: "haiku",  stage: "extract"}
+stage_completed {agent_id: "haiku",  stage: "extract", cost_usd: 0.005}
+stage_started   {agent_id: "sonnet", stage: "generate"}
+stage_completed {agent_id: "sonnet", stage: "generate", cost_usd: 0.02}
 ```
 
-### With Budget Tracking
+`render_trace(events, diagram_type="multi-agent")` produces a swim-lane diagram showing each agent's contribution.
+
+## Budget Tracking
+
+`BudgetTracker` enforces a hard cap. It raises `StudioRunnerError` when a spend would exceed the budget — fail-loud rather than silently overspending:
 
 ```python
 from spiritwriter.fabric.studio_runner import BudgetTracker
 
-tracker = BudgetTracker(budget_cents=100)  # $1.00 cap
-
-# After each LLM call
-tracker.spend(cost_cents, f"{stage}:{call_description}")
-
-# At end
-print(tracker.summary())
-# {"total_spent": 42, "budget_remaining": 58, "line_items": [...]}
-```
-
-### With Scoped Access (Entitlements)
-
-For sensitive inputs, encrypt and scope access per agent:
-
-```python
-from spiritwriter.fabric.crypto import encrypt_shard, generate_key
-from spiritwriter.fabric.entitlement import create_entitlement, Capability
-
-# Encrypt the input
-key = generate_key()
-encrypted = store.encrypt_and_store(input_shard, key)
-
-# Grant scoped access to the extraction agent
-token = create_entitlement(
-    issuer="pipeline-orchestrator",
-    subject="haiku-extractor",
-    scopes=["project:my-pipeline"],
-    capabilities=[Capability.SHARD_READ],
-    shard_keys={encrypted.shard_id: key},
-    budget_cents=10,
-    ttl_seconds=300,
+tracker = BudgetTracker(
+    budget_usd=1.00,                # hard cap
+    token_id="tok-001",             # optional — for trace correlation
+    tracer=emitter,                 # optional — emits budget_spent events
 )
 
-# Agent hydrates with entitlement
+tracker.record(label="extract:llm_call_1", amount=0.05)
+tracker.record(label="generate:llm_call_2", amount=0.42)
+
+tracker.spent       # 0.47
+tracker.remaining   # 0.53
+tracker.can_spend(0.10)   # True
+tracker.can_spend(1.00)   # False — would exceed budget
+
+tracker.summary()
+# {"budget_usd": 1.0, "spent_usd": 0.47, "remaining_usd": 0.53, "entries": [...]}
+```
+
+Note: the API is `record(label, amount)`, not `spend(amount, label)`. Arg order is label first.
+
+## Scoped Access via Entitlements
+
+For sensitive inputs, encrypt the input shard and grant scoped access per agent:
+
+```python
+from spiritwriter.fabric.crypto import generate_job_key
+from spiritwriter.fabric.entitlement import create_entitlement, Capability
+
+key = generate_job_key()
+encrypted = store.encrypt_and_store(input_shard, key)
+
+token = create_entitlement(
+    granted_to="haiku-extractor",
+    granted_by="pipeline-orchestrator",
+    shard_keys={encrypted.shard_id: key},   # raw bytes; create_entitlement serializes
+    scopes=["project:my-pipeline"],
+    capabilities=[Capability.SHARD_READ],
+    secrets=[],                              # no secret-store entitlements
+    budget_usd=0.10,
+    expires_at="2026-12-31T23:59:59Z",       # ISO timestamp; optional
+)
+
+# The agent hydrates with their token; the store enforces all checks
 context = store.hydrate_with_entitlement(token)
 ```
 
+See [encryption.md](encryption.md#entitlement-tokens) for the full validation order (expiry → capability → scope) and the per-shard-key distribution pattern.
+
 ## Per-Stage Overhead
 
-| What you add | Lines | When |
-|-------------|-------|------|
-| `emitter.emit("stage_started", ...)` | 1 | Before your logic |
-| `emitter.emit("stage_completed", ...)` | 1 | After your logic |
-| `write_checkpoint(...)` | 1 call (~15 lines in helper) | After your logic |
+| What you add | Cost | When |
+|--------------|------|------|
+| `emitter.emit("stage_started", ...)` | 1 line | Before stage logic |
+| `emitter.emit("stage_completed", ...)` | 1 line | After stage logic |
+| `write_checkpoint(...)` | 1 call (~15 lines in helper) | After stage logic |
 | `get_resume_stage(...)` | 1 call (~15 lines in helper) | At pipeline start |
-| `verify_chain(...)` | 1 | At pipeline end |
-| `render_trace(...)` | 1 | At pipeline end |
-| `BudgetTracker.spend(...)` | 1 per LLM call | Optional |
-| Entitlement setup | ~10 | Optional, for sensitive data |
+| `verify_chain(events)` | 1 line | At pipeline end |
+| `render_trace(events, diagram_type=...)` | 1 line | At pipeline end |
+| `BudgetTracker.record(label, amount)` | 1 line per LLM call | Optional |
+| Entitlement setup | ~10 lines | Optional, for sensitive data |
 
 **Total per stage: 2-3 lines.** The helpers are written once and reused across pipelines.
 
-## Provenance Report
+## Provenance Reports
 
-The trace JSONL file is a complete audit trail. Render it as:
+The trace JSONL is the source of truth for both audit and visualization. Three diagram types from the same events:
 
 ```python
-# Simple workflow diagram
-render_trace("run.jsonl", diagram_type="workflow")
+from spiritwriter.fabric.visualize import render_trace, load_trace
 
-# Shard genealogy (which shards derived from which)
-render_trace("run.jsonl", diagram_type="genealogy")
+events = emitter.get_events()              # in-memory
+# or: events = load_trace("run.jsonl")     # from disk
 
-# Multi-agent view (which agent did what)
-render_trace("run.jsonl", diagram_type="multi_agent")
+render_trace(events, diagram_type="workflow")     # stages and transitions
+render_trace(events, diagram_type="genealogy")    # which shard derived from which
+render_trace(events, diagram_type="multi-agent")  # which agent did what
 ```
 
-Output is Mermaid markdown, renderable as PNG/SVG by any Mermaid tool.
+Output is Mermaid markdown. Render as PNG/SVG with any Mermaid CLI or pipe through GitHub's auto-render.
 
 ## Claude Code Integration
 
-For CC-driven stages, use the checkpoint/resume pattern:
-
-```bash
-# Each CC invocation = one stage
-claude -p --permission-mode acceptEdits --max-turns 20 \
-  "Read job:my-pipeline:checkpoint. Run extract stage. Write checkpoint. Exit."
-
-# Verify checkpoint before advancing
-python3 -c "
-from spiritwriter.fabric.store import ShardStore
-store = ShardStore('/path/to/shards')
-c = store.resolve_ref('job:my-pipeline:checkpoint')
-assert c.get_atom('stage').value == 'extract_complete'
-print('✓ checkpoint verified')
-"
-
-# Next stage
-claude -p --permission-mode acceptEdits --max-turns 20 \
-  "Read job:my-pipeline:checkpoint. Run generate stage. Write checkpoint. Exit."
-```
-
-Or automate with a shell loop:
+For pipelines where each stage runs as a separate Claude Code invocation, the checkpoint pattern translates directly. Each invocation reads the checkpoint, runs one stage, writes the next checkpoint, exits. A shell loop drives the sequence:
 
 ```bash
 STAGES=("ingest" "extract" "generate" "validate" "assemble")
@@ -390,7 +351,7 @@ for stage in "${STAGES[@]}"; do
     claude -p --permission-mode acceptEdits --max-turns 20 \
         "Read job:my-pipeline:checkpoint. Run $stage stage only. Write checkpoint. Exit." \
         2>&1 | tee "logs/$stage.log"
-    
+
     python3 -c "
 from spiritwriter.fabric.store import ShardStore
 store = ShardStore('/path/to/shards')
@@ -401,15 +362,24 @@ print('✓ $stage verified')
 done
 ```
 
+Each invocation is a fresh process. The checkpoint shard is what carries state across them — Claude Code itself doesn't need to know about pipelines, only how to read and write shards.
+
+## What This Pattern Is Not
+
+- **Not transaction-safe across stages.** A crash mid-stage may leave the trace ahead of the checkpoint (the `stage_started` event written, no `stage_completed` yet). On resume, the chain is still valid, but the stage will re-run. Make stage handlers idempotent.
+- **Not for sub-second steps.** The overhead (emit + checkpoint write) is dominated by filesystem syncs — each stage costs a few ms. Fine for stages measured in seconds; wasteful for stages measured in microseconds.
+- **Not a replacement for retries.** If a stage fails transiently, this pattern lets you resume after a crash but doesn't decide *whether* to retry. Wrap stage handlers with your own retry logic before reaching for this.
+- **Not concurrency-safe across writers.** One emitter per trace file. For parallel stages, give each its own trace file and merge after.
+
 ## File Reference
 
 | File | What it does |
-|------|-------------|
-| `spiritwriter/fabric/shard.py` | MemoryShard, ShardAtom, content addressing |
-| `spiritwriter/fabric/store.py` | ShardStore, refs, checkpoint persistence |
-| `spiritwriter/fabric/emitter.py` | TraceEmitter, hash chain, verify_chain |
+|------|--------------|
+| `spiritwriter/fabric/shard.py` | `MemoryShard`, `ShardAtom`, content addressing |
+| `spiritwriter/fabric/store.py` | `ShardStore`, refs, checkpoint persistence |
+| `spiritwriter/fabric/emitter.py` | `TraceEmitter`, hash chain, `verify_chain` |
 | `spiritwriter/fabric/visualize.py` | Mermaid diagram generation |
 | `spiritwriter/fabric/crypto.py` | AES-256-GCM shard encryption |
 | `spiritwriter/fabric/entitlement.py` | Scoped access tokens |
 | `spiritwriter/fabric/studio_job.py` | Job packaging |
-| `spiritwriter/fabric/studio_runner.py` | Job execution, BudgetTracker |
+| `spiritwriter/fabric/studio_runner.py` | Job execution, `BudgetTracker` |

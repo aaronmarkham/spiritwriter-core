@@ -4,7 +4,7 @@ The same person shows up in three rosters as "Martinez, Carlos", "MARTINEZ, CARL
 
 That's the resolution problem this module solves. **Phalanx** is the system; the **CanonicalRegistry** is the runtime engine. Domain-agnostic — supply a schema describing how your entities are identified, and the registry handles deduplication across sources using deterministic-then-fuzzy matching.
 
-No embedding model, no LLM calls. Just SQLite, normalization, and tiered confidence scoring.
+No embedding model, no LLM calls. SQLite, normalization, and tiered confidence scoring.
 
 ## The Tier System
 
@@ -24,7 +24,7 @@ The split between auto-merge (T1, T2) and flag-only (T3, T4) is the safety valve
 
 The full Consensus Memory Canonicalization spec ([specs/cmc-spec-v0.1.md](specs/cmc-spec-v0.1.md)) draws on academic prior art (EDC/EMNLP 2024, Graphiti/Zep, SimpleMem, EMem-G) and defines a four-stage pipeline: **Normalize & Embed**, **Cluster & Block**, **Consensus & Merge**, **Reify & Store**. It targets ≥85% recall on semantic duplicates with ≤5% false-merge rate — the right architecture for large-scale knowledge graph construction.
 
-That pipeline needs embedding infrastructure (vec0), LLM calls in the clustering stage, and multi-pass consensus voting — three pieces of dedicated infrastructure. CMC-Lite picks the three highest-leverage ideas from the full spec and implements them with zero new dependencies:
+That pipeline needs embedding infrastructure (vec0), LLM calls in the clustering stage, and multi-pass consensus voting — three pieces of dedicated infrastructure. CMC-Lite picks the three highest-impact ideas from the full spec and implements them with zero new dependencies:
 
 1. **Entity Sense Signatures (ESS)** — from the "Bear Problem" analysis in the CMC spec. Multiple records mention "Bear": person, pet, or brand? ESS resolves it by hashing the *defining fields* together (name + DOB + gender), not the surface string. Same defining fields = same entity, regardless of how the source spelled it.
 2. **Tiered confidence resolution** — from the Graphiti/Zep pattern of escalating from deterministic to fuzzy to LLM-assisted. CMC-Lite implements T1 (exact ESS) through T4 (weak context) without requiring LLM calls.
@@ -302,7 +302,7 @@ The schema is the contract between your domain and the registry. Choose fields c
 
 ESS fields are what makes two records "the same entity." Pick fields that are:
 
-- **Present in most records.** Missing fields just don't contribute to the ESS — they don't fail resolution, but they weaken it.
+- **Present in most records.** Missing fields don't contribute to the ESS — they don't fail resolution, but they weaken it.
 - **Stable.** Address and phone change too often. Last name, DOB, SSN-last-4 don't.
 - **Together unique.** `last_name` alone is too broad. `last_name + first_name + dob` is usually enough for people.
 
@@ -327,7 +327,7 @@ Tighter thresholds reduce false merges. Looser thresholds catch more variants. C
 
 ### Context Fields
 
-Context fields drive T4 only. They never *cause* a match; they just confirm a weak signal:
+Context fields drive T4 only. They never *cause* a match; they confirm a weak one:
 
 ```python
 context_fields=["facility", "gender", "state"]
