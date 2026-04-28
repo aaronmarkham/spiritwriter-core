@@ -142,15 +142,22 @@ Pick the shortest TTL that still serves the use case. Permanent isn't a default 
 
 ### Keepalive via `last_checked`
 
-If you set `last_checked` when an agent re-validates a shard, the TTL anchors to that timestamp instead of `created_at`. This is the keepalive pattern for actively-polled shards: they stay alive as long as something is checking them, and decay naturally once attention moves elsewhere.
+If `last_checked` is set when an agent re-validates a shard, the TTL anchors to that timestamp instead of `created_at`. This is the keepalive pattern for actively-polled shards: they stay alive as long as something is checking them, and decay naturally once attention moves elsewhere.
+
+There's a subtlety. `last_checked` and `check_count` aren't part of the content address — mutating them doesn't change `shard_id`. And `store.put()` is no-op for existing IDs, so calling `put()` after mutation will *not* update the on-disk file. To persist a keepalive update, write the shard JSON directly to its content-addressed path:
 
 ```python
+from datetime import datetime, timezone
+
 shard.last_checked = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 shard.check_count += 1
-# Note: this mutates the in-memory object but doesn't change shard_id —
-# last_checked isn't part of the content address. Re-store via store.put()
-# or update the existing on-disk record explicitly.
+
+# Direct write — store.put() would be a no-op since the file already exists
+path = store._shard_path(shard.shard_id)
+path.write_text(shard.to_json(), encoding="utf-8")
 ```
+
+This reaches into a private method (`_shard_path`); there's no public keepalive helper today. If you need this pattern often, wrap it in your application layer or open an issue for a first-class API.
 
 ### Lineage via `parent_shard_id`
 
@@ -175,7 +182,7 @@ store.put(v2)
 
 `v1` stays addressable. Anyone holding the old ID can still resolve it. Lineage is forward-readable (`v2.parent_shard_id` points back) but not backward — the store doesn't index "children of v1." If you need that, use a named ref and walk the chain manually.
 
-For the supersede-with-stable-name pattern (a ref pointing to "the latest"), see [Named Refs in shard-store.md](shard-store.md#named-refs--mutable-pointers).
+For the supersede-with-stable-name pattern (a ref pointing to "the latest"), see [Named Refs in shard-store.md](shard-store.md#named-refs).
 
 ## Hydration — turning shards into prompt context
 
@@ -199,7 +206,7 @@ Instructions render as actionable bullets instead of bracketed kind labels:
 - **startup_step_1**: Run 'alembic upgrade head' before starting the app
 ```
 
-For token-constrained contexts, `hydrate_compact()` strips the XML wrapper and atom kinds — roughly 40-60% fewer characters. Use it when assembling large multi-shard contexts under a tight budget.
+For token-constrained contexts, `hydrate_compact()` strips the XML wrapper and atom kinds — typically 40-60% fewer characters depending on atom shape (a 3-atom mixed shard measures around 50%). Use it when assembling large multi-shard contexts under a tight budget.
 
 ### Token estimation
 
