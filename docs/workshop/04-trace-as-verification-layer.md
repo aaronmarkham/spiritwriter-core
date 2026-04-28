@@ -4,7 +4,7 @@
 
 ## What you'll learn
 
-In this lesson you'll integrate spiritwriter trace events into your agent pipeline so that verification happens automatically. You'll move from shell-script output checking (Lesson 3) to cryptographic proof chains that record what was planned, what happened, and what was verified.
+After this lesson you'll integrate spiritwriter trace events into your agent pipeline so verification happens automatically. You'll move from shell-script output checking (Lesson 3) to cryptographic proof chains that record what was planned, what happened, and what was verified.
 
 ## Prerequisites
 
@@ -18,7 +18,7 @@ In this lesson you'll integrate spiritwriter trace events into your agent pipeli
 
 Spiritwriter is a cryptographic provenance framework. Each step of a pipeline emits **trace events** — structured records linked by SHA-256 hashes into a chain. The chain is tamper-evident: modifying any event invalidates all subsequent hashes.
 
-A trace event looks like this:
+A trace event:
 
 ```json
 {
@@ -35,7 +35,7 @@ A trace event looks like this:
 }
 ```
 
-Note the schema: `type` (not `event_type`), `ts` (not `timestamp`), `prev_event_hash` (not `parent_hash`), and kwargs are spread at the top level (no `payload` wrapper). Each event also carries `run_id`, `agent_id`, and `event_id`.
+Note the schema: `type` (not `event_type`), `ts` (not `timestamp`), `prev_event_hash` (not `parent_hash`), and kwargs spread at the top level (no `payload` wrapper). Each event carries `run_id`, `agent_id`, and `event_id`.
 
 The chain links: input registration → evidence file hashes → DEX string corpus → per-finding derivation → report hash. Each step references the previous step's hash via `prev_event_hash`. You can verify the entire chain from source artifact to conclusion.
 
@@ -44,13 +44,13 @@ The chain links: input registration → evidence file hashes → DEX string corp
 The `verify-outputs.sh` script from Lesson 3 checks that files exist. Spiritwriter trace gives you:
 
 1. **Tamper evidence.** The hash chain proves files weren't modified after generation.
-2. **Methodology verification.** The trace records what actually happened. If an agent fell back to regex instead of Rizin (see [Lesson 2](02-tool-availability-and-silent-degradation.md)), you can detect this by examining the `audit_strings_extracted` event — its payload will reflect the extraction method used.
+2. **Methodology verification.** The trace records what actually happened. If an agent fell back to regex instead of Rizin (see [Lesson 2](02-tool-availability-and-silent-degradation.md)), the `audit_strings_extracted` event reveals the extraction method used.
 3. **Audit trail for the audit.** When you publish security findings, the trace chain shows every step, every input hash, every tool invocation.
 4. **Composability.** Individual agent traces link into batch traces. Batch traces link into campaign traces. You can zoom from "20 apps rated HIGH risk" down to "this specific DEX string in this specific APK."
 
 ## Step 1: Add trace emission to your agent
 
-Start by having your agent emit trace events during its work. This is the minimum viable integration:
+The minimum viable integration:
 
 ```python
 from spiritwriter.fabric import TraceEmitter
@@ -66,20 +66,20 @@ emitter.emit("audit_complete", findings=11, risk="HIGH")
 # No save() call needed — events are written to out_path on each emit()
 ```
 
-The constructor takes three required arguments: `run_id`, `agent_id`, and `out_path`. The `emit()` method takes an event type string and keyword arguments (not a dict). Events are appended to the output file incrementally.
+The constructor takes three required arguments: `run_id`, `agent_id`, and `out_path`. The `emit()` method takes an event type string and keyword arguments (not a dict). Events append to the output file incrementally.
 
-The audit skill's trace chain emits these five event types (from `spiritwriter.audit.provenance`):
+The audit skill's trace chain emits five event types (from `spiritwriter.audit.provenance`):
 
 ```
 audit_input_registered → audit_evidence_extracted → audit_strings_extracted →
 audit_finding_derived (×N, one per finding) → audit_report_generated
 ```
 
-If an agent's trace chain stops at `audit_finding_derived` and never emits `audit_report_generated`, you know the report wasn't finalized — even if a report file exists on disk.
+If an agent's trace chain stops at `audit_finding_derived` and never emits `audit_report_generated`, the report wasn't finalized — even if a report file exists on disk.
 
 ## Step 2: Emit a plan event before dispatching agents
 
-Before launching parallel agents, emit a trace event that declares what you expect each agent to produce. Plan events are not part of the audit skill's built-in trace types — you're extending the trace chain to cover your own orchestration logic:
+Before launching parallel agents, emit a trace event that declares what each agent should produce. Plan events aren't part of the audit skill's built-in trace types — this extends the trace chain to cover orchestration logic:
 
 ```python
 from spiritwriter.fabric import TraceEmitter
@@ -163,11 +163,11 @@ emitter.emit(
 )
 ```
 
-The validation result is itself a trace event, so it's part of the cryptographic record.
+The validation result is itself a trace event — part of the cryptographic record.
 
 ## Step 4: Read the full trace chain
 
-The resulting trace chain for a batch audit looks like:
+The resulting trace chain for a batch audit:
 
 ```
 agent_dispatch_plan (12 counties, 3 agents, 36 expected files)
@@ -183,11 +183,11 @@ This is both a **verification mechanism** (catches gaps automatically) and a **p
 
 ## Getting started incrementally
 
-You don't need to implement the full plan → validate → gap-detect flow all at once. Build up in levels:
+You don't need the full plan → validate → gap-detect flow all at once. Build up in levels:
 
 ### Level 1: Add trace to your agent output
 
-Have your agent emit trace events during its work. This costs almost nothing and gives you a log of what actually happened (vs. what the agent said it did). For the audit skill, `trace_existing_audit()` handles this automatically.
+Have your agent emit trace events during its work. Nearly zero overhead, and you get a log of what actually happened (vs. what the agent said it did). For the audit skill, `trace_existing_audit()` handles this automatically.
 
 ### Level 2: Add post-batch validation
 
@@ -205,6 +205,10 @@ Before dispatching agents, emit a plan event. Now the trace chain covers the ful
 - [ ] For parallel agent dispatches, emit a plan event before launching
 - [ ] Check trace chains for methodology events (was the right tool used?)
 - [ ] Store trace files alongside output artifacts
+
+## What comes next
+
+You have a pipeline that verifies itself. The trace data tells you exactly what happened on every run. Now use that data to make the pipeline better: define a scoring function, create prompt variants, run them against the same batch, and let the trace data pick a winner. That's [Lesson 5](05-self-improving-pipelines.md).
 
 ---
 

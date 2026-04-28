@@ -4,7 +4,7 @@
 
 ## What you'll learn
 
-In this lesson you'll learn why parallel agents given the same prompt can produce different outputs, and how to write prompts that specify **requirements** rather than **capabilities**. You'll also set appropriate turn budgets and add post-completion verification.
+After this lesson you'll write prompts that specify **requirements** rather than **capabilities**, set turn budgets that don't starve your agents, and add post-completion verification that catches gaps before they become problems.
 
 ## Prerequisites
 
@@ -15,9 +15,11 @@ In this lesson you'll learn why parallel agents given the same prompt can produc
 
 ### Capabilities vs. requirements
 
-This is the single most important distinction in prompt engineering for agent pipelines: the difference between a prompt that says "the audit module supports provenance tracing" and one that says "you MUST generate trace files" is the difference between optional and mandatory. Agents interpret "supports" and "can generate" as capabilities they may use. They interpret "MUST produce" as requirements they can't skip.
+This is the most important distinction in this workshop — and possibly in prompt engineering for agent pipelines generally.
 
-When a prompt describes something as a capability, some runs will use it and some won't — depending on how the model prioritizes within its turn budget. When a prompt specifies it as a requirement, the agent treats it as a hard constraint.
+The difference between "the audit module supports provenance tracing" and "you MUST generate trace files" is the difference between optional and mandatory. Agents interpret "supports" and "can generate" as capabilities they may use. They interpret "MUST produce" as constraints they can't skip.
+
+Describe something as a capability, and some runs will use it, some won't — depending on how the model prioritizes within its turn budget. Specify it as a requirement, and the agent treats it as a hard constraint.
 
 ### Non-determinism in LLM agents
 
@@ -28,7 +30,7 @@ LLMs are non-deterministic by nature. Even with identical inputs, the model may:
 - Budget its turns differently based on early decisions
 - Hit the turn limit and triage away tasks it considers optional
 
-This means running three parallel agents with the same prompt and skill file can produce three different sets of outputs. One agent might produce all expected deliverables; another might skip provenance files because it ran out of turns. The capability-vs-requirement distinction above is what makes this manageable: explicit requirements reduce the surface area for non-deterministic behavior.
+Three parallel agents, same prompt, same skill file — three different sets of outputs. One produces all expected deliverables; another skips provenance files because it ran out of turns. The capability-vs-requirement distinction is what makes this manageable: explicit requirements reduce the surface area for non-deterministic behavior.
 
 ## Step 1: Specify explicit deliverables
 
@@ -52,11 +54,11 @@ All 3 files are REQUIRED. If any file is missing for any county, the audit is in
 Do not move to the next APK until all 3 files exist for the current one.
 ```
 
-The last line is important — it forces sequential verification rather than letting the agent batch work and skip deliverables for earlier items.
+That last line forces sequential verification — the agent checks its own work before moving on, instead of batching everything and silently dropping deliverables for earlier items.
 
 ## Step 2: Budget turns generously
 
-When dispatching parallel agents, each gets a `--max-turns` budget. If the budget is too tight, some agents will run out of room and silently drop lower-priority work.
+Each agent gets a `--max-turns` budget. Too tight, and some agents run out of room and silently drop lower-priority work.
 
 A rule of thumb:
 
@@ -73,7 +75,7 @@ Setting `--max-turns 60` gives zero buffer. An agent that takes a few extra turn
 
 ## Step 3: Dispatch parallel agents
 
-With explicit deliverables and generous turn budgets, you can dispatch parallel agents:
+With explicit deliverables and generous turn budgets:
 
 ```bash
 # Agent A — counties 1-4
@@ -95,11 +97,11 @@ claude -p "Audit these APKs: Covington, Limestone, Marshall, Montgomery" \
 wait
 ```
 
-Even with all the right settings, you can't guarantee identical behavior across agents. That's expected — the next step compensates for it.
+Even with all the right settings, identical behavior across agents isn't guaranteed. That's expected — the next step compensates for it.
 
 ## Step 4: Verify outputs after completion
 
-Add a post-completion check that treats missing files as failures, not caveats.
+Add a post-completion check that treats missing files as failures, not caveats:
 
 ```bash
 #!/bin/bash
@@ -125,7 +127,7 @@ fi
 echo "All outputs verified."
 ```
 
-For a more robust verification approach using spiritwriter's trace chain, see [Lesson 4](04-trace-as-verification-layer.md).
+For a more robust approach using spiritwriter's trace chain, see [Lesson 4](04-trace-as-verification-layer.md).
 
 ## The deeper issue
 
@@ -150,6 +152,10 @@ For security audit pipelines specifically, the consequences of non-deterministic
 - [ ] Add a post-completion verification step (script or automated check)
 - [ ] If dispatching N parallel agents, verify all N produced complete output
 - [ ] Treat partial output as failure, not success with caveats
+
+## What comes next
+
+Shell-script verification (does the file exist?) catches the obvious gaps. But it can't tell you whether the agent used Rizin or fell back to regex, can't prove files weren't modified after generation, and can't link findings back to their source evidence. That's where cryptographic trace chains come in. [Lesson 4](04-trace-as-verification-layer.md).
 
 ---
 

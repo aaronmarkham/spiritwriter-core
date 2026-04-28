@@ -24,7 +24,7 @@ Requires Python 3.9+.
 
 ### Memory Shards
 
-A **MemoryShard** is the fundamental unit of distributable agent memory. Think of it as a content-addressed bundle of structured knowledge:
+A **MemoryShard** is the fundamental unit of distributable agent memory — a content-addressed bundle of structured knowledge:
 
 ```python
 from spiritwriter.fabric.shard import MemoryShard, ShardAtom, AtomKind, DecayClass
@@ -92,7 +92,7 @@ latest = store.resolve_ref("project-myproject")
 
 ### Encryption
 
-Two layers of encryption protect shards at rest and in transit:
+Two encryption layers, covering shards at rest and in transit:
 
 **AES-256-GCM** — symmetric encryption for agent-to-agent sharing:
 
@@ -127,7 +127,7 @@ decrypted = unseal_shard(sealed, keypair.private_key)
 
 ### Entity Resolution (Phalanx)
 
-The **CanonicalRegistry** is the runtime component of Phalanx (spiritwriter's entity resolution system, based on the [Consensus Memory Canonicalization](specs/cmc-spec-v0.1.md) spec). It resolves entities across records using tiered confidence matching:
+The **CanonicalRegistry** is Phalanx's runtime component (spiritwriter's entity resolution system, based on the [Consensus Memory Canonicalization](specs/cmc-spec-v0.1.md) spec). It resolves entities across records using tiered confidence matching:
 
 ```python
 from spiritwriter.fabric.canonicalize import (
