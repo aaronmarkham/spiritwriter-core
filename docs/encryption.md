@@ -8,7 +8,7 @@ Two encryption layers, one access-control layer. Pick based on **who you don't t
 
 If your operator is your own service running on your own machine, AES is fine and faster. If your operator is shared infrastructure, a third party, or anything you wouldn't hand a plaintext copy to — sealed-box.
 
-## What stays visible
+## What Stays Visible
 
 Both shapes leak the same metadata. The trade-off is operator capability, not metadata privacy.
 
@@ -48,7 +48,7 @@ assert decrypted.shard_id == shard.shard_id
 
 `encrypt_shard` produces an `EncryptedShard` carrying ciphertext, nonce, and the SHA-256 hash of the original plaintext. `decrypt_shard` verifies that hash after decryption — if the bytes have been tampered with (or you decrypted with a key that produces valid-looking but wrong plaintext), it raises `DecryptionError`.
 
-### Failure modes
+### Failure Modes
 
 ```python
 # Wrong key — AES-GCM auth tag fails
@@ -71,7 +71,24 @@ except DecryptionError:
 
 GCM's auth tag covers the ciphertext. The separate `content_hash` field is belt-and-suspenders — it catches the case where someone swaps payloads at the storage layer without re-encrypting.
 
-### Key serialization
+### EncryptedShard Fields
+
+The on-disk shape, for anyone implementing a custom backend or debugging a serialization issue:
+
+| Field | Visible | Description |
+|-------|---------|-------------|
+| `shard_id` | Yes | Content address of the original (plaintext) shard |
+| `scope` | Yes | Entitlement boundary |
+| `encrypted_payload` | No | AES-256-GCM ciphertext (the encrypted shard JSON) |
+| `nonce` | No | 12-byte random nonce — fresh per encryption |
+| `atom_count` | Yes | Number of atoms (for cost estimation without decryption) |
+| `created_at` | Yes | ISO timestamp of the source shard |
+| `origin_agent` | Yes | Creating agent id |
+| `content_hash` | Yes | SHA-256 of plaintext — verified on decrypt |
+
+Serialization is JSON via `to_dict()` / `from_dict()`. Binary fields (`encrypted_payload`, `nonce`) are base64-encoded.
+
+### Key Serialization
 
 Keys are 32 bytes — base64url for transport:
 
@@ -81,7 +98,7 @@ key_back = deserialize_key(key_str)      # bytes; raises ValueError if not 32 by
 assert key == key_back
 ```
 
-### Store integration
+### Store Integration
 
 ```python
 from spiritwriter.fabric.store import ShardStore
@@ -101,7 +118,7 @@ Sealed-box uses an ephemeral Curve25519 key per message, encrypted with the owne
 
 Requires PyNaCl: `pip install 'spiritwriter-core[sealed]'`.
 
-### When sealed-box is the right answer
+### When to Use Sealed-Box
 
 - **Zero-knowledge monitoring.** Families search for detained people on shared infrastructure; the operator never sees search terms or matches (frio).
 - **Multi-tenant hosting.** Tenant data lives on shared storage; the host can't read it.
@@ -110,7 +127,7 @@ Requires PyNaCl: `pip install 'spiritwriter-core[sealed]'`.
 
 If any of those describe the trust boundary, sealed-box. Otherwise the symmetric-key path is simpler and faster.
 
-### Key management
+### Key Management
 
 ```python
 from spiritwriter.fabric.sealed import (
@@ -132,7 +149,7 @@ service_kp = OwnerKeypair.from_public_b64(keypair.public_key_b64)
 
 The split is enforced at construction. A service that never holds the private key cannot accidentally leak it.
 
-### Sealing raw data
+### Sealing Raw Data
 
 ```python
 plaintext = b'{"name": "John Smith", "booking": "2024-1234"}'
@@ -142,7 +159,7 @@ decrypted = unseal_as_owner(ciphertext, keypair.private_key)
 assert decrypted == plaintext
 ```
 
-### Sealing shards
+### Sealing Shards
 
 ```python
 from spiritwriter.fabric.sealed import seal_shard, unseal_shard, UnsealError
@@ -160,7 +177,22 @@ decrypted = unseal_shard(sealed, keypair.private_key)
 
 `unseal_shard` raises `UnsealError` if the wrong private key is used or the payload is tampered.
 
-### Ed25519 signing for result integrity
+### SealedShard Fields
+
+| Field | Visible | Description |
+|-------|---------|-------------|
+| `shard_id` | Yes | Content address of the original shard |
+| `scope` | Yes | Entitlement boundary |
+| `sealed_payload` | No | NaCl sealed-box ciphertext — opaque to operator |
+| `owner_pubkey` | Yes | 32-byte Curve25519 public key (used for result delivery) |
+| `atom_count` | Yes | Number of atoms |
+| `created_at` | Yes | ISO timestamp |
+| `origin_agent` | Yes | Creating agent id |
+| `content_hash` | Yes | SHA-256 of plaintext — verified on unseal |
+
+Note that `owner_pubkey` is stored alongside the sealed payload. That's deliberate: it lets the operator address subsequent results back to the same owner without holding any per-owner state.
+
+### Ed25519 Signing for Result Integrity
 
 Sealed-box keeps content private but doesn't prove who produced it. For "this came from service X, not someone impersonating service X," sign with Ed25519:
 
@@ -181,7 +213,7 @@ verify_signature(ciphertext, signature, verify_key)   # True or raises BadSignat
 
 Pair sealing with signing for the full pattern: service seals result for owner, signs the sealed payload, owner verifies signature then unseals.
 
-### Store integration
+### Store Integration
 
 ```python
 sealed = store.seal_and_store(shard, keypair.public_key)
@@ -238,7 +270,7 @@ Pass `key` as raw bytes. `create_entitlement` calls `serialize_key()` internally
 | `EXEC_RUN` | Execute commands |
 | `UPLOAD_YOUTUBE` | Upload to YouTube |
 
-### Entitlement-aware hydration
+### Entitlement-Aware Hydration
 
 ```python
 context = store.hydrate_with_entitlement(token)
@@ -263,7 +295,7 @@ What the layers protect against, and what they don't:
 | Replay (storing the same shard twice) | n/a | n/a | Idempotent by content address — re-store is a no-op |
 | Impersonation of result producer | No | No | Use Ed25519 signing for that |
 
-### What this layer is not
+### What This Layer Is Not
 
 - **Not perfect forward secrecy.** A leaked key compromises every shard encrypted with it. Rotate by re-encrypting under a new key (mint a new shard, since the underlying plaintext is the same).
 - **Not a key-management system.** Generating, storing, distributing, and rotating keys is your problem. See [entitlement tokens](#entitlement-tokens) for the per-job key-distribution pattern, but the root key trust is up to you.

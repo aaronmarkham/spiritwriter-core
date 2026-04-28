@@ -22,11 +22,13 @@ The split between auto-merge (T1, T2) and flag-only (T3, T4) is the safety valve
 
 ## Why CMC-Lite
 
-The full Consensus Memory Canonicalization spec ([specs/cmc-spec-v0.1.md](specs/cmc-spec-v0.1.md)) targets large-scale knowledge graph construction with embedding lookup, LLM-assisted clustering, and multi-pass consensus voting — three pieces of infrastructure. CMC-Lite picks the three highest-leverage ideas from that spec and implements them with zero new dependencies:
+The full Consensus Memory Canonicalization spec ([specs/cmc-spec-v0.1.md](specs/cmc-spec-v0.1.md)) draws on academic prior art (EDC/EMNLP 2024, Graphiti/Zep, SimpleMem, EMem-G) and defines a four-stage pipeline: **Normalize & Embed**, **Cluster & Block**, **Consensus & Merge**, **Reify & Store**. It targets ≥85% recall on semantic duplicates with ≤5% false-merge rate — the right architecture for large-scale knowledge graph construction.
 
-1. **Entity Sense Signatures (ESS)** — solves the "Bear Problem" from the full spec. Multiple records mention "Bear" — is that a person, a pet, or a brand? ESS resolves it by hashing the *defining fields* together (name + DOB + gender), not the surface string. Same defining fields = same entity, regardless of how the source spelled it.
-2. **Tiered confidence resolution** — escalate from deterministic (T1) to fuzzy (T2/T3) to context-only (T4) without LLM calls.
-3. **Phalanx (overlapping windows)** — the extraction pipeline ([examples/extract_memory.py](examples/extract_memory.py)) uses overlapping text chunks so facts spanning chunk boundaries get captured by at least two passes. Originally called "shingles" (overlapping roof tiles); renamed Phalanx for the stronger metaphor — overlapping shields, mutual coverage. Variable names in `extract_memory.py` still say "shingle" for historical reasons.
+That pipeline needs embedding infrastructure (vec0), LLM calls in the clustering stage, and multi-pass consensus voting — three pieces of dedicated infrastructure. CMC-Lite picks the three highest-leverage ideas from the full spec and implements them with zero new dependencies:
+
+1. **Entity Sense Signatures (ESS)** — from the "Bear Problem" analysis in the CMC spec. Multiple records mention "Bear": person, pet, or brand? ESS resolves it by hashing the *defining fields* together (name + DOB + gender), not the surface string. Same defining fields = same entity, regardless of how the source spelled it.
+2. **Tiered confidence resolution** — from the Graphiti/Zep pattern of escalating from deterministic to fuzzy to LLM-assisted. CMC-Lite implements T1 (exact ESS) through T4 (weak context) without requiring LLM calls.
+3. **Phalanx (overlapping windows)** — from the overlapping-window extraction pattern. The pipeline ([examples/extract_memory.py](examples/extract_memory.py)) uses overlapping text chunks so facts spanning chunk boundaries get captured by at least two passes. Originally called "shingles" (overlapping roof tiles); renamed Phalanx because the metaphor is stronger (overlapping shields, mutual coverage, defensive strength) and avoids the medical connotation. Variable names in `extract_memory.py` still say "shingle" for historical reasons.
 
 The CanonicalRegistry documented below is the runtime half; `extract_memory.py` is the ingestion half. Together: extract atoms from text using overlapping windows, then resolve entities across atoms using ESS + tiered matching.
 
@@ -80,7 +82,7 @@ cid = registry.upsert(
 )
 ```
 
-### T1: same person, different source
+### T1: Same Person, Different Source
 
 The defining fields are identical after normalization (lowercased, stripped). Different `last_name` casing doesn't matter — ESS computation lowercases everything before hashing.
 
@@ -101,7 +103,7 @@ result2.canonical_id   # same cid as candidate1
 registry.upsert(candidate2, result2, source_name="ndoc", source_id="ndoc-56789")
 ```
 
-### T3: same person, middle initial
+### T3: Same Person, Middle Initial
 
 Now the first name has a middle initial — `"CARLOS A"` vs `"Carlos"`. ESS uses `.strip().lower()` only, *not* full name normalization, so the ESS digests are different and T1 misses. Fuzzy resolution picks it up but lands at T3, not T2 — and the reason teaches the tier system.
 
@@ -125,11 +127,11 @@ result3.field_matches  # {"last_name": True, "first_name": True}
 
 The takeaway: T2 needs both *high fuzzy quality* and *high ESS overlap*. A middle-initial divergence drops the second one even when the first is solid. To T2-merge this, the candidate would need to either match ESS exactly (no divergent field) or share more fields. T3 is the right answer here — strong-but-not-certain — and it correctly punts to manual review.
 
-### T2: catching the strong case
+### T2: Catching the Strong Case
 
 For T2 you need fuzzy variations that *don't* break ESS overlap — typically because the variation is in a fuzzy-only field that isn't part of ESS, or because both records share an extra ESS field that pulls overlap up. In the inmate schema, T2 typically fires on case differences plus minor first-name variation when DOB matches exactly.
 
-### T3 from a typo
+### T3: Typo, Low Confidence
 
 ```python
 candidate4 = {
@@ -149,7 +151,7 @@ T3 doesn't auto-merge. The merge event lands in the `merges` table for review �
 
 **ESS by design.** ESS is *exact-match-after-light-normalization*. Fuzzy matching handles the long tail of typos, middle initials, and transliterations without weakening the T1 guarantee. The trade-off: anything that breaks ESS overlap costs you a tier, even when fuzzy says "looks like a match."
 
-### Batch processing
+### Batch Processing
 
 ```python
 records = [
@@ -196,7 +198,7 @@ ess1 == ess3          # False — different field set, different digest
 
 **Watch out:** ESS normalization is `.strip().lower()`, not `normalize_name()`. That means `"Carlos"` and `"CARLOS A"` produce *different* digests — fuzzy matching exists to bridge that gap. Don't try to be clever and pre-normalize before passing to ESS; the registry handles it.
 
-### Age bucketing
+### Age Bucketing
 
 When DOB is missing but age is known, bucket ages so close ages share an ESS field:
 
@@ -228,13 +230,13 @@ normalize_date("05/12/1990")    # "1990-05-12"
 normalize_date("May 12, 1990")  # "1990-05-12"
 normalize_date("garbage")       # None
 
-fuzzy_score("Martinez", "MARTINEZ")   # 1.0  (exact after normalization)
-fuzzy_score("Carlos", "Carlitos")     # ~0.70-0.80
-fuzzy_score("Smith",  "Smythe")       # ~0.60
-fuzzy_score("A",      "ALEXANDER")    # 0.0  (length-ratio filter rejects)
+fuzzy_score("Martinez", "MARTINEZ")   # 1.0   (exact after normalization)
+fuzzy_score("Carlos",   "Carlitos")   # ~0.86 (prefix-match boost — Carlos is a 6-char prefix of Carlitos)
+fuzzy_score("Smith",    "Smythe")     # ~0.73 (no prefix — diverges at char 3 — plain SequenceMatcher ratio)
+fuzzy_score("A",        "ALEXANDER")  # 0.0   (length-ratio filter rejects: 1/9 < 0.5)
 ```
 
-`fuzzy_score` is `SequenceMatcher.ratio()` with `normalize_name` pre-applied, plus a prefix-match boost (one is a prefix of the other ≥3 chars → minimum 0.85) and a length-ratio filter (≤0.5 or ≥2.0 ratio → 0.0). The filter is what stops "A" from fuzzy-matching every name starting with A.
+`fuzzy_score` is `SequenceMatcher.ratio()` with `normalize_name` pre-applied, plus a **prefix-match boost** (one string is a ≥3-char prefix of the other → score floored at 0.85) and a **length-ratio filter** (length ratio ≤0.5 or ≥2.0 → score is 0.0). The filter is what stops "A" from fuzzy-matching every name starting with A. The boost is what makes middle-initial cases like "Carlos" / "Carlos A" produce solidly-matching first-name scores even though `SequenceMatcher.ratio()` alone would land lower.
 
 ## Querying the Registry
 
@@ -296,7 +298,7 @@ registry.stats()
 
 The schema is the contract between your domain and the registry. Choose fields carefully — once the registry has data, the schema hash check prevents you from changing it.
 
-### ESS fields — the defining identity
+### ESS Fields
 
 ESS fields are what makes two records "the same entity." Pick fields that are:
 
@@ -310,7 +312,7 @@ ESS fields are what makes two records "the same entity." Pick fields that are:
 | `manufacturer`, `model_number` (products) | `current_price`, `stock_status` | Defining vs incidental |
 | `entity_name`, `scope` (memory entities) | `last_seen`, `confidence` | Identity vs metadata |
 
-### Fuzzy fields — bridging the long tail
+### Fuzzy Fields
 
 Fuzzy fields handle name variations, typos, transliterations. The threshold determines how much variation T2/T3 will accept:
 
@@ -323,7 +325,7 @@ fuzzy_fields={
 
 Tighter thresholds reduce false merges. Looser thresholds catch more variants. Calibrate against your actual data — if you have ground-truth pairs, sweep the threshold and pick the elbow.
 
-### Context fields — weak tiebreakers
+### Context Fields
 
 Context fields drive T4 only. They never *cause* a match; they just confirm a weak signal:
 
@@ -333,7 +335,7 @@ context_fields=["facility", "gender", "state"]
 
 If your domain doesn't have weak-but-corroborating signals, leave this empty. T4 is opt-in.
 
-### Custom schemas
+### Custom Schemas
 
 The same engine handles any entity type:
 
