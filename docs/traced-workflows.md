@@ -82,9 +82,9 @@ The named ref is what makes resume work — it's a stable handle the next proces
 On startup, find the last completed stage and resume after it:
 
 ```python
-def get_resume_stage(store, stages, ref_name="job:my-pipeline:checkpoint"):
+def get_resume_stage(store, stages, pipeline_name="my-pipeline"):
     """Return (next_stage_to_run, checkpoint_shard_or_None)."""
-    shard = store.resolve_ref(ref_name)
+    shard = store.resolve_ref(f"job:{pipeline_name}:checkpoint")
     if shard is None:
         return stages[0], None    # nothing to resume from
 
@@ -92,6 +92,7 @@ def get_resume_stage(store, stages, ref_name="job:my-pipeline:checkpoint"):
     if atom is None:
         return stages[0], None
 
+    # Stage names must not contain "_complete" as a substring — see note below.
     completed = atom.value.replace("_complete", "")
     if completed in stages:
         next_idx = stages.index(completed) + 1
@@ -100,6 +101,8 @@ def get_resume_stage(store, stages, ref_name="job:my-pipeline:checkpoint"):
 
     return stages[0], None
 ```
+
+**Naming gotcha.** This helper recovers the completed stage by stripping `_complete` from the atom value. If a stage name itself contains `_complete` as a substring (e.g. `validation_complete_check`), the strip mangles it. Either keep stage names free of that substring, or replace this with a structured key — `key="completed_stage"`, `value=stage` (no suffix manipulation). The shape below in the Complete Pipeline Template uses the same convention; change both if you change one.
 
 ### Verify and Render
 
@@ -307,20 +310,20 @@ token = create_entitlement(
 context = store.hydrate_with_entitlement(token)
 ```
 
-See [encryption.md](encryption.md#entitlement-tokens) for the full validation order (expiry → capability → scope) and the per-shard-key distribution pattern.
+The store enforces three checks before decryption: token not expired → has `SHARD_READ` → per-shard scope matches the token's `scopes` patterns. Any failure raises `PermissionError` *before* any plaintext is touched. See [encryption.md](encryption.md#entitlement-tokens) for the full validation order and the per-shard-key distribution pattern.
 
 ## Per-Stage Overhead
 
-| What you add | Cost | When |
-|--------------|------|------|
-| `emitter.emit("stage_started", ...)` | 1 line | Before stage logic |
-| `emitter.emit("stage_completed", ...)` | 1 line | After stage logic |
-| `write_checkpoint(...)` | 1 call (~15 lines in helper) | After stage logic |
-| `get_resume_stage(...)` | 1 call (~15 lines in helper) | At pipeline start |
-| `verify_chain(events)` | 1 line | At pipeline end |
-| `render_trace(events, diagram_type=...)` | 1 line | At pipeline end |
-| `BudgetTracker.record(label, amount)` | 1 line per LLM call | Optional |
-| Entitlement setup | ~10 lines | Optional, for sensitive data |
+| What you add | Lines | When |
+|--------------|-------|------|
+| `emitter.emit("stage_started", ...)` | 1 | Before stage logic |
+| `emitter.emit("stage_completed", ...)` | 1 | After stage logic |
+| `write_checkpoint(...)` | 1 call site (~15 lines in helper) | After stage logic |
+| `get_resume_stage(...)` | 1 call site (~15 lines in helper) | At pipeline start |
+| `verify_chain(events)` | 1 | At pipeline end |
+| `render_trace(events, diagram_type=...)` | 1 | At pipeline end |
+| `BudgetTracker.record(label, amount)` | 1 per LLM call | Optional |
+| Entitlement setup | ~10 | Optional, for sensitive data |
 
 **Total per stage: 2-3 lines.** The helpers are written once and reused across pipelines.
 

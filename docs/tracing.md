@@ -157,7 +157,9 @@ assert verify_chain(events)   # True if intact, False if tampered
 2. Each event's `prev_event_hash` matches the previous event's `hash`.
 3. The first event's `prev_event_hash` is `None`.
 
-Any single-field edit, event insertion, event removal, or reordering breaks one of those three invariants. There's no signature on `verify_chain` itself — it's a pure function on a list of dicts, so you can verify chains produced by other agents or other runs by reading their JSONL and passing the result.
+Any single-field edit, event insertion, mid-chain removal, or reordering breaks one of those three invariants. There's no signature on `verify_chain` itself — it's a pure function on a list of dicts, so you can verify chains produced by other agents or other runs by reading their JSONL and passing the result.
+
+**One thing `verify_chain` cannot detect: tail-truncation.** Dropping events from the *end* of a chain leaves every remaining event still hashing correctly and linking to its predecessor. To detect a truncated tail, emit a terminal event (e.g. `pipeline_completed`, `run_completed`) and have your consumer assert it's present — or, for stronger guarantees, pin the chain length with an external commitment (a final hash-of-all-priors, or a length receipt to a separate log).
 
 ## Signed Traces
 
@@ -205,7 +207,7 @@ studio_job_packaged
     -> studio_job_completed
 ```
 
-Render this as a Mermaid diagram via [visualize.render_trace](traced-workflows.md) — the trace JSONL is the source of truth for both the audit log *and* the human-readable provenance report.
+Render this as a [Mermaid diagram](traced-workflows.md#provenance-reports) — the trace JSONL is the source of truth for both the audit log *and* the human-readable provenance report.
 
 ## What Tracing Is Not
 
