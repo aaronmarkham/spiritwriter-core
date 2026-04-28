@@ -1,39 +1,34 @@
-# Entity Resolution — Phalanx (CMC-Lite)
+# Entity Resolution — Phalanx
 
-## Background: CMC and Why "Lite"
+The same person shows up in three rosters as "Martinez, Carlos", "MARTINEZ, CARLOS A", and "C. Martinez". Same DOB, same booking pattern. Are they the same entity?
 
-**CMC** stands for **Consensus Memory Canonicalization** — a full pipeline for resolving entities across multiple agent extraction runs. The [full CMC spec](specs/cmc-spec-v0.1.md) draws from academic prior art (EDC/EMNLP 2024, Graphiti/Zep, SimpleMem, EMem-G) and defines a four-stage pipeline: Normalize & Embed, Cluster & Block, Consensus & Merge, Reify & Store. It targets >=85% recall on semantic duplicates with <=5% false merge rate.
+That's the resolution problem this module solves. **Phalanx** is the system; the **CanonicalRegistry** is the runtime engine. Domain-agnostic — supply a schema describing how your entities are identified, and the registry handles deduplication across sources using deterministic-then-fuzzy matching.
 
-The full pipeline requires embedding infrastructure (vec0), LLM calls in the clustering stage, and a multi-pass consensus voting system. That's the right architecture for large-scale knowledge graph construction, but it's heavy for applications that just need reliable entity matching.
+No embedding model, no LLM calls. Just SQLite, normalization, and tiered confidence scoring.
 
-**CMC-Lite** takes the three most impactful ideas from the full spec and implements them with zero new infrastructure — just SQLite and string matching:
+## The Tier System
 
-1. **Entity Sense Signatures (ESS)** — from the "Bear Problem" analysis in the CMC spec. When multiple records mention "Bear," is it a person's name, a pet, or a brand? ESS resolves this by hashing the *defining fields* together (name + DOB + gender), not just the name string. Same defining fields = same entity, regardless of surface form.
+Resolution returns a `ResolutionTier` with a confidence score:
 
-2. **Tiered confidence resolution** — from the Graphiti/Zep pattern of escalating from deterministic matching to fuzzy to LLM-assisted. CMC-Lite implements T1 (exact ESS) through T4 (weak context) without requiring LLM calls.
+| Tier | Confidence | Auto-merge | Triggers when |
+|------|-----------|------------|---------------|
+| `T1_EXACT` | 0.95 | Yes | ESS digests are identical (same defining fields) |
+| `T2_STRONG` | 0.85 | Yes | All fuzzy fields pass threshold; high overall score |
+| `T3_FUZZY` | 0.70 | No (creates merge event) | Combined fuzzy score ≥ 0.65 but below T2 |
+| `T4_WEAK` | 0.50 | No (flag only) | Context overlap + partial ESS — too weak to act on |
+| `NO_MATCH` | 0.0 | n/a | New entity |
 
-3. **Multi-pass consensus** — from the overlapping-window extraction pattern. The extraction pipeline (see `examples/extract_memory.py`) uses overlapping text windows to ensure facts that span chunk boundaries are captured by at least two passes.
+The split between auto-merge (T1, T2) and flag-only (T3, T4) is the safety valve. T1 is "definitely the same"; T2 is "almost certainly the same"; T3+ wants a human or a higher-confidence pass before merging records.
 
-### Phalanx Branding
+## Why CMC-Lite
 
-The overlapping-window approach was originally called **shingles** (overlapping roof tiles). It was renamed to **Phalanx** — overlapping shields in a formation — because the metaphor is stronger (mutual coverage, defensive strength) and avoids the medical connotation. The code in `extract_memory.py` still uses "shingle" in variable names for historical reasons, but the project name is Phalanx.
+The full Consensus Memory Canonicalization spec ([specs/cmc-spec-v0.1.md](specs/cmc-spec-v0.1.md)) targets large-scale knowledge graph construction with embedding lookup, LLM-assisted clustering, and multi-pass consensus voting — three pieces of infrastructure. CMC-Lite picks the three highest-leverage ideas from that spec and implements them with zero new dependencies:
 
-The **CanonicalRegistry** (the entity resolution engine documented below) is the runtime component of Phalanx. The extraction pipeline (`extract_memory.py`) is the ingestion component. Together they form the Phalanx system: extract structured atoms from text using overlapping windows, then resolve entities across those atoms using ESS + tiered matching.
+1. **Entity Sense Signatures (ESS)** — solves the "Bear Problem" from the full spec. Multiple records mention "Bear" — is that a person, a pet, or a brand? ESS resolves it by hashing the *defining fields* together (name + DOB + gender), not the surface string. Same defining fields = same entity, regardless of how the source spelled it.
+2. **Tiered confidence resolution** — escalate from deterministic (T1) to fuzzy (T2/T3) to context-only (T4) without LLM calls.
+3. **Phalanx (overlapping windows)** — the extraction pipeline ([examples/extract_memory.py](examples/extract_memory.py)) uses overlapping text chunks so facts spanning chunk boundaries get captured by at least two passes. Originally called "shingles" (overlapping roof tiles); renamed Phalanx for the stronger metaphor — overlapping shields, mutual coverage. Variable names in `extract_memory.py` still say "shingle" for historical reasons.
 
-## The CanonicalRegistry
-
-A domain-agnostic entity resolution engine. It resolves entities across records using Entity Sense Signatures (ESS), tiered confidence scoring, and fuzzy matching. Applications supply schemas; spiritwriter provides the resolution logic.
-
-## How It Works
-
-1. **Compute ESS** — Hash the defining fields (name, DOB, etc.) into a content-addressed identity anchor.
-2. **T1 (Exact)** — If the ESS matches an existing entity, it's the same entity. Confidence: 0.95.
-3. **T2 (Strong)** — All fuzzy fields match above threshold + good ESS overlap. Confidence: 0.85.
-4. **T3 (Fuzzy)** — Partial fuzzy match (score >= 0.65). Confidence: 0.70. Creates new entity + merge event.
-5. **T4 (Weak)** — Context overlap + partial ESS. Confidence: 0.50. Flag only, no auto-merge.
-6. **NO_MATCH** — New entity.
-
-T1 and T2 auto-merge (add sighting to existing entity). T3+ create new entities with merge events for review.
+The CanonicalRegistry documented below is the runtime half; `extract_memory.py` is the ingestion half. Together: extract atoms from text using overlapping windows, then resolve entities across atoms using ESS + tiered matching.
 
 ## Quick Start
 
@@ -43,23 +38,23 @@ from spiritwriter.fabric.canonicalize import (
     canonicalize_batch, normalize_name, fuzzy_score,
 )
 
-# Define how your domain's entities are resolved
 schema = CanonicalSchema(
     name="inmate",
-    ess_fields=["last_name", "first_name", "dob"],
-    fuzzy_fields={"last_name": 0.90, "first_name": 0.80},
-    context_fields=["facility", "gender"],
-    metadata_fields=["charges", "booking_date"],
+    ess_fields=["last_name", "first_name", "dob"],   # defining identity
+    fuzzy_fields={"last_name": 0.90, "first_name": 0.80},  # per-field thresholds
+    context_fields=["facility", "gender"],            # weak signals (T4)
+    metadata_fields=["charges", "booking_date"],      # stored, not used in resolution
     age_bucket_size=2,
 )
 
-# Create registry (SQLite, WAL mode)
 registry = CanonicalRegistry("/tmp/inmates.db", schema)
 ```
 
-## Resolving Entities
+The registry opens a SQLite database in WAL mode. The schema is hashed and stored on first open — reopening with a different schema raises `ValueError`, so you can't accidentally feed records to a registry that disagrees about identity.
 
-### Single Record
+## Resolving Records
+
+`resolve()` is read-only. It returns a `ResolutionResult` you inspect before deciding to persist. `upsert()` writes the resolution to the registry.
 
 ```python
 candidate = {
@@ -70,75 +65,97 @@ candidate = {
     "gender": "M",
 }
 
-# Resolve (read-only — doesn't modify registry)
 result = registry.resolve(candidate)
-print(result.tier)          # ResolutionTier.NO_MATCH (first time)
-print(result.confidence)    # 0.0
-print(result.canonical_id)  # None
-print(result.field_matches) # {}
+result.tier            # ResolutionTier.NO_MATCH (first time)
+result.confidence      # 0.0
+result.canonical_id    # None
+result.field_matches   # {}
 
-# Persist the entity
+# Persist as a new entity
 cid = registry.upsert(
     candidate, result,
     source_name="lyon_county_jail",
     source_id="booking-2024-1234",
-    raw={"original_html": "..."},  # optional raw source data
+    raw={"original_html": "..."},   # optional raw source for audit
 )
-print(cid)  # UUID hex, e.g. "a1b2c3d4..."
 ```
 
-### Same Person, Different Source
+### T1: same person, different source
+
+The defining fields are identical after normalization (lowercased, stripped). Different `last_name` casing doesn't matter — ESS computation lowercases everything before hashing.
 
 ```python
-# Same person appears in a different roster with slight name variation
 candidate2 = {
-    "last_name": "MARTINEZ",
-    "first_name": "CARLOS A",
+    "last_name": "MARTINEZ",       # normalizes to "martinez"
+    "first_name": "Carlos",        # exact match after normalization
     "dob": "1990-05-12",
     "facility": "NDOC",
     "gender": "M",
 }
 
 result2 = registry.resolve(candidate2)
-print(result2.tier)          # ResolutionTier.T1_EXACT (same ESS)
-print(result2.confidence)    # 0.95
-print(result2.canonical_id)  # same cid as above
+result2.tier           # ResolutionTier.T1_EXACT — same ESS digest
+result2.confidence     # 0.95
+result2.canonical_id   # same cid as candidate1
 
-# Add as new sighting of existing entity
-registry.upsert(
-    candidate2, result2,
-    source_name="ndoc",
-    source_id="ndoc-56789",
-)
+registry.upsert(candidate2, result2, source_name="ndoc", source_id="ndoc-56789")
 ```
 
-### Fuzzy Matching
+### T3: same person, middle initial
+
+Now the first name has a middle initial — `"CARLOS A"` vs `"Carlos"`. ESS uses `.strip().lower()` only, *not* full name normalization, so the ESS digests are different and T1 misses. Fuzzy resolution picks it up but lands at T3, not T2 — and the reason teaches the tier system.
 
 ```python
-# Name typo — "CARLITOS" instead of "CARLOS"
 candidate3 = {
     "last_name": "Martinez",
-    "first_name": "Carlitos",
+    "first_name": "CARLOS A",      # middle initial — different ESS, fuzzy bridge
     "dob": "1990-05-12",
     "gender": "M",
 }
 
 result3 = registry.resolve(candidate3)
-print(result3.tier)          # T2_STRONG or T3_FUZZY depending on score
-print(result3.confidence)    # 0.85 or 0.70
-print(result3.field_matches) # {"last_name": True, "first_name": True/False}
+result3.tier           # ResolutionTier.T3_FUZZY
+result3.confidence     # 0.70
+result3.field_matches  # {"last_name": True, "first_name": True}
+# T3 does NOT auto-merge — registry.upsert() creates a new entity
+# and records a merge event in the `merges` table for review.
 ```
 
-### Batch Processing
+**Why T3 and not T2?** Both fuzzy fields pass their thresholds (last_name 1.0 ≥ 0.90, first_name ~0.85 ≥ 0.80), so per-field the match is strong. The combined score is the average of fuzzy quality (~0.93) and ESS field overlap. ESS overlap drops because `first_name` *digests* differ — `"carlos"` vs `"carlos a"` are different strings — leaving only 2 of 3 ESS fields matching for an overlap of 0.67. Combined score: `(0.93 + 0.67) / 2 ≈ 0.80`. That's ≥ 0.65 (T3 threshold) but < 0.85 (T2 threshold).
+
+The takeaway: T2 needs both *high fuzzy quality* and *high ESS overlap*. A middle-initial divergence drops the second one even when the first is solid. To T2-merge this, the candidate would need to either match ESS exactly (no divergent field) or share more fields. T3 is the right answer here — strong-but-not-certain — and it correctly punts to manual review.
+
+### T2: catching the strong case
+
+For T2 you need fuzzy variations that *don't* break ESS overlap — typically because the variation is in a fuzzy-only field that isn't part of ESS, or because both records share an extra ESS field that pulls overlap up. In the inmate schema, T2 typically fires on case differences plus minor first-name variation when DOB matches exactly.
+
+### T3 from a typo
+
+```python
+candidate4 = {
+    "last_name": "Martinez",
+    "first_name": "Carlitos",      # could be typo, could be different person
+    "dob": "1990-05-12",
+    "gender": "M",
+}
+
+result4 = registry.resolve(candidate4)
+result4.tier           # ResolutionTier.T3_FUZZY
+result4.confidence     # 0.70
+result4.field_matches  # {"last_name": True, "first_name": True/False — depends on score}
+```
+
+T3 doesn't auto-merge. The merge event lands in the `merges` table for review — call `registry.merge()` manually after a human or higher-confidence signal confirms.
+
+**ESS by design.** ESS is *exact-match-after-light-normalization*. Fuzzy matching handles the long tail of typos, middle initials, and transliterations without weakening the T1 guarantee. The trade-off: anything that breaks ESS overlap costs you a tier, even when fuzzy says "looks like a match."
+
+### Batch processing
 
 ```python
 records = [
-    {"last_name": "Smith", "first_name": "John", "dob": "1985-03-15",
-     "source_id": "001"},
-    {"last_name": "SMITH", "first_name": "JOHN A", "dob": "1985-03-15",
-     "source_id": "002"},
-    {"last_name": "Johnson", "first_name": "Jane", "dob": "1992-08-20",
-     "source_id": "003"},
+    {"last_name": "Smith",  "first_name": "John",   "dob": "1985-03-15", "source_id": "001"},
+    {"last_name": "SMITH",  "first_name": "JOHN A", "dob": "1985-03-15", "source_id": "002"},
+    {"last_name": "Johnson","first_name": "Jane",   "dob": "1992-08-20", "source_id": "003"},
 ]
 
 results = canonicalize_batch(
@@ -148,120 +165,106 @@ results = canonicalize_batch(
 )
 
 for record, result in results:
-    print(f"{record['last_name']}: {result.tier.value} "
-          f"(confidence={result.confidence})")
-# Smith: no_match (confidence=0.0)       — first time
-# SMITH: t1_exact (confidence=0.95)      — same ESS
-# Johnson: no_match (confidence=0.0)     — new entity
+    print(f"{record['last_name']}: {result.tier.value} (conf={result.confidence})")
+# Smith:   no_match  (0.0)   — new entity
+# SMITH:   t3_fuzzy  (0.70)  — fuzzy match on "JOHN A" vs "John" (T3, not T2 —
+#                              ESS overlap drops because first_name digest differs;
+#                              see "Why T3 and not T2?" above)
+# Johnson: no_match  (0.0)   — different person
 ```
 
-## Entity Sense Signatures (ESS)
+## Entity Sense Signatures
 
-An ESS is a content-addressed identity anchor — a SHA-256 hash of normalized defining fields:
+An ESS is a content-addressed identity anchor — SHA-256 over a sorted list of `(field, normalized_value)` pairs. Two records with the same ESS are the same entity by construction.
 
 ```python
 from spiritwriter.fabric.canonicalize import EntitySenseSig
 
 ess1 = EntitySenseSig.compute(
-    last_name="Martinez",
-    first_name="Carlos",
-    dob="1990-05-12",
+    last_name="Martinez", first_name="Carlos", dob="1990-05-12",
 )
-
 ess2 = EntitySenseSig.compute(
-    last_name="MARTINEZ",     # normalization: lowered, stripped
-    first_name="Carlos",
-    dob="1990-05-12",
+    last_name="MARTINEZ", first_name="Carlos", dob="1990-05-12",
 )
+assert ess1 == ess2   # same digest after .strip().lower() — T1 match
 
-assert ess1 == ess2  # same digest — T1 match
-
-# Check field overlap between ESS
-ess3 = EntitySenseSig.compute(
-    last_name="Martinez",
-    first_name="Carlos",
-    # dob missing
-)
-print(ess1.overlap(ess3))  # 1.0 (shared fields match)
-print(ess1 == ess3)        # False (different digest — missing field)
+# Partial record — different digest
+ess3 = EntitySenseSig.compute(last_name="Martinez", first_name="Carlos")
+ess1.overlap(ess3)    # 1.0 — shared fields all match
+ess1 == ess3          # False — different field set, different digest
 ```
 
-### Age Bucketing
+**Watch out:** ESS normalization is `.strip().lower()`, not `normalize_name()`. That means `"Carlos"` and `"CARLOS A"` produce *different* digests — fuzzy matching exists to bridge that gap. Don't try to be clever and pre-normalize before passing to ESS; the registry handles it.
 
-When DOB is unavailable but age is known, bucket ages for ESS compatibility:
+### Age bucketing
+
+When DOB is missing but age is known, bucket ages so close ages share an ESS field:
 
 ```python
 from spiritwriter.fabric.canonicalize import age_to_bucket
 
-print(age_to_bucket(42, bucket_size=2))  # "42-43"
-print(age_to_bucket(43, bucket_size=2))  # "42-43"  — same bucket
+age_to_bucket(42, bucket_size=2)   # "42-43"
+age_to_bucket(43, bucket_size=2)   # "42-43" — same bucket
 
-# Use in ESS
 ess = EntitySenseSig.compute(
-    last_name="Smith",
-    first_name="John",
-    age_bucket=age_to_bucket(34),  # instead of DOB
+    last_name="Smith", first_name="John",
+    age_bucket=age_to_bucket(34),  # "34-35"
 )
 ```
 
+Bucket size is a precision/recall trade-off. Wider buckets catch more matches but merge people who happen to be close in age. The default of 2 years works for most rosters.
+
 ## Normalization Utilities
+
+Exposed for cases where you want to inspect or pre-process before resolution:
 
 ```python
 from spiritwriter.fabric.canonicalize import normalize_name, normalize_date, fuzzy_score
 
-# Name normalization
-print(normalize_name("  martinez, carlos a.  "))  # "MARTINEZ CARLOS A"
-print(normalize_name("DE LA CRUZ"))                # "DE LA CRUZ"
+normalize_name("  martinez, carlos a.  ")   # "MARTINEZ CARLOS A"
+normalize_name("DE LA CRUZ")                 # "DE LA CRUZ"
 
-# Date normalization (various formats → ISO 8601)
-print(normalize_date("05/12/1990"))   # "1990-05-12"
-print(normalize_date("May 12, 1990")) # "1990-05-12"
-print(normalize_date("1990-05-12"))   # "1990-05-12"
-print(normalize_date("garbage"))      # None
+normalize_date("05/12/1990")    # "1990-05-12"
+normalize_date("May 12, 1990")  # "1990-05-12"
+normalize_date("garbage")       # None
 
-# Fuzzy scoring (0.0–1.0)
-print(fuzzy_score("Martinez", "MARTINEZ"))  # 1.0 (exact after normalization)
-print(fuzzy_score("Carlos", "Carlitos"))    # ~0.7-0.8
-print(fuzzy_score("Smith", "Smythe"))       # ~0.6
-print(fuzzy_score("A", "ALEXANDER"))        # 0.0 (length ratio filter)
+fuzzy_score("Martinez", "MARTINEZ")   # 1.0  (exact after normalization)
+fuzzy_score("Carlos", "Carlitos")     # ~0.70-0.80
+fuzzy_score("Smith",  "Smythe")       # ~0.60
+fuzzy_score("A",      "ALEXANDER")    # 0.0  (length-ratio filter rejects)
 ```
+
+`fuzzy_score` is `SequenceMatcher.ratio()` with `normalize_name` pre-applied, plus a prefix-match boost (one is a prefix of the other ≥3 chars → minimum 0.85) and a length-ratio filter (≤0.5 or ≥2.0 ratio → 0.0). The filter is what stops "A" from fuzzy-matching every name starting with A.
 
 ## Querying the Registry
 
 ```python
-# Get entity with all sightings
 entity = registry.get_entity(cid)
-print(entity["ess_fields"])     # {"last_name": "Martinez", ...}
-print(entity["source_count"])   # 2
-print(entity["first_seen"])     # ISO timestamp
-print(entity["last_seen"])      # ISO timestamp
-print(len(entity["sightings"])) # 2
+entity["ess_fields"]      # {"last_name": "martinez", ...}
+entity["source_count"]    # 3
+entity["first_seen"]      # ISO timestamp
+entity["last_seen"]       # ISO timestamp
+entity["sightings"]       # list of source records
 
-# Get sightings for an entity
-sightings = registry.sightings(cid)
-for s in sightings:
-    print(f"  {s['source_name']}: {s['fields']}")
+sightings = registry.sightings(cid)   # detail view of every record merged into this entity
 
-# Fuzzy search
-results = registry.find_fuzzy(
-    {"last_name": "Martinz", "first_name": "Carlo"},  # typos
+# Fuzzy search across the whole registry — slower than resolve()
+matches = registry.find_fuzzy(
+    {"last_name": "Martinz", "first_name": "Carlo"},
     limit=5,
 )
-for r in results:
-    print(f"  {r.tier.value}: {r.canonical_id} (conf={r.confidence})")
 
-# Iterate all entities
+# Iterate
 for entity in registry.entities():
-    print(f"{entity['canonical_id']}: {entity['ess_fields']}")
+    print(entity["canonical_id"], entity["ess_fields"])
 
-# Filter by recency
 for entity in registry.entities(since="2026-04-01T00:00:00Z"):
-    print(f"Recent: {entity['canonical_id']}")
+    print("Recent:", entity["canonical_id"])
 ```
 
 ## Manual Merge
 
-When you know two entities are the same but automatic resolution didn't catch it:
+When two entities are clearly the same but resolution didn't catch it:
 
 ```python
 registry.merge(
@@ -269,65 +272,72 @@ registry.merge(
     discard_id=cid_b,
     reason="Confirmed same person via booking photo comparison",
 )
-# All sightings from cid_b move to cid_a
-# cid_b is removed from entities table
-# Merge event recorded in merges table
 ```
+
+All sightings move from `cid_b` to `cid_a`. `cid_b` is deleted from `entities`. The merge is recorded in the `merges` table with the reason — provenance is preserved, so you can always answer "why are these merged?"
 
 ## Statistics
 
 ```python
-stats = registry.stats()
-print(stats)
+registry.stats()
 # {
 #     "entities": 1247,
 #     "sightings": 3891,
 #     "merges": 45,
 #     "sources": {
-#         "lyon_county_jail": 890,
-#         "ndoc": 1204,
+#         "lyon_county_jail":  890,
+#         "ndoc":             1204,
 #         "clark_county_ccdc": 1797,
 #     },
 # }
 ```
 
-## Schema Design Guide
+## Schema Design
 
-### Choosing ESS Fields
+The schema is the contract between your domain and the registry. Choose fields carefully — once the registry has data, the schema hash check prevents you from changing it.
 
-ESS fields are the **defining** fields — they determine entity identity. Choose fields that:
-- Are present in most records
-- Are relatively stable (don't change often)
-- Together, uniquely identify an entity
+### ESS fields — the defining identity
 
-Good ESS fields: `last_name`, `first_name`, `dob`, `ssn_last4`
-Bad ESS fields: `address`, `phone` (change too often), `charges` (vary per booking)
+ESS fields are what makes two records "the same entity." Pick fields that are:
 
-### Choosing Fuzzy Fields
+- **Present in most records.** Missing fields just don't contribute to the ESS — they don't fail resolution, but they weaken it.
+- **Stable.** Address and phone change too often. Last name, DOB, SSN-last-4 don't.
+- **Together unique.** `last_name` alone is too broad. `last_name + first_name + dob` is usually enough for people.
 
-Fuzzy fields handle name variations, typos, and transliterations. Set thresholds based on how much variation you expect:
+| Good | Bad | Why |
+|------|-----|-----|
+| `last_name`, `first_name`, `dob`, `ssn_last4` | `address`, `phone` | Stable across time |
+| `manufacturer`, `model_number` (products) | `current_price`, `stock_status` | Defining vs incidental |
+| `entity_name`, `scope` (memory entities) | `last_seen`, `confidence` | Identity vs metadata |
+
+### Fuzzy fields — bridging the long tail
+
+Fuzzy fields handle name variations, typos, transliterations. The threshold determines how much variation T2/T3 will accept:
 
 ```python
 fuzzy_fields={
-    "last_name": 0.90,    # tight — last names vary less
-    "first_name": 0.80,   # looser — nicknames, diminutives
+    "last_name":  0.90,   # tight — last names vary less
+    "first_name": 0.80,   # looser — nicknames, middle initials
 }
 ```
 
-### Choosing Context Fields
+Tighter thresholds reduce false merges. Looser thresholds catch more variants. Calibrate against your actual data — if you have ground-truth pairs, sweep the threshold and pick the elbow.
 
-Context fields provide weak signals for T4 matching. They break ties but don't drive resolution:
+### Context fields — weak tiebreakers
+
+Context fields drive T4 only. They never *cause* a match; they just confirm a weak signal:
 
 ```python
 context_fields=["facility", "gender", "state"]
 ```
 
-### Custom Schemas
+If your domain doesn't have weak-but-corroborating signals, leave this empty. T4 is opt-in.
+
+### Custom schemas
 
 The same engine handles any entity type:
 
 ```python
-# Product catalog dedup
 product_schema = CanonicalSchema(
     name="product",
     ess_fields=["manufacturer", "model_number"],
@@ -335,7 +345,6 @@ product_schema = CanonicalSchema(
     context_fields=["category", "price_range"],
 )
 
-# Memory entity dedup (agent knowledge)
 memory_schema = CanonicalSchema(
     name="memory_entity",
     ess_fields=["entity_name", "scope"],
@@ -346,28 +355,24 @@ memory_schema = CanonicalSchema(
 
 ## Storage
 
-The registry uses SQLite with WAL mode for concurrent read/write:
+SQLite, WAL mode, three tables plus `_meta`:
 
 ```sql
--- Canonical entities
 entities(canonical_id, ess_digest, ess_fields, first_seen, last_seen,
          source_count, merged_from)
 
--- Source-specific records
 sightings(id, canonical_id, source_name, source_id, fields, raw, created_at)
 
--- Merge provenance
 merges(id, keep_id, discard_id, tier, confidence, reason, merged_at)
 ```
 
-Schema hash is stored in `_meta` — reopening a registry with a different schema raises `ValueError`.
+The `_meta` table holds the schema hash. Reopening with a different schema raises `ValueError` rather than silently producing wrong results. WAL mode means concurrent readers don't block the writer (and vice versa) — but there's still only one writer per database file at a time.
 
-## Resolution Tier Reference
+## What Phalanx Is Not
 
-| Tier | Confidence | Auto-Merge | Criteria |
-|------|-----------|------------|----------|
-| T1_EXACT | 0.95 | Yes | Identical ESS digest |
-| T2_STRONG | 0.85 | Yes | All fuzzy fields pass threshold + score >= 0.85 |
-| T3_FUZZY | 0.70 | No (merge event) | Combined fuzzy score >= 0.65 |
-| T4_WEAK | 0.50 | No (flag only) | Context overlap + partial ESS |
-| NO_MATCH | 0.0 | N/A | New entity |
+- **Not embedding-based.** No vec0, no FAISS, no LLM scoring. The full CMC spec covers that path; CMC-Lite stops at deterministic + fuzzy on purpose.
+- **Not multi-domain in one DB.** One schema per registry. Want to dedupe inmates *and* products? Two registries.
+- **Not concurrency-safe for multi-writer.** WAL mode handles concurrent reads, but parallel writes against one DB file will serialize. Shard by domain or by source if you need throughput.
+- **Not a graph database.** Sightings link to one canonical entity; merges record provenance. There's no relationship layer between entities.
+
+For richer matching (semantic similarity, multi-modal entities, LLM-assisted disambiguation), the [full CMC pipeline](specs/cmc-spec-v0.1.md) is the upgrade path.
