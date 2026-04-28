@@ -15,7 +15,7 @@ After this lesson you'll write prompts that specify **requirements** rather than
 
 ### Capabilities vs. requirements
 
-This is the single most important distinction in prompt engineering for agent pipelines.
+This is the most important distinction in this workshop — and possibly in prompt engineering for agent pipelines generally.
 
 The difference between "the audit module supports provenance tracing" and "you MUST generate trace files" is the difference between optional and mandatory. Agents interpret "supports" and "can generate" as capabilities they may use. They interpret "MUST produce" as constraints they can't skip.
 
@@ -63,8 +63,8 @@ Each agent gets a `--max-turns` budget. Too tight, and some agents run out of ro
 A rule of thumb:
 
 ```
-expected_turns = (number_of_items x turns_per_item)
-max_turns = expected_turns x 2, minimum 10 turn buffer
+expected_turns = (number_of_items × turns_per_item)
+max_turns = expected_turns × 2, minimum 10 turn buffer
 ```
 
 For a batch of 4 APKs at ~15 turns each:

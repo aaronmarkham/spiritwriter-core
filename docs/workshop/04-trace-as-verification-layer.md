@@ -37,7 +37,7 @@ A trace event:
 
 Note the schema: `type` (not `event_type`), `ts` (not `timestamp`), `prev_event_hash` (not `parent_hash`), and kwargs spread at the top level (no `payload` wrapper). Each event carries `run_id`, `agent_id`, and `event_id`.
 
-The chain links: input registration -> evidence file hashes -> DEX string corpus -> per-finding derivation -> report hash. Each step references the previous step's hash via `prev_event_hash`. You can verify the entire chain from source artifact to conclusion.
+The chain links: input registration → evidence file hashes → DEX string corpus → per-finding derivation → report hash. Each step references the previous step's hash via `prev_event_hash`. You can verify the entire chain from source artifact to conclusion.
 
 ### Why trace beats shell scripts
 
@@ -71,8 +71,8 @@ The constructor takes three required arguments: `run_id`, `agent_id`, and `out_p
 The audit skill's trace chain emits five event types (from `spiritwriter.audit.provenance`):
 
 ```
-audit_input_registered -> audit_evidence_extracted -> audit_strings_extracted ->
-audit_finding_derived (xN, one per finding) -> audit_report_generated
+audit_input_registered → audit_evidence_extracted → audit_strings_extracted →
+audit_finding_derived (×N, one per finding) → audit_report_generated
 ```
 
 If an agent's trace chain stops at `audit_finding_derived` and never emits `audit_report_generated`, the report wasn't finalized — even if a report file exists on disk.
@@ -171,19 +171,19 @@ The resulting trace chain for a batch audit:
 
 ```
 agent_dispatch_plan (12 counties, 3 agents, 36 expected files)
-  +-- agent-A: audit_input_registered -> ... -> audit_finding_derived (x4)
-  |   ! Missing: audit_report_generated for all 4 counties
-  +-- agent-B: audit_input_registered -> ... -> audit_report_generated (x4, complete)
-  +-- agent-C: audit_input_registered -> ... -> audit_report_generated (x4, complete)
-  +-- batch_validation: 28/36 files present, 8 gaps identified
-        +-- backfill_completed: 8 missing files regenerated
+  ├── agent-A: audit_input_registered → ... → audit_finding_derived (×4)
+  │   ⚠ Missing: audit_report_generated for all 4 counties
+  ├── agent-B: audit_input_registered → ... → audit_report_generated (×4, complete)
+  ├── agent-C: audit_input_registered → ... → audit_report_generated (×4, complete)
+  └── batch_validation: 28/36 files present, 8 gaps identified
+        └── backfill_completed: 8 missing files regenerated
 ```
 
 This is both a **verification mechanism** (catches gaps automatically) and a **provenance record** (proves the batch was validated and gaps were filled).
 
 ## Getting started incrementally
 
-You don't need the full plan -> validate -> gap-detect flow all at once. Build up in levels:
+You don't need the full plan → validate → gap-detect flow all at once. Build up in levels:
 
 ### Level 1: Add trace to your agent output
 
@@ -195,7 +195,7 @@ After agents complete, run a validator that checks expected outputs exist. Emit 
 
 ### Level 3: Add plan events
 
-Before dispatching agents, emit a plan event. Now the trace chain covers the full lifecycle: what you intended -> what happened -> what was verified.
+Before dispatching agents, emit a plan event. Now the trace chain covers the full lifecycle: what you intended → what happened → what was verified.
 
 ## Checklist
 

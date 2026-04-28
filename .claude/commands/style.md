@@ -57,10 +57,10 @@ These rules apply to every variant. This is the voice underneath everything.
 
 - **Marketing speak:** "leverage," "utilize," "empower," "seamless," "robust"
 - **Corporate hedging:** "it may be advisable to consider," "depending on your use case"
-- **Filler intros:** "In this section, we will discuss..." — just discuss it
-- **Over-qualification:** "It's important to note that..." — just state it
+- **Filler intros:** "In this section, we will discuss..." — discuss it
+- **Over-qualification:** "It's important to note that..." — state it
 - **Passive voice** (unless quoting an error message or API response)
-- **False simplicity:** "simply," "just," "easily" — if it were simple, you wouldn't need docs
+- **False simplicity in user-facing prose:** "simply," "just," "easily" — if it were simple, you wouldn't need docs. (Fine in directives like this style guide; avoid in content the reader consumes.)
 - **LLM tells:** "Let's dive in," "Here's the thing," "Without further ado"
 
 ---

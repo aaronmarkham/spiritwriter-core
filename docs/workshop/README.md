@@ -2,7 +2,7 @@
 
 Five lessons on building reliable AI agent pipelines, drawn from real incidents building [Frio](https://github.com/aaronmarkham/frio)'s audit pipeline across 20 OCV apps and 5 states. Every lesson starts with something that broke and shows the fix.
 
-The lessons build on each other: environment setup -> tool verification -> prompt engineering -> provenance tracing -> continuous improvement.
+The lessons build on each other: environment setup → tool verification → prompt engineering → provenance tracing → continuous improvement.
 
 ## Lessons
 

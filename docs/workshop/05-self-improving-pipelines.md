@@ -123,7 +123,7 @@ emitter.emit(
     reason="100% completeness across all runs",
     comparison_data=results,
     previous_baseline="A",
-    improvement="mean score 0.90 -> 1.00",
+    improvement="mean score 0.90 → 1.00",
 )
 ```
 
@@ -165,7 +165,7 @@ Over time, you're not running agents and hoping — you're building evidence for
 | 1. Environment | Permissions blocked, tools missing | Explicit PATH, permission mode | Verify the agent's world before dispatching |
 | 2. Silent degradation | Required tool missing, agent fell back silently | Tool-check preamble, fail loudly | Don't let agents downgrade methodology |
 | 3. Non-determinism | Same prompt, different outputs | Explicit deliverables, generous turns | Same prompt != same output |
-| 4. Trace verification | Manual checking doesn't scale | Plan -> validate -> gap-detect | Make verification part of the provenance |
+| 4. Trace verification | Manual checking doesn't scale | Plan → validate → gap-detect | Make verification part of the provenance |
 | 5. Self-improvement | Static prompts, no measurement | A/B test with trace scoring | Measure, compare, promote, repeat |
 
 Each lesson builds on the previous one. Together, they turn a "run agent and hope" workflow into a pipeline you can measure and improve systematically.
