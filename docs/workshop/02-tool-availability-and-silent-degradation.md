@@ -2,37 +2,63 @@
 
 > Agents adapt — which is usually good, but in security analysis means they'll silently downgrade their methodology without telling you.
 
-## What happened
+## What you'll learn
 
-Our audit skill uses [Rizin](https://rizin.re/) (`rz-bin`) for binary analysis of Android APKs. Rizin can parse DEX bytecode, extract symbol tables, identify linked libraries, and dump structured data from compiled binaries. This gives high-confidence findings — you're looking at what the code actually contains, not guessing from string patterns.
+In this lesson you'll learn how to prevent agents from silently falling back to weaker analysis methods when a required tool is unavailable. You'll classify your tools into tiers and add verification steps that force the agent to fail loudly rather than produce incomplete results.
 
-Early in our audit runs, Rizin wasn't installed on the machine. The agent encountered `rz-bin: command not found` and... kept going. It didn't error out. It didn't report a problem. It fell back to regex-based analysis: grepping through APK contents for patterns like `com.google.firebase`, `com.facebook.sdk`, `amazonaws.com`.
+## Prerequisites
 
-The output looked complete. The report had the same structure. Findings were listed with names, categories, and risk levels. The JSON was valid. If you weren't comparing against a Rizin-powered run, you'd never notice.
+- Completed [Lesson 1](01-environment-and-permissions.md) — environment and PATH configured
+- Understanding of which tools your pipeline depends on
 
-But the findings were shallower:
+## Concepts
 
-| Method | What it finds | What it misses |
-|--------|--------------|----------------|
-| Rizin binary analysis | DEX class names, method signatures, symbol tables, linked native libraries | — |
-| Regex fallback | String literals containing known SDK package names | Obfuscated code, native libraries, SDK components that don't have recognizable string patterns |
-
-We only noticed the difference when we ran the same APK with Rizin available and got additional findings that the regex pass had missed.
-
-## Why agents do this
+### Why agents fall back silently
 
 LLMs are trained to be helpful. When a tool isn't available, the agent's instinct is to find an alternative approach rather than stop. This is usually a feature — you want an agent that works around minor obstacles.
 
-But in security analysis, methodology matters. A weaker analysis method doesn't just produce fewer findings — it produces a report that *looks* equally authoritative but has blind spots. The consumer of the report (a human making security decisions) has no way to know the methodology was downgraded.
+But in security analysis, methodology matters. A weaker analysis method doesn't just produce fewer findings — it produces a report that *looks* equally authoritative but has blind spots. The consumer of the report has no way to know the methodology was downgraded.
 
-## The fix: fail loudly
+### Binary analysis vs. string matching
 
-Add a tool verification preamble to your skill or prompt. Check for required tools before doing any work, and abort with an explicit error if something is missing.
+To make this concrete, consider two approaches to analyzing an Android APK:
 
-### Option A: In the prompt
+| Method | What it finds | What it misses |
+|--------|--------------|----------------|
+| **Binary analysis** (e.g., [Rizin](https://rizin.re/) `rz-bin`) | DEX class names, method signatures, symbol tables, linked native libraries | — |
+| **String matching** (regex/grep fallback) | String literals containing known SDK package names | Obfuscated code, native libraries, SDK components without recognizable string patterns |
+
+[Rizin](https://rizin.re/) is a binary analysis framework. Its `rz-bin` tool can parse DEX bytecode, extract symbol tables, identify linked libraries, and dump structured data from compiled binaries. This gives high-confidence findings because you're examining what the code actually contains, not guessing from string patterns.
+
+If `rz-bin` isn't available and the agent falls back to regex-based analysis (grepping for patterns like `com.google.firebase` or `amazonaws.com`), the output looks complete — same report structure, same JSON format, findings listed with names and risk levels. But the findings are shallower, and you wouldn't notice unless you compared against a Rizin-powered run.
+
+## Step 1: Classify your tools into tiers
+
+Map every external tool your agent uses into one of three tiers:
+
+| Tier | If missing | Action |
+|------|-----------|--------|
+| **Required** | Results are unreliable | Abort with error |
+| **Enhancing** | Results are weaker but valid | Warn in output, continue |
+| **Optional** | No impact on core results | Silently skip |
+
+For security work, most analysis tools are **Required**. Don't let the agent decide to downgrade.
+
+Example classification for an APK audit pipeline:
+
+| Tool | Tier | Reason |
+|------|------|--------|
+| `rz-bin` | Required | Binary analysis is the core methodology |
+| `curl` | Required | Can't download APKs without it |
+| `python3` | Required | Runs spiritwriter, scoring scripts |
+| `jq` | Enhancing | JSON pretty-printing; agent can parse JSON without it |
+
+## Step 2: Add tool verification to your prompt
+
+Add a verification preamble to your skill or prompt that checks for Required tools before doing any work. The agent should abort with an explicit error if something is missing.
 
 ```
-BEFORE STARTING ANY AUDIT WORK, verify the following tools are available:
+BEFORE STARTING ANY WORK, verify the following tools are available:
 
 1. Run: which rz-bin
    Expected: /opt/homebrew/bin/rz-bin
@@ -45,7 +71,27 @@ BEFORE STARTING ANY AUDIT WORK, verify the following tools are available:
 Do NOT fall back to alternative analysis methods. If rz-bin is unavailable, the audit cannot proceed.
 ```
 
-### Option B: In a wrapper script
+The key line is: **"Do NOT fall back to alternative analysis methods."** Without this, the agent will try to be helpful and find a workaround.
+
+## Step 3: Add verification to your skill file
+
+If you're using a skill file (passed via `--append-system-prompt-file`), add a prerequisites table at the top:
+
+```markdown
+## Prerequisites (MUST verify before proceeding)
+
+Run each command below. If ANY fails, stop immediately and report the error.
+
+| Tool | Command | Expected |
+|------|---------|----------|
+| Rizin | `which rz-bin` | `/opt/homebrew/bin/rz-bin` |
+| Python | `python3 --version` | 3.10+ |
+| curl | `which curl` | any path |
+```
+
+## Step 4: Add a wrapper script for pre-flight checks
+
+For additional safety, run a pre-flight check before dispatching the agent:
 
 ```bash
 #!/bin/bash
@@ -63,23 +109,11 @@ done
 echo "All tools verified. Proceeding."
 ```
 
-### Option C: In the skill file
+This catches problems before the agent even starts, saving time and API costs.
 
-```markdown
-## Prerequisites (MUST verify before proceeding)
+## Step 5: Detect degradation in completed runs
 
-Run each command below. If ANY fails, stop immediately and report the error.
-
-| Tool | Command | Expected |
-|------|---------|----------|
-| Rizin | `which rz-bin` | `/opt/homebrew/bin/rz-bin` |
-| Python | `python3 --version` | 3.10+ |
-| curl | `which curl` | any path |
-```
-
-## Detecting degradation after the fact
-
-If you can't prevent degradation (maybe you're reviewing output from an agent that already ran), look for these signals:
+If you're reviewing output from an agent that already ran, look for these signals:
 
 1. **Missing tool references in trace logs.** If the agent was supposed to use `rz-bin` but the trace shows only `grep` and `strings` commands, the methodology was downgraded.
 
@@ -87,19 +121,7 @@ If you can't prevent degradation (maybe you're reviewing output from an agent th
 
 3. **No binary-specific findings.** Rizin finds things like native library linkage and obfuscated class names that regex can't. If all findings are string-match patterns (`com.google.firebase`, `com.facebook.sdk`), the analysis was likely regex-only.
 
-4. **Provenance trace shows the method.** If you're using spiritwriter (see [Lesson 4](04-trace-as-verification-layer.md)), each step of the analysis emits trace events. A missing `rizin_extraction` event in the trace chain tells you the binary analysis didn't happen — even if the final report looks complete.
-
-## The broader principle
-
-This isn't just about Rizin. Any agent-driven pipeline has tools that range from "nice to have" to "critical for correctness." Map your tools into tiers:
-
-| Tier | If missing | Action |
-|------|-----------|--------|
-| **Required** | Results are unreliable | Abort with error |
-| **Enhancing** | Results are weaker but valid | Warn in output, continue |
-| **Optional** | No impact on core results | Silently skip |
-
-For security work, most analysis tools are Tier 1 (Required). Don't let the agent decide to downgrade.
+4. **Provenance trace shows the method.** If you're using spiritwriter (see [Lesson 4](04-trace-as-verification-layer.md)), each step emits trace events. A missing `rizin_extraction` event tells you binary analysis didn't happen — even if the final report looks complete.
 
 ## Checklist
 
@@ -107,6 +129,7 @@ For security work, most analysis tools are Tier 1 (Required). Don't let the agen
 - [ ] Classify each tool: Required / Enhancing / Optional
 - [ ] Add verification commands to your skill preamble for all Required tools
 - [ ] Include explicit "do NOT fall back" instructions for Required tools
+- [ ] Run `pre-flight.sh` (or equivalent) before dispatching agents
 - [ ] After runs, check trace logs for tool usage (did it actually call what you expected?)
 
 ---

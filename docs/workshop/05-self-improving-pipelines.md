@@ -2,7 +2,17 @@
 
 > Once you have trace verification, you can A/B test prompts intentionally. The trace data becomes your ground truth for "did the agent actually do the job."
 
-## Where we are
+## What you'll learn
+
+In this lesson you'll combine everything from Lessons 1-4 into a pipeline that measures its own quality and improves over time. You'll define a scoring function, create prompt variants, run them against the same batch, and use trace data to pick a winner.
+
+## Prerequisites
+
+- Completed [Lessons 1-4](README.md) — environment, tool verification, explicit deliverables, trace verification
+- A working agent pipeline with trace emission
+- At least one batch of real or test data to run variants against
+
+## Where you are
 
 By this point in the workshop, you have:
 
@@ -11,19 +21,11 @@ By this point in the workshop, you have:
 3. **Explicit deliverables** (Lesson 3) — prompts that specify what MUST be produced
 4. **Trace verification** (Lesson 4) — cryptographic proof of what actually happened
 
-Each of these was a response to a real failure. Now we combine them into something more powerful: a pipeline that measures its own quality and improves over time.
+Now you'll combine them into a pipeline that measures its own quality and improves over time.
 
-## The idea
+## Step 1: Define a scoring function
 
-The Agent A/B divergence wasn't just a bug — it was an unintentional A/B test. Same prompt, different results. The trace chain told us exactly where they diverged and what was missing.
-
-What if you did this on purpose?
-
-## Intentional prompt A/B testing
-
-### Step 1: Define what "success" means
-
-Before you can measure improvement, you need a scoring function. For our audit pipeline:
+Before you can measure improvement, define what "success" means. For an audit pipeline:
 
 ```python
 def score_run(trace_path, expected_deliverables):
@@ -42,26 +44,20 @@ def score_run(trace_path, expected_deliverables):
     return sum(scores[k] * weights[k] for k in scores)
 ```
 
-Using this scoring function against our original run:
-- **Agent A:** completeness=1.0, methodology=1.0, provenance=0.0 → **score: 0.70**
-- **Agent B:** completeness=1.0, methodology=1.0, provenance=1.0 → **score: 1.00**
-- **Agent C:** completeness=1.0, methodology=1.0, provenance=1.0 → **score: 1.00**
+This scoring function uses trace data — not the agent's self-reported output — as ground truth. The trace records what tools were actually called and what files were actually produced.
 
-Average: 0.90. The gap in provenance from Agent A pulls the batch score down.
+## Step 2: Create prompt variants
 
-### Step 2: Create prompt variants
+Take your current skill file and create targeted variants, each addressing a known failure mode:
 
-Take your current skill file and create targeted variants:
+| Variant | Change | Targets |
+|---------|--------|---------|
+| **A** (baseline) | Current skill file as-is | Control |
+| **B** (explicit deliverables) | Add "you MUST produce exactly 3 files" language (Lesson 3) | Completeness |
+| **C** (tool-check preamble) | Add Rizin verification block (Lesson 2) + explicit deliverables | Methodology + completeness |
+| **D** (checkpoint pattern) | Add "after each APK, verify all 3 files exist before proceeding" | Sequential verification |
 
-**Variant A (baseline):** Current skill file as-is.
-
-**Variant B (explicit deliverables):** Add the "you MUST produce exactly 3 files" language from Lesson 3.
-
-**Variant C (tool-check preamble):** Add the Rizin verification block from Lesson 2 plus explicit deliverables.
-
-**Variant D (checkpoint pattern):** Add intermediate checkpoints — "After each APK, verify all 3 files exist before proceeding to the next."
-
-### Step 3: Run variants against the same batch
+## Step 3: Run variants against the same batch
 
 ```bash
 # Same 4 APKs, different prompt variants
@@ -69,14 +65,17 @@ for variant in A B C D; do
   claude -p "Audit: Baldwin, Calhoun, Chambers, Colbert" \
     --append-system-prompt-file "skills/audit/SKILL-variant-${variant}.md" \
     --max-turns 120 \
+    --permission-mode bypassPermissions \
     --output-format stream-json \
-    ... \
+    --settings '{"env":{"PATH":"/opt/homebrew/bin:/usr/bin:/usr/local/bin:/bin:/usr/sbin"}}' \
     > "results/variant-${variant}/output.jsonl" 2>&1 &
 done
 wait
 ```
 
-### Step 4: Score and compare
+Running all variants against the same batch ensures differences in output reflect prompt quality, not data variance.
+
+## Step 4: Score and compare
 
 ```python
 variants = ["A", "B", "C", "D"]
@@ -110,9 +109,9 @@ Variant B: mean=0.95  min=0.85  [GAPS]
 Variant A: mean=0.90  min=0.70  [GAPS]
 ```
 
-### Step 5: Promote the winner
+## Step 5: Promote the winner and record the decision
 
-Variant D (checkpoints) produces consistently complete output. It becomes the new baseline skill file. The trace data from the comparison run becomes the evidence for why this version was chosen.
+The winning variant becomes your new baseline skill file. Record the decision in the trace chain so there's provenance for why this version was chosen:
 
 ```python
 emitter.emit("prompt_variant_selected", {
@@ -120,7 +119,7 @@ emitter.emit("prompt_variant_selected", {
     "reason": "100% completeness across all runs",
     "comparison_data": results,
     "previous_baseline": "A",
-    "improvement": "mean score 0.90 → 1.00"
+    "improvement": "mean score 0.90 -> 1.00"
 })
 ```
 
@@ -139,15 +138,13 @@ The same framework works for any pipeline parameter:
 ## The feedback loop
 
 ```
-┌─────────────────────────────────────────┐
-│  1. Define scoring function             │
-│  2. Create prompt variants              │
-│  3. Run variants against same batch     │
-│  4. Score using trace data              │
-│  5. Promote winner as new baseline      │
-│  6. Record decision in trace chain      │
-│  7. Repeat with new variants            │
-└─────────────────────────────────────────┘
+1. Define scoring function
+2. Create prompt variants
+3. Run variants against same batch
+4. Score using trace data
+5. Promote winner as new baseline
+6. Record decision in trace chain
+7. Repeat with new variants
 ```
 
 Each iteration through this loop:
@@ -157,17 +154,17 @@ Each iteration through this loop:
 
 Over time, you're not just running agents — you're building evidence for which configurations produce reliable results for your specific use case.
 
-## What this looks like at scale
+## Summary: the five-lesson arc
 
-For the Frio audit pipeline across 50 states:
+| Lesson | Problem | Solution | Takeaway |
+|--------|---------|----------|----------|
+| 1. Environment | Permissions blocked, tools missing | Explicit PATH, permission mode | Verify the agent's world before dispatching |
+| 2. Silent degradation | Required tool missing, agent fell back silently | Tool-check preamble, fail loudly | Don't let agents downgrade methodology |
+| 3. Non-determinism | Same prompt, different outputs | Explicit deliverables, generous turns | Same prompt != same output |
+| 4. Trace verification | Manual checking doesn't scale | Plan -> validate -> gap-detect | Make verification part of the provenance |
+| 5. Self-improvement | Static prompts, no measurement | A/B test with trace scoring | Measure, compare, promote, repeat |
 
-1. **First run:** Use the best-known prompt variant. Trace everything.
-2. **Validation:** Score all agent outputs. Flag gaps.
-3. **Backfill:** Re-run gaps with the same or improved prompt.
-4. **Analysis:** Which counties/platforms cause the most failures? Why?
-5. **Iterate:** Create targeted variants for problem cases. Test. Promote.
-
-The trace chain for the entire campaign — discovery → audit → validation → backfill → variant testing — becomes a comprehensive record of what you did, what you found, and how you verified it.
+Each lesson builds on the previous one. Together, they turn a fragile "run agent and hope" workflow into a pipeline you can measure and improve systematically.
 
 ## Checklist
 
@@ -178,18 +175,6 @@ The trace chain for the entire campaign — discovery → audit → validation �
 - [ ] Promote the winning variant as your new baseline
 - [ ] Record the comparison and decision in the trace chain
 - [ ] Schedule periodic re-evaluation as your pipeline evolves
-
-## Summary: the five-lesson arc
-
-| Lesson | Failure | Fix | Takeaway |
-|--------|---------|-----|----------|
-| 1. Environment | Permissions blocked, tools missing | Explicit PATH, permission mode | Verify the agent's world before dispatching |
-| 2. Silent degradation | Rizin missing, agent used regex | Tool-check preamble, fail loudly | Don't let agents downgrade methodology |
-| 3. Non-determinism | Agent A skipped provenance | Explicit deliverables, generous turns | Same prompt ≠ same output |
-| 4. Trace verification | Manual spot-checking doesn't scale | Plan → validate → gap-detect | Make verification part of the provenance |
-| 5. Self-improvement | Static prompts, no measurement | A/B test with trace scoring | Measure, compare, promote, repeat |
-
-Each lesson builds on the previous failure. Together, they turn a fragile "run agent and hope" workflow into a pipeline you can trust — and prove you can trust.
 
 ---
 

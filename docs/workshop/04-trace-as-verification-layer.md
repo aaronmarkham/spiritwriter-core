@@ -2,15 +2,19 @@
 
 > Add provenance tracing to the pipeline itself — not after the fact, but as part of the work.
 
-## What happened
+## What you'll learn
 
-After the Agent A/B divergence in [Lesson 3](03-prompt-ambiguity-and-nondeterministic-output.md), the parent session (CC) had to manually backfill the missing provenance. This worked because someone was watching — one human checking 3 agents across 12 counties.
+In this lesson you'll integrate spiritwriter trace events into your agent pipeline so that verification happens automatically. You'll move from shell-script output checking (Lesson 3) to cryptographic proof chains that record what was planned, what happened, and what was verified.
 
-Now scale it: 50 states × N counties per state × 3 files per county. Manual spot-checking breaks down fast. You need automated verification, and that verification needs to be part of the provenance record itself.
+## Prerequisites
 
-This is what spiritwriter does.
+- Completed [Lessons 1-3](README.md) — environment, tool verification, explicit deliverables
+- `pip install spiritwriter` (or your project's equivalent)
+- Familiarity with SHA-256 hash chaining concepts
 
-## What spiritwriter trace provides
+## Concepts
+
+### What spiritwriter trace provides
 
 Spiritwriter is a cryptographic provenance framework. Each step of a pipeline emits **trace events** — structured records linked by SHA-256 hashes into a chain. The chain is tamper-evident: modifying any event invalidates all subsequent hashes.
 
@@ -33,13 +37,41 @@ A trace event looks like this:
 }
 ```
 
-The chain links: APK binary hash → extraction events → individual findings → final report → witness document. Each step references the previous step's hash. You can verify the entire chain from source artifact to conclusion.
+The chain links: APK binary hash -> extraction events -> individual findings -> final report -> witness document. Each step references the previous step's hash. You can verify the entire chain from source artifact to conclusion.
 
-## Using trace for agent verification
+### Why trace beats shell scripts
 
-The insight from the Agent A/B incident: trace isn't just for auditing external software. It's for auditing your own pipeline.
+The `verify-outputs.sh` script from Lesson 3 checks that files exist. Spiritwriter trace gives you:
 
-### Step 1: Emit a plan event before dispatching agents
+1. **Tamper evidence.** The hash chain proves files weren't modified after generation.
+2. **Methodology verification.** The trace records which tools were used. If an agent fell back to regex instead of Rizin (see [Lesson 2](02-tool-availability-and-silent-degradation.md)), the trace shows `regex_extraction` instead of `rizin_extraction`.
+3. **Audit trail for the audit.** When you publish security findings, the trace chain shows every step, every input hash, every tool invocation.
+4. **Composability.** Individual agent traces link into batch traces. Batch traces link into campaign traces. You can zoom from "20 apps rated HIGH risk" down to "this specific DEX string in this specific APK."
+
+## Step 1: Add trace emission to your agent
+
+Start by having your agent emit trace events during its work. This is the minimum viable integration:
+
+```python
+from spiritwriter.fabric import TraceEmitter
+
+emitter = TraceEmitter("my-audit")
+emitter.emit("audit_started", {"target": "some-app.apk"})
+# ... do work ...
+emitter.emit("audit_complete", {"findings": 11, "risk": "HIGH"})
+emitter.save("trace.jsonl")
+```
+
+Each agent's audit skill emits events during the audit:
+
+```
+apk_hash_verified -> permissions_extracted -> dex_strings_extracted ->
+findings_classified -> report_generated -> witness_signed
+```
+
+If an agent's trace chain stops at `report_generated` and never emits `witness_signed`, you know provenance wasn't completed — even if the report file exists.
+
+## Step 2: Emit a plan event before dispatching agents
 
 Before launching parallel agents, emit a trace event that declares what you expect each agent to produce:
 
@@ -76,18 +108,7 @@ plan = emitter.emit("agent_dispatch_plan", {
 
 This plan event is now part of the trace chain. It records what should exist when the agents finish.
 
-### Step 2: Agents emit their own trace events as they work
-
-Each agent's audit skill already uses spiritwriter to emit events during the audit:
-
-```
-apk_hash_verified → permissions_extracted → dex_strings_extracted →
-findings_classified → report_generated → witness_signed
-```
-
-Agent A's trace chain stops at `report_generated` — it never emitted `witness_signed`. Agent B's chain is complete.
-
-### Step 3: Validate outputs against the plan
+## Step 3: Validate outputs against the plan
 
 After all agents finish, a validator reads the plan event and checks actual outputs:
 
@@ -127,51 +148,31 @@ emitter.emit("batch_validation", {
 })
 ```
 
-### Step 4: The full trace chain tells the story
+The validation result is itself a trace event, so it's part of the cryptographic record.
+
+## Step 4: Read the full trace chain
 
 The resulting trace chain for a batch audit looks like:
 
 ```
 agent_dispatch_plan (12 counties, 3 agents, 36 expected files)
-  ├── agent-A: apk_hash → ... → report_generated (×4)
-  │   ⚠ Missing: witness_signed for all 4 counties
-  ├── agent-B: apk_hash → ... → witness_signed (×4, complete)
-  ├── agent-C: apk_hash → ... → witness_signed (×4, complete)
-  └── batch_validation: 28/36 files present, 8 gaps identified
-        └── backfill_completed: 8 missing files regenerated
+  |-- agent-A: apk_hash -> ... -> report_generated (x4)
+  |   Warning: Missing witness_signed for all 4 counties
+  |-- agent-B: apk_hash -> ... -> witness_signed (x4, complete)
+  |-- agent-C: apk_hash -> ... -> witness_signed (x4, complete)
+  \-- batch_validation: 28/36 files present, 8 gaps identified
+        \-- backfill_completed: 8 missing files regenerated
 ```
 
-This is both a **verification mechanism** (catches Agent A's gaps automatically) and a **provenance record** (proves the batch was validated and gaps were filled).
+This is both a **verification mechanism** (catches gaps automatically) and a **provenance record** (proves the batch was validated and gaps were filled).
 
-## What this gives you that shell scripts don't
+## Getting started incrementally
 
-The simple `verify-outputs.sh` from Lesson 3 checks that files exist. Spiritwriter trace gives you:
-
-1. **Tamper evidence.** The hash chain means you can prove files weren't modified after generation. A shell script can tell you files exist; trace can tell you they're the same files the agent produced.
-
-2. **Methodology verification.** The trace chain records which tools were used. If Agent A fell back to regex instead of Rizin (see [Lesson 2](02-tool-availability-and-silent-degradation.md)), the trace shows `regex_extraction` instead of `rizin_extraction` — even if the final report looks the same.
-
-3. **Audit trail for the audit.** When you publish security findings, people ask "how did you arrive at this?" The trace chain is the answer: every step, every input hash, every tool invocation, cryptographically linked.
-
-4. **Composability.** Individual agent traces link into the batch trace. Batch traces link into campaign traces (all 50 states). You can zoom from "20 apps rated HIGH risk" down to "this specific DEX string in this specific APK."
-
-## Getting started
-
-You don't need to implement the full plan → validate → gap-detect flow on day one. Start small:
+You don't need to implement the full plan -> validate -> gap-detect flow all at once. Build up in levels:
 
 ### Level 1: Add trace to your agent output
 
 Have your agent emit trace events during its work. This costs almost nothing and gives you a log of what actually happened (vs. what the agent said it did).
-
-```python
-from spiritwriter.fabric import TraceEmitter
-
-emitter = TraceEmitter("my-audit")
-emitter.emit("audit_started", {"target": "some-app.apk"})
-# ... do work ...
-emitter.emit("audit_complete", {"findings": 11, "risk": "HIGH"})
-emitter.save("trace.jsonl")
-```
 
 ### Level 2: Add post-batch validation
 
@@ -179,7 +180,7 @@ After agents complete, run a validator that checks expected outputs exist. Emit 
 
 ### Level 3: Add plan events
 
-Before dispatching agents, emit a plan event. Now the trace chain covers the full lifecycle: what you intended → what happened → what was verified.
+Before dispatching agents, emit a plan event. Now the trace chain covers the full lifecycle: what you intended -> what happened -> what was verified.
 
 ## Checklist
 

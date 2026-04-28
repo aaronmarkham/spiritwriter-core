@@ -2,63 +2,43 @@
 
 > Identical prompts do not guarantee identical behavior.
 
-## What happened
+## What you'll learn
 
-We needed to audit 12 Alabama county sheriff apps. Rather than run them sequentially (slow), we split them into 3 batches of 4 and launched 3 parallel `claude -p` agents:
+In this lesson you'll learn why parallel agents given the same prompt can produce different outputs, and how to write prompts that specify **requirements** rather than **capabilities**. You'll also set appropriate turn budgets and add post-completion verification.
 
-```bash
-# Agent A — counties 1-4
-claude -p "Audit these APKs: Baldwin, Calhoun, Chambers, Colbert" \
-  --append-system-prompt-file .claude/skills/audit/SKILL.md \
-  --max-turns 60 ...
+## Prerequisites
 
-# Agent B — counties 5-8
-claude -p "Audit these APKs: Covington, Limestone, Marshall, Montgomery" \
-  --append-system-prompt-file .claude/skills/audit/SKILL.md \
-  --max-turns 60 ...
+- Completed [Lesson 1](01-environment-and-permissions.md) — headless agent invocation
+- Completed [Lesson 2](02-tool-availability-and-silent-degradation.md) — tool verification
 
-# Agent C — counties 9-12
-claude -p "Audit these APKs: Russell, Shelby, Talladega, Tallapoosa" \
-  --append-system-prompt-file .claude/skills/audit/SKILL.md \
-  --max-turns 60 ...
-```
+## Concepts
 
-Same CLI invocation. Same prompt template. Same skill file. Same model.
-
-**Agent B and C** produced the expected output for all their counties: `report.json`, `trace.jsonl`, `witness.json`.
-
-**Agent A** produced `report.json` for all 4 counties but skipped provenance entirely — no `trace.jsonl`, no `witness.json`. The audit reports were there, but the cryptographic proof chain wasn't.
-
-Neither agent was "wrong." The skill file described provenance generation but didn't list it as a required deliverable. Agent A processed its 4 APKs, spent 58 of its 60 turns on the audit work, and had no room left for provenance. Agent B happened to read deeper into the skill file and budgeted differently.
-
-We only discovered the gap because the parent session (CC) manually checked the output directories for each agent.
-
-## Why this happens
+### Non-determinism in LLM agents
 
 LLMs are non-deterministic by nature. Even with identical inputs, the model may:
 
-- Read the skill file in a different order
+- Read a skill file in a different order
 - Prioritize different sections of a long prompt
 - Budget its turns differently based on early decisions
 - Hit the turn limit and triage away tasks it considers optional
 
-Two contributing factors made this worse:
+This means running three parallel agents with the same prompt and skill file can produce three different sets of outputs. One agent might produce all expected deliverables; another might skip provenance files because it ran out of turns.
 
-1. **Turn budget was too tight.** 60 turns for 4 APKs with provenance was marginal. Agent A used 58 turns and ran out of room. Agent B happened to be more efficient.
+### Capabilities vs. requirements
 
-2. **The prompt was ambiguous about what was required.** The skill file described provenance as a capability, not a requirement. The difference between "you can generate trace files" and "you MUST generate trace files" is the difference between optional and mandatory.
+The difference between a prompt that says "the audit module supports provenance tracing" and one that says "you MUST generate trace files" is the difference between optional and mandatory. Agents interpret "supports" and "can generate" as capabilities they may use. They interpret "MUST produce" as requirements they can't skip.
 
-## Fix 1: Explicit deliverables
+## Step 1: Specify explicit deliverables
 
 List every required output file by name. Don't describe capabilities — specify requirements.
 
-**Before (ambiguous):**
+**Ambiguous (avoid):**
 ```
 Audit each APK. Generate a report with findings, permissions, and secrets.
 The audit module supports provenance tracing via spiritwriter.
 ```
 
-**After (explicit):**
+**Explicit (preferred):**
 ```
 For EACH APK, you MUST produce exactly 3 files:
 
@@ -70,26 +50,54 @@ All 3 files are REQUIRED. If any file is missing for any county, the audit is in
 Do not move to the next APK until all 3 files exist for the current one.
 ```
 
-## Fix 2: Budget turns generously
+The last line is important — it forces sequential verification rather than letting the agent batch work and skip deliverables for earlier items.
 
-The rule of thumb we arrived at:
+## Step 2: Budget turns generously
+
+When dispatching parallel agents, each gets a `--max-turns` budget. If the budget is too tight, some agents will run out of room and silently drop lower-priority work.
+
+A rule of thumb:
 
 ```
 expected_turns = (number_of_items × turns_per_item)
 max_turns = expected_turns × 2, minimum 10 turn buffer
 ```
 
-For our audit batches:
-- 4 APKs × 15 turns each = 60 expected
+For a batch of 4 APKs at ~15 turns each:
+- Expected: 60 turns
 - Budget: `--max-turns 120`
 
-The original 60-turn limit was exactly the expected amount with zero buffer. Agent A needed more room and had none.
+Setting `--max-turns 60` gives zero buffer. An agent that takes a few extra turns on early items has no room left for later deliverables.
 
-## Fix 3: Verify after completion
+## Step 3: Dispatch parallel agents
 
-Even with explicit prompts and generous budgets, you can't guarantee identical behavior. You need a post-completion check.
+With explicit deliverables and generous turn budgets, you can dispatch parallel agents:
 
-**Simple version — shell script:**
+```bash
+# Agent A — counties 1-4
+claude -p "Audit these APKs: Baldwin, Calhoun, Chambers, Colbert" \
+  --append-system-prompt-file .claude/skills/audit/SKILL.md \
+  --max-turns 120 \
+  --permission-mode bypassPermissions \
+  --output-format stream-json \
+  --settings '{"env":{"PATH":"/opt/homebrew/bin:/usr/bin:/usr/local/bin:/bin:/usr/sbin"}}' &
+
+# Agent B — counties 5-8
+claude -p "Audit these APKs: Covington, Limestone, Marshall, Montgomery" \
+  --append-system-prompt-file .claude/skills/audit/SKILL.md \
+  --max-turns 120 \
+  --permission-mode bypassPermissions \
+  --output-format stream-json \
+  --settings '{"env":{"PATH":"/opt/homebrew/bin:/usr/bin:/usr/local/bin:/bin:/usr/sbin"}}' &
+
+wait
+```
+
+Even with all the right settings, you can't guarantee identical behavior across agents. That's expected — the next step compensates for it.
+
+## Step 4: Verify outputs after completion
+
+Add a post-completion check that treats missing files as failures, not caveats.
 
 ```bash
 #!/bin/bash
@@ -115,18 +123,16 @@ fi
 echo "All outputs verified."
 ```
 
-**Better version — spiritwriter trace verification:**
-
-See [Lesson 4](04-trace-as-verification-layer.md) for how to make this verification part of the provenance chain itself.
+For a more robust verification approach using spiritwriter's trace chain, see [Lesson 4](04-trace-as-verification-layer.md).
 
 ## The deeper issue
 
-This incident reveals something fundamental about using AI agents for structured work: **the same prompt is not a specification.** Natural language instructions leave room for interpretation, and different runs will interpret differently.
+Natural language prompts are not specifications. They leave room for interpretation, and different runs will interpret differently. This is analogous to property-based testing vs. example-based testing — a single prompt that works once doesn't prove the system works reliably.
 
-This is analogous to property-based testing vs. example-based testing. A single test case (prompt) that passes once doesn't prove the system works — it proves it worked that time. You need either:
+You need either:
 
-1. **Stronger specifications** (explicit deliverables, checklists, tool-check preambles)
-2. **Output verification** (check what was actually produced, not what was asked for)
+1. **Stronger specifications** — explicit deliverables, checklists, tool-check preambles
+2. **Output verification** — check what was actually produced, not what was asked for
 3. **Both** (recommended)
 
 For security audit pipelines specifically, the consequences of non-deterministic output are:
@@ -136,7 +142,7 @@ For security audit pipelines specifically, the consequences of non-deterministic
 
 ## Checklist
 
-- [ ] Explicitly list every required output file by name in your prompt/skill
+- [ ] List every required output file by name in your prompt/skill
 - [ ] Use "MUST produce" language, not "can generate" or "supports"
 - [ ] Set `--max-turns` to 2x your expected turn count
 - [ ] Add a post-completion verification step (script or automated check)
