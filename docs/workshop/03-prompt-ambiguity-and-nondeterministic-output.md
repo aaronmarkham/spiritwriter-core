@@ -13,6 +13,12 @@ In this lesson you'll learn why parallel agents given the same prompt can produc
 
 ## Concepts
 
+### Capabilities vs. requirements
+
+This is the single most important distinction in prompt engineering for agent pipelines: the difference between a prompt that says "the audit module supports provenance tracing" and one that says "you MUST generate trace files" is the difference between optional and mandatory. Agents interpret "supports" and "can generate" as capabilities they may use. They interpret "MUST produce" as requirements they can't skip.
+
+When a prompt describes something as a capability, some runs will use it and some won't — depending on how the model prioritizes within its turn budget. When a prompt specifies it as a requirement, the agent treats it as a hard constraint.
+
 ### Non-determinism in LLM agents
 
 LLMs are non-deterministic by nature. Even with identical inputs, the model may:
@@ -22,11 +28,7 @@ LLMs are non-deterministic by nature. Even with identical inputs, the model may:
 - Budget its turns differently based on early decisions
 - Hit the turn limit and triage away tasks it considers optional
 
-This means running three parallel agents with the same prompt and skill file can produce three different sets of outputs. One agent might produce all expected deliverables; another might skip provenance files because it ran out of turns.
-
-### Capabilities vs. requirements
-
-The difference between a prompt that says "the audit module supports provenance tracing" and one that says "you MUST generate trace files" is the difference between optional and mandatory. Agents interpret "supports" and "can generate" as capabilities they may use. They interpret "MUST produce" as requirements they can't skip.
+This means running three parallel agents with the same prompt and skill file can produce three different sets of outputs. One agent might produce all expected deliverables; another might skip provenance files because it ran out of turns. The capability-vs-requirement distinction above is what makes this manageable: explicit requirements reduce the surface area for non-deterministic behavior.
 
 ## Step 1: Specify explicit deliverables
 

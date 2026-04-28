@@ -31,20 +31,23 @@ Before you can measure improvement, define what "success" means. For an audit pi
 def score_run(trace_path, expected_deliverables):
     """Score a single agent run from 0.0 to 1.0."""
     trace = load_trace(trace_path)
+    event_types = {e["type"] for e in trace}
 
     scores = {
+        # Completeness weighted highest: partial output is worse than slow output
         "completeness": count_present(trace, expected_deliverables) / len(expected_deliverables),
-        "methodology": 1.0 if "rizin_extraction" in trace.event_types else 0.5,
-        "provenance": 1.0 if all(f in trace.event_types
-            for f in ["trace_saved", "witness_signed"]) else 0.0,
+        # Did the agent use binary analysis or fall back to regex?
+        "methodology": 1.0 if "audit_strings_extracted" in event_types else 0.5,
+        # Was the full trace chain emitted through to the report?
+        "provenance": 1.0 if "audit_report_generated" in event_types else 0.0,
     }
 
-    # Weighted average
+    # Weighted: completeness matters most, methodology and provenance equally
     weights = {"completeness": 0.4, "methodology": 0.3, "provenance": 0.3}
     return sum(scores[k] * weights[k] for k in scores)
 ```
 
-This scoring function uses trace data — not the agent's self-reported output — as ground truth. The trace records what tools were actually called and what files were actually produced.
+This scoring function uses trace data — not the agent's self-reported output — as ground truth. The event types come from spiritwriter's actual audit trace chain (see [Lesson 4](04-trace-as-verification-layer.md)).
 
 ## Step 2: Create prompt variants
 
@@ -114,13 +117,14 @@ Variant A: mean=0.90  min=0.70  [GAPS]
 The winning variant becomes your new baseline skill file. Record the decision in the trace chain so there's provenance for why this version was chosen:
 
 ```python
-emitter.emit("prompt_variant_selected", {
-    "selected": "D",
-    "reason": "100% completeness across all runs",
-    "comparison_data": results,
-    "previous_baseline": "A",
-    "improvement": "mean score 0.90 -> 1.00"
-})
+emitter.emit(
+    "prompt_variant_selected",
+    selected="D",
+    reason="100% completeness across all runs",
+    comparison_data=results,
+    previous_baseline="A",
+    improvement="mean score 0.90 → 1.00",
+)
 ```
 
 ## Beyond prompts: what else you can A/B test
@@ -161,7 +165,7 @@ Over time, you're not just running agents — you're building evidence for which
 | 1. Environment | Permissions blocked, tools missing | Explicit PATH, permission mode | Verify the agent's world before dispatching |
 | 2. Silent degradation | Required tool missing, agent fell back silently | Tool-check preamble, fail loudly | Don't let agents downgrade methodology |
 | 3. Non-determinism | Same prompt, different outputs | Explicit deliverables, generous turns | Same prompt != same output |
-| 4. Trace verification | Manual checking doesn't scale | Plan -> validate -> gap-detect | Make verification part of the provenance |
+| 4. Trace verification | Manual checking doesn't scale | Plan → validate → gap-detect | Make verification part of the provenance |
 | 5. Self-improvement | Static prompts, no measurement | A/B test with trace scoring | Measure, compare, promote, repeat |
 
 Each lesson builds on the previous one. Together, they turn a fragile "run agent and hope" workflow into a pipeline you can measure and improve systematically.

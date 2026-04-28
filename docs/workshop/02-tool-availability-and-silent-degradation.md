@@ -121,7 +121,7 @@ If you're reviewing output from an agent that already ran, look for these signal
 
 3. **No binary-specific findings.** Rizin finds things like native library linkage and obfuscated class names that regex can't. If all findings are string-match patterns (`com.google.firebase`, `com.facebook.sdk`), the analysis was likely regex-only.
 
-4. **Provenance trace shows the method.** If you're using spiritwriter (see [Lesson 4](04-trace-as-verification-layer.md)), each step emits trace events. A missing `rizin_extraction` event tells you binary analysis didn't happen — even if the final report looks complete.
+4. **Provenance trace shows the method.** If you're using spiritwriter (see [Lesson 4](04-trace-as-verification-layer.md)), the audit emits an `audit_strings_extracted` trace event recording the extraction method and results. Examining this event reveals whether binary analysis actually happened — even if the final report looks complete.
 
 ## Checklist
 

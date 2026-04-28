@@ -2,7 +2,7 @@
 
 Five lessons on building reliable AI agent pipelines, using [Frio](https://github.com/aaronmarkham/frio) (a jail roster monitoring system) as a running example. The workshop covers how to set up, verify, and improve agent-driven workflows where you need to trust the output.
 
-Each lesson introduces a concept, walks through configuration or implementation, and includes a checklist and troubleshooting guidance. The lessons build on each other: environment setup -> tool verification -> prompt engineering -> provenance tracing -> continuous improvement.
+Each lesson introduces a concept, walks through configuration or implementation, and includes a checklist and troubleshooting guidance. The lessons build on each other: environment setup → tool verification → prompt engineering → provenance tracing → continuous improvement.
 
 ## Lessons
 

@@ -22,29 +22,29 @@ A trace event looks like this:
 
 ```json
 {
-  "event_id": "evt_a1b2c3",
-  "event_type": "apk_audit_complete",
-  "timestamp": "2026-04-27T14:32:01Z",
-  "parent_hash": "sha256:9f3e...",
-  "payload": {
-    "county": "Baldwin County AL",
-    "package": "com.ocv.baldwincountyal",
-    "findings_count": 11,
-    "risk_rating": "HIGH",
-    "report_path": "docs/audits/ocv/AL/Baldwin County AL/report.json"
-  },
+  "type": "audit_report_generated",
+  "run_id": "audit-com.ocv.baldwincountyal-20260427",
+  "event_id": "a1b2c3d4-...",
+  "ts": "2026-04-27T14:32:01Z",
+  "agent_id": "agent-A",
+  "prev_event_hash": "sha256:9f3e...",
+  "report_path": "docs/audits/ocv/AL/Baldwin County AL/report.json",
+  "findings_count": 11,
+  "risk_rating": "HIGH",
   "hash": "sha256:4a7d..."
 }
 ```
 
-The chain links: APK binary hash -> extraction events -> individual findings -> final report -> witness document. Each step references the previous step's hash. You can verify the entire chain from source artifact to conclusion.
+Note the schema: `type` (not `event_type`), `ts` (not `timestamp`), `prev_event_hash` (not `parent_hash`), and kwargs are spread at the top level (no `payload` wrapper). Each event also carries `run_id`, `agent_id`, and `event_id`.
+
+The chain links: input registration → evidence file hashes → DEX string corpus → per-finding derivation → report hash. Each step references the previous step's hash via `prev_event_hash`. You can verify the entire chain from source artifact to conclusion.
 
 ### Why trace beats shell scripts
 
 The `verify-outputs.sh` script from Lesson 3 checks that files exist. Spiritwriter trace gives you:
 
 1. **Tamper evidence.** The hash chain proves files weren't modified after generation.
-2. **Methodology verification.** The trace records which tools were used. If an agent fell back to regex instead of Rizin (see [Lesson 2](02-tool-availability-and-silent-degradation.md)), the trace shows `regex_extraction` instead of `rizin_extraction`.
+2. **Methodology verification.** The trace records what actually happened. If an agent fell back to regex instead of Rizin (see [Lesson 2](02-tool-availability-and-silent-degradation.md)), you can detect this by examining the `audit_strings_extracted` event — its payload will reflect the extraction method used.
 3. **Audit trail for the audit.** When you publish security findings, the trace chain shows every step, every input hash, every tool invocation.
 4. **Composability.** Individual agent traces link into batch traces. Batch traces link into campaign traces. You can zoom from "20 apps rated HIGH risk" down to "this specific DEX string in this specific APK."
 
@@ -55,55 +55,66 @@ Start by having your agent emit trace events during its work. This is the minimu
 ```python
 from spiritwriter.fabric import TraceEmitter
 
-emitter = TraceEmitter("my-audit")
-emitter.emit("audit_started", {"target": "some-app.apk"})
+emitter = TraceEmitter(
+    run_id="audit-com.example.app-20260427",
+    agent_id="agent-A",
+    out_path="trace.jsonl",
+)
+emitter.emit("audit_started", target="some-app.apk")
 # ... do work ...
-emitter.emit("audit_complete", {"findings": 11, "risk": "HIGH"})
-emitter.save("trace.jsonl")
+emitter.emit("audit_complete", findings=11, risk="HIGH")
+# No save() call needed — events are written to out_path on each emit()
 ```
 
-Each agent's audit skill emits events during the audit:
+The constructor takes three required arguments: `run_id`, `agent_id`, and `out_path`. The `emit()` method takes an event type string and keyword arguments (not a dict). Events are appended to the output file incrementally.
+
+The audit skill's trace chain emits these five event types (from `spiritwriter.audit.provenance`):
 
 ```
-apk_hash_verified -> permissions_extracted -> dex_strings_extracted ->
-findings_classified -> report_generated -> witness_signed
+audit_input_registered → audit_evidence_extracted → audit_strings_extracted →
+audit_finding_derived (×N, one per finding) → audit_report_generated
 ```
 
-If an agent's trace chain stops at `report_generated` and never emits `witness_signed`, you know provenance wasn't completed — even if the report file exists.
+If an agent's trace chain stops at `audit_finding_derived` and never emits `audit_report_generated`, you know the report wasn't finalized — even if a report file exists on disk.
 
 ## Step 2: Emit a plan event before dispatching agents
 
-Before launching parallel agents, emit a trace event that declares what you expect each agent to produce:
+Before launching parallel agents, emit a trace event that declares what you expect each agent to produce. Plan events are not part of the audit skill's built-in trace types — you're extending the trace chain to cover your own orchestration logic:
 
 ```python
 from spiritwriter.fabric import TraceEmitter
 
-emitter = TraceEmitter("audit-dispatch")
+emitter = TraceEmitter(
+    run_id="batch-AL-20260427",
+    agent_id="dispatch-orchestrator",
+    out_path="batch-trace.jsonl",
+)
 
-plan = emitter.emit("agent_dispatch_plan", {
-    "batch_id": "AL-2026-04-27",
-    "agents": [
+plan = emitter.emit(
+    "agent_dispatch_plan",
+    batch_id="AL-2026-04-27",
+    agents=[
         {
             "agent_id": "agent-A",
             "counties": ["Baldwin", "Calhoun", "Chambers", "Colbert"],
             "expected_deliverables": [
                 "{county}/report.json",
                 "{county}/trace.jsonl",
-                "{county}/witness.json"
-            ]
+                "{county}/witness.json",
+            ],
         },
         {
             "agent_id": "agent-B",
             "counties": ["Covington", "Limestone", "Marshall", "Montgomery"],
-            "expected_deliverables": ["...same..."]
+            "expected_deliverables": ["...same..."],
         },
         {
             "agent_id": "agent-C",
             "counties": ["Russell", "Shelby", "Talladega", "Tallapoosa"],
-            "expected_deliverables": ["...same..."]
-        }
-    ]
-})
+            "expected_deliverables": ["...same..."],
+        },
+    ],
+)
 ```
 
 This plan event is now part of the trace chain. It records what should exist when the agents finish.
@@ -116,7 +127,11 @@ After all agents finish, a validator reads the plan event and checks actual outp
 from spiritwriter.fabric import TraceEmitter
 from pathlib import Path
 
-emitter = TraceEmitter("audit-validator")
+emitter = TraceEmitter(
+    run_id="batch-AL-20260427",
+    agent_id="batch-validator",
+    out_path="batch-trace.jsonl",
+)
 
 plan = load_plan_event("AL-2026-04-27")  # read from trace
 
@@ -129,23 +144,23 @@ for agent in plan["agents"]:
                 gaps.append({
                     "agent_id": agent["agent_id"],
                     "county": county,
-                    "missing": str(path)
+                    "missing": str(path),
                 })
 
+total_expected = sum(
+    len(a["counties"]) * len(a["expected_deliverables"])
+    for a in plan["agents"]
+)
+
 # Emit validation result as a trace event
-emitter.emit("batch_validation", {
-    "batch_id": plan["batch_id"],
-    "status": "complete" if not gaps else "incomplete",
-    "gaps": gaps,
-    "total_expected": sum(
-        len(a["counties"]) * len(a["expected_deliverables"])
-        for a in plan["agents"]
-    ),
-    "total_present": sum(
-        len(a["counties"]) * len(a["expected_deliverables"])
-        for a in plan["agents"]
-    ) - len(gaps)
-})
+emitter.emit(
+    "batch_validation",
+    batch_id=plan["batch_id"],
+    status="complete" if not gaps else "incomplete",
+    gaps=gaps,
+    total_expected=total_expected,
+    total_present=total_expected - len(gaps),
+)
 ```
 
 The validation result is itself a trace event, so it's part of the cryptographic record.
@@ -156,23 +171,23 @@ The resulting trace chain for a batch audit looks like:
 
 ```
 agent_dispatch_plan (12 counties, 3 agents, 36 expected files)
-  |-- agent-A: apk_hash -> ... -> report_generated (x4)
-  |   Warning: Missing witness_signed for all 4 counties
-  |-- agent-B: apk_hash -> ... -> witness_signed (x4, complete)
-  |-- agent-C: apk_hash -> ... -> witness_signed (x4, complete)
-  \-- batch_validation: 28/36 files present, 8 gaps identified
-        \-- backfill_completed: 8 missing files regenerated
+  ├── agent-A: audit_input_registered → ... → audit_finding_derived (×4)
+  │   ⚠ Missing: audit_report_generated for all 4 counties
+  ├── agent-B: audit_input_registered → ... → audit_report_generated (×4, complete)
+  ├── agent-C: audit_input_registered → ... → audit_report_generated (×4, complete)
+  └── batch_validation: 28/36 files present, 8 gaps identified
+        └── backfill_completed: 8 missing files regenerated
 ```
 
 This is both a **verification mechanism** (catches gaps automatically) and a **provenance record** (proves the batch was validated and gaps were filled).
 
 ## Getting started incrementally
 
-You don't need to implement the full plan -> validate -> gap-detect flow all at once. Build up in levels:
+You don't need to implement the full plan → validate → gap-detect flow all at once. Build up in levels:
 
 ### Level 1: Add trace to your agent output
 
-Have your agent emit trace events during its work. This costs almost nothing and gives you a log of what actually happened (vs. what the agent said it did).
+Have your agent emit trace events during its work. This costs almost nothing and gives you a log of what actually happened (vs. what the agent said it did). For the audit skill, `trace_existing_audit()` handles this automatically.
 
 ### Level 2: Add post-batch validation
 
@@ -180,7 +195,7 @@ After agents complete, run a validator that checks expected outputs exist. Emit 
 
 ### Level 3: Add plan events
 
-Before dispatching agents, emit a plan event. Now the trace chain covers the full lifecycle: what you intended -> what happened -> what was verified.
+Before dispatching agents, emit a plan event. Now the trace chain covers the full lifecycle: what you intended → what happened → what was verified.
 
 ## Checklist
 

@@ -59,12 +59,16 @@ which rz-bin   # /opt/homebrew/bin/rz-bin ✓
 env -i PATH=/usr/bin:/bin which rz-bin   # not found ✗
 ```
 
-Build a PATH string that includes every directory your tools live in:
+Build a PATH string that includes every directory your tools live in. The exact paths depend on your platform:
 
-```bash
-# Typical macOS PATH for agent use
-/opt/homebrew/bin:/usr/bin:/usr/local/bin:/bin:/usr/sbin
-```
+| Platform | Typical tool directories |
+|----------|------------------------|
+| macOS (Apple Silicon) | `/opt/homebrew/bin:/usr/bin:/usr/local/bin:/bin:/usr/sbin` |
+| macOS (Intel) | `/usr/local/bin:/usr/bin:/bin:/usr/sbin` |
+| Linux (with Homebrew) | `/home/linuxbrew/.linuxbrew/bin:/usr/bin:/usr/local/bin:/bin` |
+| Linux (system packages) | `/usr/bin:/usr/local/bin:/bin:/usr/sbin` |
+
+The examples in this workshop use macOS Apple Silicon paths. Adjust for your platform.
 
 ## Step 3: Set the working directory
 
@@ -96,7 +100,7 @@ cd /path/to/project && \
 ```
 
 Key flags:
-- `--append-system-prompt-file` embeds the skill as additional system context (vs `--system-prompt` which replaces the default)
+- `--append-system-prompt-file` loads a file and appends it to the default system prompt (vs `--system-prompt` which replaces it). Note: `claude --help` lists `--append-system-prompt <prompt>` for inline text; the `-file` variant is documented in the `--bare` section and accepts a file path.
 - `--output-format stream-json --verbose` gives you real-time progress (plain `json` buffers everything until completion)
 - `--max-turns 120` gives the agent room to work — see [Lesson 3](03-prompt-ambiguity-and-nondeterministic-output.md) for sizing guidance
 
@@ -154,6 +158,18 @@ The headless process has a minimal PATH. Tools that work in your terminal don't 
 ```bash
 --settings '{"env":{"PATH":"/opt/homebrew/bin:/usr/bin:/usr/local/bin:/bin:/usr/sbin"}}'
 ```
+
+**Tip:** To avoid repeating this on every invocation, add the `env` block to your project's `.claude/settings.json`:
+
+```json
+{
+  "env": {
+    "PATH": "/opt/homebrew/bin:/usr/bin:/usr/local/bin:/bin:/usr/sbin"
+  }
+}
+```
+
+Then all `claude -p` invocations from that project will inherit the PATH automatically. The remaining examples in this workshop use the inline `--settings` flag for explicitness, but a project-level settings file is recommended for production use.
 
 ## Why this matters for security work
 
