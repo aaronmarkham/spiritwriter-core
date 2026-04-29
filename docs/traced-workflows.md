@@ -534,7 +534,7 @@ For multi-pilot runs, each pilot's content + task + result triangle appears alon
 
 ### Multi-Agent
 
-Swim lanes by agent. Each subgraph is one `agent_id`; events flow downward within a lane and across lanes as work hands off. This is the diagram that earns its keep on long traces — at a glance you can see which agent ate the most cost and where the orchestration boundaries sit:
+Swim lanes by agent. Each subgraph is one `agent_id`; events flow downward within a lane, and the orchestrator's calls cross lanes to show who dispatches what. This is the diagram that earns its keep on long traces — at a glance you can see which agent ate the most cost and where the orchestration boundaries sit:
 
 ```mermaid
 graph TD
@@ -542,22 +542,16 @@ graph TD
     classDef shard fill:#023e8a,stroke:#03045e,color:#fff
     classDef spend fill:#e85d04,stroke:#dc2f02,color:#fff
 
-    subgraph orchestrator[csp-orchestrator]
-        N0["⚡ pipeline_started"]:::ok
-        N1["🎫 Grant → pilot-A"]:::shard
-        N0 --> N1
-        N2["🎬 60s ingrown-hair explainer..."]:::ok
-        N1 --> N2
-        N3["✅ Done $2.80"]:::ok
-        N2 --> N3
-        N4["⚡ pipeline_completed"]:::ok
-        N3 --> N4
-    end
-
     subgraph script[script-writer]
         N5["💰 brief_to_script:claude_sonnet $0.10"]:::spend
         N6["⚡ shard_created"]:::ok
         N5 --> N6
+    end
+
+    subgraph audio[audio-generator]
+        N9["💰 script_to_audio:simple_overlay $0.30"]:::spend
+        N10["⚡ shard_created"]:::ok
+        N9 --> N10
     end
 
     subgraph video[video-generator]
@@ -566,12 +560,24 @@ graph TD
         N7 --> N8
     end
 
-    subgraph audio[audio-generator]
-        N9["💰 script_to_audio:simple_overlay $0.30"]:::spend
-        N10["⚡ shard_created"]:::ok
-        N9 --> N10
+    subgraph orchestrator[csp-orchestrator]
+        N0["⚡ pipeline_started"]:::ok
+        N1["🎫 Grant → pilot-A"]:::shard
+        N0 --> N1
+        N2["🎬 explainer video"]:::ok
+        N1 --> N2
+        N3["✅ Done $2.80"]:::ok
+        N4["⚡ pipeline_completed"]:::ok
+        N3 --> N4
     end
+
+    N2 -. dispatch .-> N5
+    N6 -. dispatch .-> N9
+    N10 -. dispatch .-> N7
+    N8 --> N3
 ```
+
+The dotted dispatch edges and the final solid hand-back are added by hand in this rendering — `render_multi_agent` produces the swim-lane structure (each agent as its own subgraph, intra-lane order from the trace), but the orchestrator-to-agent edges are a post-processing step the consumer adds when they want the dispatch flow made explicit.
 
 ## Multi-Pilot Fan-Out
 
