@@ -120,10 +120,13 @@ A **job** is a packaged unit of sub-agent work — encrypted content shards + an
 ```python
 from spiritwriter.fabric.jobs import JobSpec, package_job
 
+# content_atoms is a list[ShardAtom] of the source material
+# (the same atom shape used elsewhere in this doc — see jobs.md
+# for richer construction patterns).
 spec = JobSpec(
     prompt="Summarize the source material in three bullet points",
     budget_usd=2.0,
-    constraints={"max_words": "60"},
+    constraints={"max_words": 60},
 )
 
 pkg = package_job(store, content_atoms, spec, tracer=emitter)
