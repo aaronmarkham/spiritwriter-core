@@ -20,11 +20,11 @@ from spiritwriter.fabric.entitlement import (
     create_entitlement, validate_capability, validate_scope,
     is_expired, get_shard_key, serialize_token, deserialize_token,
 )
-from spiritwriter.fabric.studio_job import (
-    StudioJobSpec, PackagedJob, package_job,
+from spiritwriter.fabric.jobs import (
+    JobSpec, PackagedJob, package_job,
 )
-from spiritwriter.fabric.studio_runner import (
-    StudioRunnerError, JobContext, BudgetTracker,
+from spiritwriter.fabric.runner import (
+    JobRunnerError, JobContext, BudgetTracker,
     parse_job_block, hydrate_job, create_result_shard,
 )
 from spiritwriter.fabric.network import (
@@ -68,10 +68,10 @@ __all__ = [
     "get_shard_key",
     "serialize_token",
     "deserialize_token",
-    "StudioJobSpec",
+    "JobSpec",
     "PackagedJob",
     "package_job",
-    "StudioRunnerError",
+    "JobRunnerError",
     "JobContext",
     "BudgetTracker",
     "parse_job_block",

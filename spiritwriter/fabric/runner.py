@@ -1,10 +1,10 @@
-"""Studio runner — sub-agent execution logic for packaged jobs.
+"""Job runner — sub-agent execution logic for packaged jobs.
 
 This module provides the parsing and hydration logic that a
-studio sub-agent uses to unpack a job and execute it.
+sub-agent uses to unpack a job and execute it.
 
 The runner:
-1. Parses the <studio-job> block from its task text
+1. Parses the <job> block from its task text
 2. Deserializes the entitlement token
 3. Hydrates content + task shards via the store
 4. Tracks budget as work proceeds
@@ -30,8 +30,8 @@ from spiritwriter.fabric.entitlement import (
 from spiritwriter.fabric.emitter import TraceEmitter
 
 
-class StudioRunnerError(Exception):
-    """Errors during studio job execution."""
+class JobRunnerError(Exception):
+    """Errors during job execution."""
     pass
 
 
@@ -93,7 +93,7 @@ class BudgetTracker:
     def record(self, label: str, amount: float) -> None:
         """Record a spend. Raises if over budget."""
         if not self.can_spend(amount):
-            raise StudioRunnerError(
+            raise JobRunnerError(
                 f"Budget exceeded: ${self.spent:.2f} + ${amount:.2f} > "
                 f"${self.budget_usd:.2f} limit"
             )
@@ -121,7 +121,7 @@ class BudgetTracker:
 
 
 def parse_job_block(task_text: str) -> tuple[str, str, str]:
-    """Parse <studio-job> block from task text.
+    """Parse <job> block from task text.
 
     Returns (token_str, content_shard_id, task_shard_id).
     """
@@ -136,8 +136,8 @@ def parse_job_block(task_text: str) -> tuple[str, str, str]:
     )
 
     if not all([token_match, content_match, task_match]):
-        raise StudioRunnerError(
-            "Missing required fields in <studio-job> block. "
+        raise JobRunnerError(
+            "Missing required fields in <job> block. "
             "Need <entitlement>, <content-shard>, and <task-shard>."
         )
 
@@ -155,7 +155,7 @@ def hydrate_job(
 ) -> JobContext:
     """Parse task text, validate entitlement, decrypt shards.
 
-    This is the main entry point for a studio runner sub-agent.
+    This is the main entry point for a job runner sub-agent.
     """
     token_str, content_id, task_id = parse_job_block(task_text)
 
@@ -167,14 +167,14 @@ def hydrate_job(
             tracer.capability_checked(
                 token_id=token.token_id, capability="token_valid", allowed=False,
             )
-        raise StudioRunnerError("Entitlement token has expired")
+        raise JobRunnerError("Entitlement token has expired")
 
     if not validate_capability(token, Capability.SHARD_READ):
         if tracer:
             tracer.capability_checked(
                 token_id=token.token_id, capability=Capability.SHARD_READ, allowed=False,
             )
-        raise StudioRunnerError("Token lacks shard:read capability")
+        raise JobRunnerError("Token lacks shard:read capability")
 
     if tracer:
         tracer.capability_checked(
@@ -185,7 +185,7 @@ def hydrate_job(
     content_key = get_shard_key(token, content_id)
     content_enc = store.get_encrypted(content_id)
     if content_enc is None:
-        raise StudioRunnerError(f"Content shard {content_id} not found in store")
+        raise JobRunnerError(f"Content shard {content_id} not found in store")
     content_shard = decrypt_shard(content_enc, content_key)
 
     if tracer:
@@ -197,14 +197,14 @@ def hydrate_job(
     task_key = get_shard_key(token, task_id)
     task_enc = store.get_encrypted(task_id)
     if task_enc is None:
-        raise StudioRunnerError(f"Task shard {task_id} not found in store")
+        raise JobRunnerError(f"Task shard {task_id} not found in store")
     task_shard = decrypt_shard(task_enc, task_key)
 
     if tracer:
         tracer.shard_decrypted(
             shard_id=task_id, token_id=token.token_id, scope=task_shard.scope,
         )
-        tracer.studio_job_started(
+        tracer.job_started(
             token_id=token.token_id,
             content_shard_id=content_id,
             task_shard_id=task_id,
@@ -223,7 +223,7 @@ def hydrate_job(
 def create_result_shard(
     job: JobContext,
     results: dict[str, Any],
-    agent_id: str = "studio-runner",
+    agent_id: str = "job-runner",
 ) -> MemoryShard:
     """Create a result shard from job execution output.
 
@@ -247,7 +247,7 @@ def create_result_shard(
                  f"${budget.get('budget_usd', 0):.2f} budget",
             kind=AtomKind.FACT,
             key="cost_summary",
-            entity="studio_run",
+            entity="job_run",
         ))
 
     # Output refs (video paths, YouTube URLs, etc.)
@@ -256,7 +256,7 @@ def create_result_shard(
             text=f"{output.get('type', 'output')}: {output.get('ref', 'unknown')}",
             kind=AtomKind.FACT,
             key=f"output.{output.get('type', 'unknown')}",
-            entity="studio_run",
+            entity="job_run",
         ))
 
     # Errors or warnings
@@ -272,7 +272,7 @@ def create_result_shard(
         scope=job.content_shard.scope.replace(":content", ":result"),
         origin=agent_id,
         decay_class=DecayClass.STABLE,
-        tags=["studio-result"],
+        tags=["job-result"],
         meta={
             "content_shard_id": job.content_shard_id,
             "task_shard_id": job.task_shard_id,

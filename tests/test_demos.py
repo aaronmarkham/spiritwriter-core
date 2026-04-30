@@ -80,7 +80,7 @@ class TestDemo01SimpleTrace:
         types = {e["type"] for e in events}
         assert "shard_created" in types
         assert "entitlement_granted" in types
-        assert "studio_job_packaged" in types
+        assert "job_packaged" in types
         assert "spawn_with_shards" in types
 
     def test_child_event_types(self):
@@ -88,7 +88,7 @@ class TestDemo01SimpleTrace:
         types = {e["type"] for e in events}
         assert "capability_checked" in types
         assert "shard_decrypted" in types
-        assert "studio_job_completed" in types
+        assert "job_completed" in types
 
     def test_mermaid_generated(self):
         path = self._traces / "workflow.mmd"
@@ -230,8 +230,8 @@ class TestDemo04GovernanceDivergence:
     def test_run_a_completes_successfully(self):
         events = _load_events(self._traces / "run_a.jsonl")
         types = {e["type"] for e in events}
-        assert "studio_job_completed" in types
-        assert "studio_job_failed" not in types
+        assert "job_completed" in types
+        assert "job_failed" not in types
         assert "capability_denied" not in types
         assert "budget_exceeded" not in types
 
@@ -240,8 +240,8 @@ class TestDemo04GovernanceDivergence:
         types = [e["type"] for e in events]
         assert "capability_denied" in types
         assert "budget_exceeded" in types
-        assert "studio_job_failed" in types
-        assert "studio_job_completed" not in types
+        assert "job_failed" in types
+        assert "job_completed" not in types
 
     def test_run_b_capability_denied_details(self):
         events = _load_events(self._traces / "run_b.jsonl")

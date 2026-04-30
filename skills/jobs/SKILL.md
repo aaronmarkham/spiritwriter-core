@@ -1,4 +1,4 @@
-# Skill: Spiritwriter Studio Jobs
+# Skill: Spiritwriter Jobs
 
 Package, dispatch, and execute scoped sub-agent work with budget tracking and trace provenance.
 
@@ -19,7 +19,7 @@ pip install -e /path/to/spiritwriter-core
 
 | Concept | What it is |
 |---------|-----------|
-| **StudioJobSpec** | Job definition: task description, content shard refs, tool permissions, budget. |
+| **JobSpec** | Job definition: task description, content shard refs, tool permissions, budget. |
 | **PackagedJob** | Ready-to-spawn bundle: encrypted shards + entitlement token + task text. |
 | **BudgetTracker** | Spend monitor. Tracks cumulative cost, raises on over-budget. |
 | **Result shard** | Output shard linked to the job by trace chain. Separate from input (never mutate source). |
@@ -29,9 +29,9 @@ pip install -e /path/to/spiritwriter-core
 ### Package a job
 
 ```python
-from spiritwriter.fabric.studio_job import StudioJobSpec, package_job
+from spiritwriter.fabric.jobs import JobSpec, package_job
 
-spec = StudioJobSpec(
+spec = JobSpec(
     task="Analyze this paper and extract key findings",
     content_refs=[shard_ref_1, shard_ref_2],
     tools=["web_search", "read"],
@@ -48,7 +48,7 @@ packaged = package_job(spec, store, issuer="lilit")
 ### Run a job (sub-agent side)
 
 ```python
-from spiritwriter.fabric.studio_runner import parse_job_block, hydrate_job, BudgetTracker
+from spiritwriter.fabric.runner import parse_job_block, hydrate_job, BudgetTracker
 
 # Parse the job block from task text
 job_block = parse_job_block(task_text)
@@ -66,7 +66,7 @@ tracker.spend(30, "llm_call_2")
 ### Return results
 
 ```python
-from spiritwriter.fabric.studio_runner import create_result_shard
+from spiritwriter.fabric.runner import create_result_shard
 
 result = create_result_shard(
     atoms=[...],            # extracted knowledge
@@ -80,10 +80,10 @@ store.put(result)
 ## Job Lifecycle (Trace Events)
 
 ```
-studio_job_packaged → entitlement_granted → studio_job_started →
+job_packaged → entitlement_granted → job_started →
   capability_checked → shard_decrypted (×N) →
   budget_spent (×N) →
-studio_job_completed (or studio_job_failed)
+job_completed (or job_failed)
 ```
 
 Every transition is hash-chained via TraceEmitter. Full provenance from packaging to result.
@@ -97,5 +97,5 @@ Every transition is hash-chained via TraceEmitter. Full provenance from packagin
 
 ## Source Files
 
-- `spiritwriter/fabric/studio_job.py` — StudioJobSpec, PackagedJob, package_job()
-- `spiritwriter/fabric/studio_runner.py` — parse_job_block(), hydrate_job(), BudgetTracker, create_result_shard()
+- `spiritwriter/fabric/jobs.py` — JobSpec, PackagedJob, package_job()
+- `spiritwriter/fabric/runner.py` — parse_job_block(), hydrate_job(), BudgetTracker, create_result_shard()

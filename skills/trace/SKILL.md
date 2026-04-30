@@ -47,10 +47,10 @@ emitter.emit_entitlement_granted(token)
 emitter.emit_shard_decrypted(shard_id, scope)
 emitter.emit_capability_checked(token_id, capability, allowed=True)
 emitter.emit_budget_spent(token_id, amount, remaining)
-emitter.emit_studio_job_packaged(job_id, shard_ids)
-emitter.emit_studio_job_started(job_id)
-emitter.emit_studio_job_completed(job_id, result_shard_id)
-emitter.emit_studio_job_failed(job_id, error)
+emitter.emit_job_packaged(job_id, shard_ids)
+emitter.emit_job_started(job_id)
+emitter.emit_job_completed(job_id, result_shard_id)
+emitter.emit_job_failed(job_id, error)
 ```
 
 ### Verify chain integrity

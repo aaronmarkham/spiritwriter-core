@@ -32,7 +32,7 @@ creates the assembly shard:
 ```
 shard_created          ← todo-list shard
   entitlement_granted  ← grant to worker-summarize_section_a ($0.25)
-  studio_job_packaged  ← content + task shards
+  job_packaged  ← content + task shards
   spawn_with_shards    ← dispatch subagent
   subagent_completed   ← result received
   entitlement_granted  ← grant to worker-summarize_section_b ($0.25)

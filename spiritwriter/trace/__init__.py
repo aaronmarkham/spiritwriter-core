@@ -39,8 +39,8 @@ _SUBMODULES = (
     "sealed",
     "shard",
     "store",
-    "studio_job",
-    "studio_runner",
+    "jobs",
+    "runner",
     "visualize",
 )
 
