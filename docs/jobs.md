@@ -174,7 +174,10 @@ Cost flows in from the *application*, not from the library. After each LLM call,
 tracker = BudgetTracker(budget_usd=job.budget_usd, token_id=job.token.token_id, tracer=tracer)
 
 response = anthropic_client.messages.create(model="claude-sonnet-4-6", ...)
-tracker.record("llm:sonnet", response.usage.cost)        # raises JobRunnerError on overflow
+# anthropic.types.Usage exposes input_tokens/output_tokens/cache_*; turn that into USD
+# via your provider's price table (or use a billing helper that does it for you)
+sonnet_cost = compute_cost_usd(response.usage, model="claude-sonnet-4-6")
+tracker.record("llm:sonnet", sonnet_cost)                # raises JobRunnerError on overflow
 
 tts = elevenlabs_client.tts(text=script, voice=...)
 tracker.record("tts:elevenlabs", tts.cost_usd)

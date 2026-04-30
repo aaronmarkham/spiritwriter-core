@@ -81,7 +81,7 @@ Capabilities are action verbs. The library declares the names; the application d
 
 `Capability.SHARD_READ` is the only one the library itself enforces — `ShardStore.hydrate_with_entitlement()` rejects tokens that lack it. The rest are conventions: your application code calls `validate_capability(token, Capability.WEB_SEARCH)` before allowing a web search, and emits a `capability_checked` event whether the check passes or fails. The audit trail then shows what an agent did *and* what it tried to do and was prevented from doing.
 
-Add custom capability strings if you need them — `capabilities` is a `list[str]`, not an enum-restricted set. `Capability` is a constants holder, not a `Enum`.
+Add custom capability strings if you need them — `capabilities` is a `list[str]`, not an enum-restricted set. `Capability` is a constants holder, not an `Enum`.
 
 ## Scopes
 
@@ -125,14 +125,15 @@ The library does not autodetect spend from LLM SDK responses — your code reads
 
 ## Validation Order
 
-When a token is presented to `ShardStore.hydrate_with_entitlement()`, the store walks four checks in this order. Any failure raises `PermissionError` *before* decryption:
+When a token is presented to `ShardStore.hydrate_with_entitlement()`, three checks raise `PermissionError` *before* any decryption happens:
 
 1. **Token not expired.** `is_expired(token)` — raises `PermissionError("token expired")` if `expires_at` is in the past.
 2. **Token has `SHARD_READ`.** `validate_capability(token, Capability.SHARD_READ)` — raises `PermissionError("token lacks shard:read")` if missing.
 3. **Per-shard scope match.** For each shard the token claims keys for, `validate_scope(token, shard.scope)` must pass. Raises `PermissionError(f"token not entitled to scope {scope}")` on the first mismatch.
-4. **Shard exists in store.** Missing shards are skipped silently — they may be on a DHT the resolver hasn't reached. Hydration continues with the shards that do resolve.
 
 Each rejection is fail-fast — the store doesn't return partial results from a bad token.
+
+A fourth condition — **shard exists in store** — does *not* raise. Missing shards are skipped silently, on the assumption that they may be on a DHT the resolver hasn't reached. Hydration continues with whichever shards do resolve. If you need to assert a shard was found, check the result's keys against the token's `shard_keys` after hydration.
 
 See [shard-store.md](shard-store.md#entitlement-aware-hydration) for the calling-side details.
 
