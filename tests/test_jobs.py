@@ -101,6 +101,37 @@ class TestJobSpec:
         assert atoms[0].key == "production_prompt"
         assert atoms[1].key == "budget_limit"
 
+    def test_negative_budget_rejected(self):
+        with pytest.raises(ValueError, match="budget_usd must be >= 0"):
+            JobSpec(prompt="x", budget_usd=-5.0)
+
+    def test_zero_budget_allowed(self):
+        # Zero is a valid no-spend assertion (useful for lifecycle testing)
+        spec = JobSpec(prompt="x", budget_usd=0.0)
+        assert spec.budget_usd == 0.0
+
+    def test_constraint_stringify_non_string_values(self):
+        """Pin docs/jobs.md's documented behavior: constraint values
+        are formatted via {v} f-string, so non-string values land as
+        their str() repr. Keeps code and docs in sync."""
+        spec = JobSpec(
+            prompt="p",
+            budget_usd=1.0,
+            constraints={
+                "items": [1, 2, 3],
+                "config": {"nested": "value"},
+                "count": 42,
+            },
+        )
+        constraint_atoms = {
+            a.key: a.text
+            for a in spec.to_atoms()
+            if a.key.startswith("constraint.")
+        }
+        assert constraint_atoms["constraint.items"] == "items: [1, 2, 3]"
+        assert constraint_atoms["constraint.config"] == "config: {'nested': 'value'}"
+        assert constraint_atoms["constraint.count"] == "count: 42"
+
 
 class TestPackageJob:
     def test_package_roundtrip(self, tmp_store, sample_atoms, sample_spec):

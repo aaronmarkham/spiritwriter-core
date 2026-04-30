@@ -47,6 +47,12 @@ class JobSpec:
     budget_usd: float = 10.0
     constraints: dict[str, Any] = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        if self.budget_usd < 0:
+            raise ValueError(
+                f"budget_usd must be >= 0, got {self.budget_usd!r}"
+            )
+
     def to_atoms(self) -> list[ShardAtom]:
         """Convert job spec to shard atoms.
 
