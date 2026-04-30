@@ -111,7 +111,28 @@ Pick AES when the operator and the key-holder cooperate. Pick sealed-box when th
 
 **Entitlement tokens** package a decryption key + scope patterns + capabilities + budget into a delegatable bearer credential. A sub-agent presents the token; the store validates expiry → `SHARD_READ` → per-shard scope match before decrypting.
 
-**Deep dive:** [encryption.md](encryption.md)
+**Deep dive:** [encryption.md](encryption.md), [entitlements.md](entitlements.md)
+
+### Delegated Jobs
+
+A **job** is a packaged unit of sub-agent work — encrypted content shards + an encrypted task shard with the prompt + an entitlement token tying it all together with scope, capability, and budget. The main agent issues the job; the sub-agent presents the token; every step is traced.
+
+```python
+from spiritwriter.fabric.jobs import JobSpec, package_job
+
+spec = JobSpec(
+    prompt="Summarize the source material in three bullet points",
+    budget_usd=2.0,
+    constraints={"max_words": "60"},
+)
+
+pkg = package_job(store, content_atoms, spec, tracer=emitter)
+task_text = pkg.spawn_task_text()  # hand this to the sub-agent
+```
+
+`package_job` generates one AES key for both shards, encrypts and stores them, mints the entitlement, emits `entitlement_granted` + `job_packaged` trace events, and returns the `PackagedJob`. The job key lives only in memory on the returned object — never persisted. The sub-agent uses `hydrate_job()` to validate the token, decrypt both shards, and return a `JobContext` to work against.
+
+**Deep dive:** [jobs.md](jobs.md)
 
 ### Entity Resolution
 
@@ -178,12 +199,14 @@ The deep-dive docs aren't a linear tutorial — they're reference material organ
 | If you're building... | Read in this order |
 |-----------------------|---------------------|
 | Memory for a single agent | [memory-shards](memory-shards.md) → [shard-store](shard-store.md) |
-| Memory shared across agents | + [encryption](encryption.md) (entitlements section) |
+| Memory shared across agents | + [encryption](encryption.md) → [entitlements](entitlements.md) |
+| Delegating work to sub-agents | + [jobs](jobs.md) |
 | A multi-stage agent pipeline | + [traced-workflows](traced-workflows.md) (uses [Claude Studio Producer](https://github.com/aaronmarkham/claude-studio-producer) as the worked example) |
 | A zero-knowledge service | + [encryption](encryption.md) (sealed-box section) |
 | Cross-source entity dedup | [entity-resolution](entity-resolution.md) |
 | Distributed agent memory | + [network-distribution](network-distribution.md) |
 | Audit infrastructure | [tracing](tracing.md) |
+| Auditing Android binaries | [audit](audit.md) |
 | Anything — full surface | [api-reference](api-reference.md), [integration-guide](integration-guide.md) |
 
 ## What spiritwriter-core Is Not
