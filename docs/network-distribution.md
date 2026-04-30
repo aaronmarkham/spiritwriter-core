@@ -48,7 +48,8 @@ from spiritwriter.fabric.backends.ipfs import IPFSBackend, IPFSConfig
 from spiritwriter.fabric.store import ShardStore
 from spiritwriter.fabric.shard import MemoryShard, ShardAtom, AtomKind
 
-# Local development — disable the private-swarm requirement
+# Local development only — allow public IPFS.
+# For production, see "Private Swarm Setup" below; the default is True.
 config = IPFSConfig(require_private_swarm=False)
 backend = IPFSBackend(store_root="./my-shards", config=config)
 
@@ -180,9 +181,10 @@ config = IPFSConfig(require_private_swarm=True)   # default
 backend = IPFSBackend(store_root="./shards", config=config)
 
 assert backend.is_available()   # True only if Kubo is up AND on the private swarm
+                                # (returns False on swarm mismatch — does not raise)
 ```
 
-`is_available()` raises `SwarmMismatchError` if the running Kubo node isn't using the expected swarm key.
+`is_available()` is a boolean predicate — it catches both `NetworkUnavailable`/`NetworkTimeout` and `SwarmMismatchError` internally and returns `False`. The `SwarmMismatchError` does propagate from `publish()` and other operations, where the swarm check runs before any work; that's where you'd `try/except` it.
 
 ### Docker Compose
 
@@ -212,7 +214,7 @@ backend = IPFSBackend(store_root="/data/shards", config=config)
 
 ## CID Mapping
 
-Shard IDs are SHA-256 hex digests; IPFS CIDs are base58btc-encoded multihashes. They refer to the same content but use different encodings, so the backend keeps a `cid_map.json` next to the shard store that bridges them:
+Shard IDs are SHA-256 hex digests; IPFS CIDs are base58btc-encoded multihashes. They refer to the same content but use different encodings, so the backend keeps a `cid_map.json` in the store root (alongside the `shards/` directory) that bridges them:
 
 ```json
 {
@@ -263,7 +265,7 @@ python -m pytest tests/test_ipfs_backend.py -v -m ipfs
 - **Not a CDN.** Kubo is the transport, not a high-throughput edge cache. Throughput is bounded by the slowest peer with the content; for large binary assets, ship the bytes through a real CDN and put a shard ref in the trace.
 - **Not metadata-private.** Even with sealed-box content encryption, scope/atom_count/origin_agent/timestamps land in plaintext on the envelope. Private swarms restrict who can see them; nothing makes them invisible.
 
-For tighter access control on encrypted shards, see [entitlements.md](entitlements.md).
+For tighter access control on encrypted shards, see [entitlements.md](entitlements.md). For the deeper config / exception reference (env-var precedence, swarm-key validation rules, exception taxonomy), see [`skills/network/SKILL.md`](../skills/network/SKILL.md).
 
 ## File Reference
 
