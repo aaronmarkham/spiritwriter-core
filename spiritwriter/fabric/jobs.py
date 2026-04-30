@@ -42,6 +42,15 @@ class JobSpec:
     The minimal generic shape: a prompt, a budget cap, and free-form
     constraints. Subclass this and override to_atoms() to add domain-
     specific fields (e.g. VideoJobSpec for media production).
+
+    Field notes:
+      - prompt: required; empty strings are accepted (caller's problem,
+        not validated here).
+      - budget_usd: rejected if < 0. Zero is allowed for lifecycle/
+        smoke-testing — note that a paired BudgetTracker(budget_usd=0)
+        will raise JobRunnerError on any non-zero record().
+      - constraints: values are stringified via f-string {v} formatting,
+        so dict[str, str] is the predictable shape. See docs/jobs.md.
     """
     prompt: str
     budget_usd: float = 10.0

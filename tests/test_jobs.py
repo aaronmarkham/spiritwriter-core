@@ -113,7 +113,9 @@ class TestJobSpec:
     def test_constraint_stringify_non_string_values(self):
         """Pin docs/jobs.md's documented behavior: constraint values
         are formatted via {v} f-string, so non-string values land as
-        their str() repr. Keeps code and docs in sync."""
+        their str() repr. Keeps code and docs in sync. Includes the
+        gotcha cases (True/None) where Python's str() differs from
+        what a JSON-minded reader might expect."""
         spec = JobSpec(
             prompt="p",
             budget_usd=1.0,
@@ -121,6 +123,8 @@ class TestJobSpec:
                 "items": [1, 2, 3],
                 "config": {"nested": "value"},
                 "count": 42,
+                "feature": True,         # str(True) is "True", not "true"
+                "fallback": None,         # str(None) is "None", not "null"
             },
         )
         constraint_atoms = {
@@ -131,6 +135,8 @@ class TestJobSpec:
         assert constraint_atoms["constraint.items"] == "items: [1, 2, 3]"
         assert constraint_atoms["constraint.config"] == "config: {'nested': 'value'}"
         assert constraint_atoms["constraint.count"] == "count: 42"
+        assert constraint_atoms["constraint.feature"] == "feature: True"
+        assert constraint_atoms["constraint.fallback"] == "fallback: None"
 
 
 class TestPackageJob:
