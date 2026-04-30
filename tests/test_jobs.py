@@ -2,6 +2,7 @@
 
 import json
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -43,13 +44,9 @@ def sample_atoms():
 @pytest.fixture
 def sample_spec():
     return JobSpec(
-        prompt="Create a 60-second explainer about Brazilian wax aftercare",
-        style="explainer",
+        prompt="Summarize the source material in three bullet points",
         budget_usd=15.0,
-        duration_seconds=60,
-        voice="nova",
-        upload_target="youtube:unlisted",
-        constraints={"max_scenes": "8", "tier": "standard"},
+        constraints={"max_words": "60", "tier": "standard"},
     )
 
 
@@ -58,27 +55,88 @@ def sample_spec():
 class TestJobSpec:
     def test_to_atoms_basic(self, sample_spec):
         atoms = sample_spec.to_atoms()
-        assert len(atoms) >= 3  # prompt + config + budget
+        # prompt + budget + 2 constraints = 4 atoms
+        assert len(atoms) == 4
         prompts = [a for a in atoms if a.key == "production_prompt"]
         assert len(prompts) == 1
-        assert "Brazilian wax" in prompts[0].text
+        assert "three bullet" in prompts[0].text
 
-    def test_to_atoms_with_upload(self, sample_spec):
+    def test_to_atoms_budget_atom(self, sample_spec):
         atoms = sample_spec.to_atoms()
-        uploads = [a for a in atoms if a.key == "upload_target"]
-        assert len(uploads) == 1
-        assert "youtube:unlisted" in uploads[0].text
+        budget_atoms = [a for a in atoms if a.key == "budget_limit"]
+        assert len(budget_atoms) == 1
+        assert "15.00" in budget_atoms[0].text
 
     def test_to_atoms_constraints(self, sample_spec):
         atoms = sample_spec.to_atoms()
         constraint_atoms = [a for a in atoms if a.key and a.key.startswith("constraint.")]
         assert len(constraint_atoms) == 2
 
-    def test_no_upload_target(self):
+    def test_no_constraints(self):
         spec = JobSpec(prompt="test", budget_usd=5.0)
         atoms = spec.to_atoms()
-        uploads = [a for a in atoms if a.key == "upload_target"]
-        assert len(uploads) == 0
+        # prompt + budget only — no constraint atoms
+        assert len(atoms) == 2
+        assert {a.key for a in atoms} == {"production_prompt", "budget_limit"}
+
+    def test_subclass_extends_atoms(self):
+        """Subclasses can call super().to_atoms() and append their own."""
+        @dataclass
+        class ExtendedSpec(JobSpec):
+            extra_field: str = "x"
+
+            def to_atoms(self):
+                atoms = super().to_atoms()
+                atoms.append(ShardAtom(
+                    text=self.extra_field,
+                    kind=AtomKind.INSTRUCTION,
+                    key="extra",
+                ))
+                return atoms
+
+        spec = ExtendedSpec(prompt="p", budget_usd=1.0, extra_field="hello")
+        atoms = spec.to_atoms()
+        assert any(a.key == "extra" and a.text == "hello" for a in atoms)
+        # Base atoms still there in the same positions
+        assert atoms[0].key == "production_prompt"
+        assert atoms[1].key == "budget_limit"
+
+    def test_negative_budget_rejected(self):
+        with pytest.raises(ValueError, match="budget_usd must be >= 0"):
+            JobSpec(prompt="x", budget_usd=-5.0)
+
+    def test_zero_budget_allowed(self):
+        # Zero is a valid no-spend assertion (useful for lifecycle testing)
+        spec = JobSpec(prompt="x", budget_usd=0.0)
+        assert spec.budget_usd == 0.0
+
+    def test_constraint_stringify_non_string_values(self):
+        """Pin docs/jobs.md's documented behavior: constraint values
+        are formatted via {v} f-string, so non-string values land as
+        their str() repr. Keeps code and docs in sync. Includes the
+        gotcha cases (True/None) where Python's str() differs from
+        what a JSON-minded reader might expect."""
+        spec = JobSpec(
+            prompt="p",
+            budget_usd=1.0,
+            constraints={
+                "items": [1, 2, 3],
+                "config": {"nested": "value"},
+                "count": 42,
+                "feature": True,         # str(True) is "True", not "true"
+                "fallback": None,         # str(None) is "None", not "null"
+            },
+        )
+        constraint_atoms = {
+            a.key: a.text
+            for a in spec.to_atoms()
+            if a.key.startswith("constraint.")
+        }
+        assert constraint_atoms["constraint.items"] == "items: [1, 2, 3]"
+        assert constraint_atoms["constraint.config"] == "config: {'nested': 'value'}"
+        assert constraint_atoms["constraint.count"] == "count: 42"
+        assert constraint_atoms["constraint.feature"] == "feature: True"
+        assert constraint_atoms["constraint.fallback"] == "fallback: None"
 
 
 class TestPackageJob:
@@ -163,7 +221,7 @@ class TestHydrateJob:
         job = hydrate_job(tmp_store, task_text)
 
         assert job.prompt is not None
-        assert "Brazilian wax" in job.prompt
+        assert "three bullet" in job.prompt
         assert len(job.content_shard.atoms) == 3
         assert job.budget_usd == 15.0
 
