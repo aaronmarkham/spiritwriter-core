@@ -133,8 +133,13 @@ with CanonicalRegistry("/tmp/people.db", schema) as registry:
     result = registry.resolve({
         "last_name": "Smith", "first_name": "John", "dob": "1990-05-12",
     })
-    # result.tier in {T1_EXACT, T2_STRONG, T3_FUZZY, T4_WEAK, NO_MATCH}
-    # result.confidence in [0.0, 0.95]
+    if result.tier == ResolutionTier.T1_EXACT:
+        # auto-merge: same person as an existing entity
+        registry.upsert({"last_name": "Smith", "first_name": "John",
+                          "dob": "1990-05-12"}, result,
+                         source_name="roster_a", source_id="001")
+    # tiers: T1_EXACT (0.95) | T2_STRONG (0.85) | T3_FUZZY (0.70)
+    #        T4_WEAK (0.50)  | NO_MATCH (0.0)
 ```
 
 T1 and T2 auto-merge; T3 and T4 create merge events for review. No embedding model, no LLM calls — SQLite, normalization, and tiered scoring.
@@ -149,7 +154,7 @@ The **TraceEmitter** writes hash-chained JSONL events for a tamper-evident audit
 from spiritwriter.fabric.emitter import TraceEmitter, verify_chain
 
 emitter = TraceEmitter(
-    run_id="run-2026-04-29-001",
+    run_id="run-001",                  # arbitrary; conventionally run-YYYYMMDD-NNN
     agent_id="my-agent",
     out_path="/tmp/trace.jsonl",
 )
@@ -168,13 +173,13 @@ Optional Ed25519 signing adds non-repudiation. Render traces as Mermaid (workflo
 
 ## Reading Paths by Use Case
 
-The deep-dive docs aren't a linear tutorial — they're reference material organized by capability. Pick a path:
+The deep-dive docs aren't a linear tutorial — they're reference material organized by capability. Pick a path. Each `+` row extends the path from the row above it.
 
 | If you're building... | Read in this order |
 |-----------------------|---------------------|
 | Memory for a single agent | [memory-shards](memory-shards.md) → [shard-store](shard-store.md) |
 | Memory shared across agents | + [encryption](encryption.md) (entitlements section) |
-| A multi-stage agent pipeline | + [traced-workflows](traced-workflows.md) (uses CSP as the worked example) |
+| A multi-stage agent pipeline | + [traced-workflows](traced-workflows.md) (uses [Claude Studio Producer](https://github.com/aaronmarkham/claude-studio-producer) as the worked example) |
 | A zero-knowledge service | + [encryption](encryption.md) (sealed-box section) |
 | Cross-source entity dedup | [entity-resolution](entity-resolution.md) |
 | Distributed agent memory | + [network-distribution](network-distribution.md) |
