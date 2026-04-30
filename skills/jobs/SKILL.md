@@ -116,9 +116,13 @@ Every transition is hash-chained via `TraceEmitter`. Full provenance from packag
 - **Trace chain links everything** — entitlement → decryptions → spends → result
 - **Subclass for richer specs** — `JobSpec` is intentionally minimal; override `to_atoms()` to add fields without breaking the contract
 
+## When to use `parse_job_block` vs `hydrate_job`
+
+`hydrate_job(store, task_text)` is the normal entry point — it parses the block, validates the token, and decrypts both shards in one call. Use `parse_job_block(task_text) -> (token_str, content_id, task_id)` directly when you need the raw block contents without the validation+decrypt step (fixture replay, manual testing, custom hydration paths).
+
 ## Source Files
 
 - `spiritwriter/fabric/jobs.py` — `JobSpec`, `PackagedJob`, `package_job()`
-- `spiritwriter/fabric/runner.py` — `parse_job_block()`, `hydrate_job()`, `JobContext`, `BudgetTracker`, `create_result_shard()`, `JobRunnerError`
+- `spiritwriter/fabric/runner.py` — `hydrate_job()`, `parse_job_block()`, `JobContext`, `BudgetTracker`, `create_result_shard()`, `JobRunnerError`
 
 For the full guide, see [docs/jobs.md](../../docs/jobs.md).

@@ -103,6 +103,8 @@ Only `prompt` is required. `JobSpec.to_atoms()` projects the spec into three kin
 
 `constraints` is the escape hatch for caller-defined task shape — `{"max_words": "60", "tier": "standard"}`. Each entry becomes a `constraint.<key>` atom on the task shard, accessible from the runner side via `job.config["constraint.max_words"]`. Use this for shape that's specific to your job but doesn't justify a subclass.
 
+**Constraint values are stringified with f-string `{v}` formatting**, so a non-string value lands in the atom as its `str()` repr — `{"items": [1, 2, 3]}` becomes the literal text `items: [1, 2, 3]`. For predictable atom text use `dict[str, str]`; for richer shapes, subclass and emit your own atoms with explicit serialization.
+
 ### Subclassing for Richer Specs
 
 When the constraint dict starts feeling stringly-typed, subclass `JobSpec` and add real fields. The contract is: call `super().to_atoms()` first so the prompt and budget atoms stay in stable positions, then append your own:
