@@ -117,7 +117,7 @@ class TestPackageJob:
     def test_spawn_task_text(self, tmp_store, sample_atoms, sample_spec):
         pkg = package_job(tmp_store, sample_atoms, sample_spec)
         text = pkg.spawn_task_text()
-        assert "<job>" in text
+        assert "<sw-job>" in text
         assert "<entitlement>" in text
         assert pkg.content_shard_id in text
         assert pkg.task_shard_id in text
@@ -138,11 +138,11 @@ class TestPackageJob:
 class TestParseJobBlock:
     def test_parse_valid(self):
         text = (
-            "<job>\n"
+            "<sw-job>\n"
             "<entitlement>{\"token_id\": \"abc\"}</entitlement>\n"
             "<content-shard>sha256_content</content-shard>\n"
             "<task-shard>sha256_task</task-shard>\n"
-            "</job>"
+            "</sw-job>"
         )
         token_str, content_id, task_id = parse_job_block(text)
         assert "abc" in token_str

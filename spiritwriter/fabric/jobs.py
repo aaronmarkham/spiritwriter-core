@@ -90,12 +90,12 @@ class PackagedJob:
         """
         token_str = serialize_token(self.entitlement_token)
         return (
-            f"<job>\n"
+            f"<sw-job>\n"
             f"<entitlement>{token_str}</entitlement>\n"
             f"<content-shard>{self.content_shard_id}</content-shard>\n"
             f"<task-shard>{self.task_shard_id}</task-shard>\n"
-            f"</job>\n\n"
-            f"You are a job runner agent. Parse the <job> block above.\n"
+            f"</sw-job>\n\n"
+            f"You are a job runner agent. Parse the <sw-job> block above.\n"
             f"Use the entitlement token to decrypt and hydrate the content and task shards.\n"
             f"Execute the production task according to the task shard instructions.\n"
             f"Track all spending against the budget limit.\n"

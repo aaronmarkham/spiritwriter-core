@@ -4,7 +4,7 @@ This module provides the parsing and hydration logic that a
 sub-agent uses to unpack a job and execute it.
 
 The runner:
-1. Parses the <job> block from its task text
+1. Parses the <sw-job> block from its task text
 2. Deserializes the entitlement token
 3. Hydrates content + task shards via the store
 4. Tracks budget as work proceeds
@@ -121,7 +121,7 @@ class BudgetTracker:
 
 
 def parse_job_block(task_text: str) -> tuple[str, str, str]:
-    """Parse <job> block from task text.
+    """Parse <sw-job> block from task text.
 
     Returns (token_str, content_shard_id, task_shard_id).
     """
@@ -137,7 +137,7 @@ def parse_job_block(task_text: str) -> tuple[str, str, str]:
 
     if not all([token_match, content_match, task_match]):
         raise JobRunnerError(
-            "Missing required fields in <job> block. "
+            "Missing required fields in <sw-job> block. "
             "Need <entitlement>, <content-shard>, and <task-shard>."
         )
 
