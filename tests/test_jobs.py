@@ -2,6 +2,7 @@
 
 import json
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -80,9 +81,6 @@ class TestJobSpec:
 
     def test_subclass_extends_atoms(self):
         """Subclasses can call super().to_atoms() and append their own."""
-        from dataclasses import dataclass
-        from spiritwriter.fabric.shard import ShardAtom, AtomKind
-
         @dataclass
         class ExtendedSpec(JobSpec):
             extra_field: str = "x"
