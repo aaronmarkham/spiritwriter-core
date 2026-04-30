@@ -89,7 +89,7 @@ Validation happens at every access point:
 Every check is logged to the trace hash chain via `TraceEmitter`, creating an
 auditable record of what was attempted, what was allowed, and what was denied.
 
-**Source:** `spiritwriter/fabric/entitlement.py`, `spiritwriter/fabric/studio_runner.py:172-181`.
+**Source:** `spiritwriter/fabric/entitlement.py`, `spiritwriter/fabric/runner.py:172-181`.
 
 ---
 

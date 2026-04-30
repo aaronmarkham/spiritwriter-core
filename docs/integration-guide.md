@@ -371,7 +371,7 @@ platform_shard = MemoryShard(
 
 ### Knowledge Base Integration
 
-Studio Producer's document ingestion produces atoms compatible with spiritwriter shards:
+Claude Studio Producer's document ingestion produces atoms compatible with spiritwriter shards:
 
 ```python
 # Ingest a PDF and create a knowledge shard
@@ -387,7 +387,7 @@ for doc_atom in document_graph.atoms:
 
 kb_shard = MemoryShard(
     atoms=atoms,
-    scope="studio:content",
+    scope="job:content",
     origin="document-ingestor",
     decay_class=DecayClass.STABLE,
     tags=["knowledge-base", doc_atom.source_id],

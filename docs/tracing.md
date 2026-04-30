@@ -100,31 +100,31 @@ emitter.budget_spent(
 
 `capability_checked` is worth emitting on *both* the allowed and denied paths — the audit trail then shows not only what an agent did, but what it tried to do and was prevented from doing.
 
-## Studio Job Events
+## Job Events
 
-Track sub-agent production jobs through their full lifecycle:
+Track delegated sub-agent jobs through their full lifecycle. See [jobs.md](jobs.md) for the issuer/runner pattern that emits these.
 
 ```python
-emitter.studio_job_packaged(
+emitter.job_packaged(
     content_shard_id="content-abc...",
     task_shard_id="task-def...",
     token_id="tok-001",
     budget_usd=5.0,
 )
-emitter.studio_job_started(
+emitter.job_started(
     token_id="tok-001",
     content_shard_id="content-abc...",
     task_shard_id="task-def...",
-    prompt="Produce a 60-second explainer video",
+    prompt="Summarize the source material",
 )
-emitter.studio_job_completed(
+emitter.job_completed(
     token_id="tok-001",
     result_shard_id="result-ghi...",
     spent_usd=3.50,
-    outputs=[{"type": "video", "path": "/tmp/output.mp4"}],
+    outputs=[{"type": "summary", "ref": "..."}],
 )
 # or
-emitter.studio_job_failed(
+emitter.job_failed(
     token_id="tok-001",
     error="Provider timeout after 30s",
     spent_usd=1.20,
@@ -192,19 +192,19 @@ The emitter calls `signer.sign(hash_bytes)` and stores the result as the `sig` f
 
 ## A Typical Chain
 
-A complete production job, end to end:
+A complete delegated job, end to end:
 
 ```
-studio_job_packaged
-  -> entitlement_granted
-    -> studio_job_started
-      -> capability_checked (shard:read, allowed=True)
-      -> shard_decrypted (content shard)
-      -> shard_decrypted (task shard)
-      -> budget_spent (LLM call)
-      -> budget_spent (provider call)
-      -> shard_created (result shard)
-    -> studio_job_completed
+entitlement_granted
+  job_packaged
+    capability_checked (shard:read, allowed=True)
+    shard_decrypted (content shard)
+    shard_decrypted (task shard)
+    job_started
+      budget_spent (LLM call)
+      budget_spent (provider call)
+      shard_created (result shard)
+    job_completed
 ```
 
 Render this as a [Mermaid diagram](traced-workflows.md#provenance-reports) — the trace JSONL is the source of truth for both the audit log *and* the human-readable provenance report.
@@ -212,6 +212,6 @@ Render this as a [Mermaid diagram](traced-workflows.md#provenance-reports) — t
 ## What Tracing Is Not
 
 - **Not a database.** No query layer, no indexing, no aggregation across runs. Read the JSONL, filter in Python.
-- **Not authorization.** A trace event records what happened; it doesn't gate what's allowed. Use [entitlements](encryption.md#entitlement-tokens) for that.
+- **Not authorization.** A trace event records what happened; it doesn't gate what's allowed. Use [entitlements](entitlements.md) for that.
 - **Not synchronous across writers.** One emitter per file. Multiple processes writing to the same `out_path` will produce interleaved lines that can't be chain-verified — give each producer its own file.
 - **Not encrypted.** Trace events are plaintext JSONL. If event payloads contain sensitive data (decrypted shard content, raw user input), the file itself needs filesystem-level protection.

@@ -356,10 +356,10 @@ The cost-by-agent view in the multi-agent diagram is what makes traces readable 
 
 ## Budget Tracking
 
-`BudgetTracker` enforces a hard cap. It raises `StudioRunnerError` when a spend would exceed the budget — fail-loud rather than silently overspending:
+`BudgetTracker` enforces a hard cap. It raises `JobRunnerError` when a spend would exceed the budget — fail-loud rather than silently overspending:
 
 ```python
-from spiritwriter.fabric.studio_runner import BudgetTracker
+from spiritwriter.fabric.runner import BudgetTracker
 
 tracker = BudgetTracker(
     budget_usd=1.00,                # hard cap
@@ -446,7 +446,7 @@ token = create_entitlement(
 context = store.hydrate_with_entitlement(token)
 ```
 
-The store enforces three checks before decryption: token not expired → has `SHARD_READ` → per-shard scope matches the token's `scopes` patterns. Any failure raises `PermissionError` *before* any plaintext is touched. See [encryption.md](encryption.md#entitlement-tokens) for the full validation order and the per-shard-key distribution pattern.
+The store enforces three checks before decryption: token not expired → has `SHARD_READ` → per-shard scope matches the token's `scopes` patterns. Any failure raises `PermissionError` *before* any plaintext is touched. See [entitlements.md](entitlements.md) for the full token shape and validation order, and [jobs.md](jobs.md) for the wider issuer/runner pattern.
 
 ## Per-Stage Overhead
 
@@ -673,5 +673,5 @@ Each invocation is a fresh process. The checkpoint shard is what carries state a
 | `spiritwriter/fabric/visualize.py` | Mermaid diagram generation |
 | `spiritwriter/fabric/crypto.py` | AES-256-GCM shard encryption |
 | `spiritwriter/fabric/entitlement.py` | Scoped access tokens |
-| `spiritwriter/fabric/studio_job.py` | Job packaging |
-| `spiritwriter/fabric/studio_runner.py` | Job execution, `BudgetTracker` |
+| `spiritwriter/fabric/jobs.py` | Job packaging |
+| `spiritwriter/fabric/runner.py` | Job execution, `BudgetTracker` |
