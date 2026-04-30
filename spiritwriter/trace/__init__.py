@@ -35,12 +35,12 @@ _SUBMODULES = (
     "emitter",
     "entitlement",
     "extract",
+    "jobs",
     "network",
+    "runner",
     "sealed",
     "shard",
     "store",
-    "studio_job",
-    "studio_runner",
     "visualize",
 )
 

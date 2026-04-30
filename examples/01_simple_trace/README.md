@@ -9,7 +9,7 @@ a result shard, and the parent records completion.
 - **ShardStore + ShardAtom basics** — creating content-addressed knowledge
   bundles and storing them to disk
 - **TraceEmitter** — hash-chained provenance events (`shard_created`,
-  `spawn_with_shards`, `studio_job_completed`)
+  `spawn_with_shards`, `job_completed`)
 - **package_job** — encrypting content + task into shard pairs with an
   entitlement token for the subagent
 - **Child trace** — the subagent emits its own trace chain; the parent
@@ -33,7 +33,7 @@ the prior one — change one byte and `verify_chain` fails.
 ```json
 {"type": "shard_created", "run_id": "parent-run-001", "agent_id": "orchestrator", "prev_event_hash": null, "shard_id": "1010b5a0...", "scope": "demo:request", "atom_count": 2, "hash": "1ae4dfd1..."}
 {"type": "entitlement_granted", "prev_event_hash": "1ae4dfd1...", "granted_to": "summarizer", "capabilities": ["shard:read", "shard:write", ...], "budget_usd": 0.5, "hash": "e79b237c..."}
-{"type": "studio_job_packaged", "prev_event_hash": "e79b237c...", "content_shard_id": "dba4c900...", "task_shard_id": "d238667e...", ...}
+{"type": "job_packaged", "prev_event_hash": "e79b237c...", "content_shard_id": "dba4c900...", "task_shard_id": "d238667e...", ...}
 {"type": "spawn_with_shards", ...}
 {"type": "subagent_completed", ...}
 {"type": "shard_resolved", ...}
@@ -48,10 +48,10 @@ the shards with its entitlement key, does the work, and records completion.
 {"type": "capability_checked", "run_id": "child-run-001", "agent_id": "summarizer", "capability": "shard:read", "allowed": true, ...}
 {"type": "shard_decrypted", "scope": "demo:content", ...}
 {"type": "shard_decrypted", "scope": "demo:task", ...}
-{"type": "studio_job_started", ...}
+{"type": "job_started", ...}
 {"type": "budget_spent", ...}
 {"type": "shard_created", ...}
-{"type": "studio_job_completed", "spent_usd": 0.03, ...}
+{"type": "job_completed", "spent_usd": 0.03, ...}
 ```
 
 ### Workflow diagram

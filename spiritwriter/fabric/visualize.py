@@ -5,7 +5,7 @@ Generates three diagram types:
 2. Genealogy: shard lineage tree (parent → child → grandchild)
 3. Multi-agent: nested agent spawns with trace chains
 
-Supports failure states (studio_job_failed events).
+Supports failure states (job_failed events).
 """
 
 from __future__ import annotations
@@ -82,7 +82,7 @@ def render_simple_workflow(events: list[dict[str, Any]]) -> str:
                 f"budget: ${evt.get('budget_usd', 0):.2f}",
                 "entitle",
             )
-        elif t == "studio_job_packaged":
+        elif t == "job_packaged":
             nid = add_node(
                 f"📦 Job Packaged\\n"
                 f"content: {_short_id(evt.get('content_shard_id', ''))}...\\n"
@@ -105,7 +105,7 @@ def render_simple_workflow(events: list[dict[str, Any]]) -> str:
                 f"🔓 Decrypt: {scope}\\n{sid}...",
                 "shard",
             )
-        elif t == "studio_job_started":
+        elif t == "job_started":
             prompt = evt.get("prompt", "")
             short_prompt = _escape(prompt)[:50] if prompt else "?"
             nid = add_node(
@@ -120,13 +120,13 @@ def render_simple_workflow(events: list[dict[str, Any]]) -> str:
                 f"💰 {label}\\n${amount:.2f} (total: ${total:.2f})",
                 "spend",
             )
-        elif t == "studio_job_completed":
+        elif t == "job_completed":
             spent = evt.get("spent_usd", 0)
             nid = add_node(
                 f"✅ Job Complete\\nspent: ${spent:.2f}",
                 "ok",
             )
-        elif t == "studio_job_failed":
+        elif t == "job_failed":
             error = _escape(evt.get("error", "unknown"))[:40]
             spent = evt.get("spent_usd", 0)
             nid = add_node(
@@ -169,14 +169,14 @@ def render_shard_genealogy(events: list[dict[str, Any]]) -> str:
 
     for evt in events:
         t = evt["type"]
-        if t == "studio_job_packaged":
+        if t == "job_packaged":
             cid = evt.get("content_shard_id", "")
             tid = evt.get("task_shard_id", "")
             tok = evt.get("token_id", "")
             content_shards.add(cid)
             task_shards.add(tid)
             jobs.append((cid, tid, tok))
-        elif t == "studio_job_completed":
+        elif t == "job_completed":
             tok = evt.get("token_id", "")
             rid = evt.get("result_shard_id", "")
             result_shards.add(rid)
@@ -243,7 +243,7 @@ def render_multi_agent(events: list[dict[str, Any]]) -> str:
             if t == "entitlement_granted":
                 label = f"🎫 Grant → {evt.get('granted_to', '?')}"
                 css = "shard"
-            elif t == "studio_job_packaged":
+            elif t == "job_packaged":
                 label = f"📦 Package job"
                 css = "shard"
             elif t == "capability_checked":
@@ -253,17 +253,17 @@ def render_multi_agent(events: list[dict[str, Any]]) -> str:
             elif t == "shard_decrypted":
                 label = f"🔓 {evt.get('scope', '?')}"
                 css = "shard"
-            elif t == "studio_job_started":
+            elif t == "job_started":
                 prompt = evt.get("prompt", "")
                 label = f"🎬 {_escape(prompt)[:35]}..."
                 css = "ok"
             elif t == "budget_spent":
                 label = f"💰 {evt.get('label', '?')} ${evt.get('amount', 0):.2f}"
                 css = "spend"
-            elif t == "studio_job_completed":
+            elif t == "job_completed":
                 label = f"✅ Done ${evt.get('spent_usd', 0):.2f}"
                 css = "ok"
-            elif t == "studio_job_failed":
+            elif t == "job_failed":
                 label = f"❌ {_escape(evt.get('error', ''))[:30]}"
                 css = "fail"
             elif t == "spawn_with_shards":

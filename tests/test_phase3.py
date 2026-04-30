@@ -223,8 +223,8 @@ class TestRenderTrace:
     def test_render_trace_dispatches(self, tmp_path):
         out = str(tmp_path / "trace.jsonl")
         em = TraceEmitter(run_id="r1", agent_id="a1", out_path=out)
-        em.emit("studio_job_started", prompt="hello")
-        em.emit("studio_job_completed", spent_usd=1.0, token_id="t1", result_shard_id="s1")
+        em.emit("job_started", prompt="hello")
+        em.emit("job_completed", spent_usd=1.0, token_id="t1", result_shard_id="s1")
         events = em.get_events()
 
         result_wrapper = render_trace(events, "workflow")

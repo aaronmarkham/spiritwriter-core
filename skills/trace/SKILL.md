@@ -43,14 +43,14 @@ emitter.emit("task_completed", {"result": "success"})
 The emitter has convenience methods for common events:
 
 ```python
-emitter.emit_entitlement_granted(token)
-emitter.emit_shard_decrypted(shard_id, scope)
-emitter.emit_capability_checked(token_id, capability, allowed=True)
-emitter.emit_budget_spent(token_id, amount, remaining)
-emitter.emit_studio_job_packaged(job_id, shard_ids)
-emitter.emit_studio_job_started(job_id)
-emitter.emit_studio_job_completed(job_id, result_shard_id)
-emitter.emit_studio_job_failed(job_id, error)
+emitter.entitlement_granted(token)
+emitter.shard_decrypted(shard_id, scope)
+emitter.capability_checked(token_id, capability, allowed=True)
+emitter.budget_spent(token_id, amount, remaining)
+emitter.job_packaged(job_id, shard_ids)
+emitter.job_started(job_id)
+emitter.job_completed(job_id, result_shard_id)
+emitter.job_failed(job_id, error)
 ```
 
 ### Verify chain integrity

@@ -1,4 +1,4 @@
-"""Tests for studio job packaging (Phase 4) and studio runner (Phase 5)."""
+"""Tests for job packaging (Phase 4) and job runner (Phase 5)."""
 
 import json
 import tempfile
@@ -14,11 +14,11 @@ from spiritwriter.fabric.crypto import generate_job_key, encrypt_shard, serializ
 from spiritwriter.fabric.entitlement import (
     Capability, create_entitlement, serialize_token, deserialize_token,
 )
-from spiritwriter.fabric.studio_job import (
-    StudioJobSpec, PackagedJob, package_job,
+from spiritwriter.fabric.jobs import (
+    JobSpec, PackagedJob, package_job,
 )
-from spiritwriter.fabric.studio_runner import (
-    StudioRunnerError, JobContext, BudgetTracker,
+from spiritwriter.fabric.runner import (
+    JobRunnerError, JobContext, BudgetTracker,
     parse_job_block, hydrate_job, create_result_shard,
 )
 
@@ -42,7 +42,7 @@ def sample_atoms():
 
 @pytest.fixture
 def sample_spec():
-    return StudioJobSpec(
+    return JobSpec(
         prompt="Create a 60-second explainer about Brazilian wax aftercare",
         style="explainer",
         budget_usd=15.0,
@@ -55,7 +55,7 @@ def sample_spec():
 
 # === Phase 4: Job Packaging ===
 
-class TestStudioJobSpec:
+class TestJobSpec:
     def test_to_atoms_basic(self, sample_spec):
         atoms = sample_spec.to_atoms()
         assert len(atoms) >= 3  # prompt + config + budget
@@ -75,7 +75,7 @@ class TestStudioJobSpec:
         assert len(constraint_atoms) == 2
 
     def test_no_upload_target(self):
-        spec = StudioJobSpec(prompt="test", budget_usd=5.0)
+        spec = JobSpec(prompt="test", budget_usd=5.0)
         atoms = spec.to_atoms()
         uploads = [a for a in atoms if a.key == "upload_target"]
         assert len(uploads) == 0
@@ -117,11 +117,11 @@ class TestPackageJob:
     def test_spawn_task_text(self, tmp_store, sample_atoms, sample_spec):
         pkg = package_job(tmp_store, sample_atoms, sample_spec)
         text = pkg.spawn_task_text()
-        assert "<studio-job>" in text
+        assert "<sw-job>" in text
         assert "<entitlement>" in text
         assert pkg.content_shard_id in text
         assert pkg.task_shard_id in text
-        assert "studio runner" in text.lower()
+        assert "job runner" in text.lower()
 
     def test_custom_capabilities(self, tmp_store, sample_atoms, sample_spec):
         pkg = package_job(
@@ -138,11 +138,11 @@ class TestPackageJob:
 class TestParseJobBlock:
     def test_parse_valid(self):
         text = (
-            "<studio-job>\n"
+            "<sw-job>\n"
             "<entitlement>{\"token_id\": \"abc\"}</entitlement>\n"
             "<content-shard>sha256_content</content-shard>\n"
             "<task-shard>sha256_task</task-shard>\n"
-            "</studio-job>"
+            "</sw-job>"
         )
         token_str, content_id, task_id = parse_job_block(text)
         assert "abc" in token_str
@@ -150,7 +150,7 @@ class TestParseJobBlock:
         assert task_id == "sha256_task"
 
     def test_parse_missing_fields(self):
-        with pytest.raises(StudioRunnerError, match="Missing required"):
+        with pytest.raises(JobRunnerError, match="Missing required"):
             parse_job_block("no job block here")
 
 
@@ -186,7 +186,7 @@ class TestHydrateJob:
         task_text = pkg.spawn_task_text()
 
         empty_store = ShardStore(tmp_store.root / "empty")
-        with pytest.raises(StudioRunnerError, match="not found"):
+        with pytest.raises(JobRunnerError, match="not found"):
             hydrate_job(empty_store, task_text)
 
 
@@ -201,7 +201,7 @@ class TestBudgetTracker:
     def test_over_budget(self):
         bt = BudgetTracker(budget_usd=5.0)
         bt.record("luma_gen", 4.32)
-        with pytest.raises(StudioRunnerError, match="Budget exceeded"):
+        with pytest.raises(JobRunnerError, match="Budget exceeded"):
             bt.record("more_luma", 4.32)
 
     def test_summary(self):
@@ -227,7 +227,7 @@ class TestCreateResultShard:
             "warnings": ["QA verifier skipped due to known bug"],
         })
 
-        assert result.scope == "studio:result"
+        assert result.scope == "job:result"
         assert len(result.atoms) >= 4  # summary + cost + 2 outputs + 1 warning
         assert result.meta["content_shard_id"] == pkg.content_shard_id
 
@@ -369,7 +369,7 @@ class TestTraceIntegration:
         events = self._read_events(tracer)
         types = [e["type"] for e in events]
         assert "entitlement_granted" in types
-        assert "studio_job_packaged" in types
+        assert "job_packaged" in types
         # Verify entitlement event has correct fields
         grant_evt = next(e for e in events if e["type"] == "entitlement_granted")
         assert grant_evt["token_id"] == pkg.entitlement_token.token_id
@@ -383,7 +383,7 @@ class TestTraceIntegration:
         types = [e["type"] for e in events]
         assert "capability_checked" in types
         assert types.count("shard_decrypted") == 2  # content + task
-        assert "studio_job_started" in types
+        assert "job_started" in types
         # Verify chain integrity
         for i, evt in enumerate(events):
             if i == 0:
@@ -423,7 +423,7 @@ class TestTraceIntegration:
         bt.record("luma_gen", 4.32)
 
         # Complete
-        tracer.studio_job_completed(
+        tracer.job_completed(
             token_id=job.token.token_id,
             result_shard_id="result-abc",
             spent_usd=bt.spent,
@@ -437,13 +437,13 @@ class TestTraceIntegration:
         types = [e["type"] for e in events]
         assert types == [
             "entitlement_granted",
-            "studio_job_packaged",
+            "job_packaged",
             "capability_checked",
             "shard_decrypted",
             "shard_decrypted",
-            "studio_job_started",
+            "job_started",
             "budget_spent",
-            "studio_job_completed",
+            "job_completed",
         ]
 
         # Every event chains to previous

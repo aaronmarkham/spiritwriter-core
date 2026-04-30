@@ -27,9 +27,9 @@ from spiritwriter.fabric.shard import (
 )
 from spiritwriter.fabric.store import ShardStore
 from spiritwriter.fabric.emitter import TraceEmitter, verify_chain
-from spiritwriter.fabric.studio_job import StudioJobSpec, package_job
-from spiritwriter.fabric.studio_runner import (
-    hydrate_job, BudgetTracker, create_result_shard, StudioRunnerError,
+from spiritwriter.fabric.jobs import JobSpec, package_job
+from spiritwriter.fabric.runner import (
+    hydrate_job, BudgetTracker, create_result_shard, JobRunnerError,
 )
 from spiritwriter.fabric.entitlement import (
     Capability, validate_capability,
@@ -84,7 +84,7 @@ def run_a_good_agent(task_text: str, store: ShardStore, trace_path: str) -> Memo
     tracer.shard_created(
         shard_id=result.shard_id, scope=result.scope, atom_count=len(result.atoms),
     )
-    tracer.studio_job_completed(
+    tracer.job_completed(
         token_id=job.token.token_id,
         result_shard_id=result.shard_id,
         spent_usd=tracker.spent,
@@ -137,7 +137,7 @@ def run_b_bad_agent(task_text: str, store: ShardStore, trace_path: str) -> Memor
     # Violation 2: try to exceed the budget
     try:
         tracker.record("expensive_llm_call", 0.50)  # This blows the $0.25 budget
-    except StudioRunnerError as exc:
+    except JobRunnerError as exc:
         tracer.emit(
             "budget_exceeded",
             token_id=job.token.token_id,
@@ -146,7 +146,7 @@ def run_b_bad_agent(task_text: str, store: ShardStore, trace_path: str) -> Memor
             budget_usd=tracker.budget_usd,
             error=str(exc),
         )
-        tracer.studio_job_failed(
+        tracer.job_failed(
             token_id=job.token.token_id,
             error=f"Budget exceeded: {exc}",
             spent_usd=tracker.spent,
@@ -192,7 +192,7 @@ def main(output_dir: Path | None = None) -> int:
         pkg_a = package_job(
             store=store,
             content_atoms=content_atoms,
-            job_spec=StudioJobSpec(
+            job_spec=JobSpec(
                 prompt="Analyze the document and produce a summary.",
                 budget_usd=1.00,
             ),
@@ -230,7 +230,7 @@ def main(output_dir: Path | None = None) -> int:
         pkg_b = package_job(
             store=store,
             content_atoms=content_atoms,
-            job_spec=StudioJobSpec(
+            job_spec=JobSpec(
                 prompt="Analyze the document and produce a summary.",
                 budget_usd=0.25,  # Tight budget — agent will try to exceed it
             ),
@@ -260,7 +260,7 @@ def main(output_dir: Path | None = None) -> int:
         run_b_events = TraceEmitter(run_id="", agent_id="", out_path=run_b_trace).get_events()
         governance_issues = [
             e for e in run_b_events
-            if e["type"] in ("capability_denied", "budget_exceeded", "studio_job_failed")
+            if e["type"] in ("capability_denied", "budget_exceeded", "job_failed")
         ]
 
         parent.emit(
@@ -302,7 +302,7 @@ def main(output_dir: Path | None = None) -> int:
                 print(f"    [{icon}] {t}: {e['capability']}")
             elif t == "budget_spent":
                 print(f"    [$] {t}: ${e['amount']:.2f} ({e['label']})")
-            elif t == "studio_job_completed":
+            elif t == "job_completed":
                 print(f"    [+] {t}: spent ${e['spent_usd']:.2f}")
             else:
                 print(f"    [ ] {t}")
@@ -322,7 +322,7 @@ def main(output_dir: Path | None = None) -> int:
                 print(f"    [!] {t}: tried ${e['attempted_amount']:.2f}, "
                       f"already spent ${e['already_spent']:.2f}, "
                       f"budget ${e['budget_usd']:.2f}")
-            elif t == "studio_job_failed":
+            elif t == "job_failed":
                 print(f"    [X] {t}: {e['error'][:60]}")
             else:
                 print(f"    [ ] {t}")

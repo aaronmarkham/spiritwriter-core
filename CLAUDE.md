@@ -17,7 +17,7 @@ Read the relevant skill for your task:
 | **shards** | Create, store, hydrate, query knowledge shards | `skills/shards/SKILL.md` |
 | **trace** | Log agent actions with hash-chained provenance | `skills/trace/SKILL.md` |
 | **entitlements** | Encrypt shards, grant scoped access tokens | `skills/entitlements/SKILL.md` |
-| **studio** | Package and run sub-agent jobs with budget tracking | `skills/studio/SKILL.md` |
+| **jobs** | Package and run sub-agent jobs with budget tracking | `skills/jobs/SKILL.md` |
 | **network** | Publish/resolve shards over IPFS, private swarm config | `skills/network/SKILL.md` |
 | **audit** | Traced security audit of Android apps — findings + hash-chain + witness | `skills/audit/SKILL.md` |
 
@@ -40,7 +40,7 @@ spiritwriter/
   classify/    — Content classification
   ingest/      — Document ingestion
   llm/         — LLM provider abstraction
-  fabric/      — Shards, store, emitter, crypto, entitlements, studio jobs, network resolver
+  fabric/      — Shards, store, emitter, crypto, entitlements, jobs, network resolver
     backends/  — Network backends (IPFS/Kubo)
   audit/       — Traced Android APK security audits (provenance, registry, verify)
   trace/       — Deprecated shim re-exporting fabric/ (removed in 0.6.0)

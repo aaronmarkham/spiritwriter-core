@@ -1,6 +1,6 @@
-"""Studio job packaging — encrypt content + task into shard pairs.
+"""Job packaging — encrypt content + task into shard pairs.
 
-A studio job consists of:
+A job consists of:
 1. Content shard: source material (research, atoms, file refs)
 2. Task shard: production instructions (prompt, style, budget, constraints)
 3. Entitlement token: grants sub-agent access to both + specific capabilities
@@ -28,10 +28,10 @@ from spiritwriter.fabric.emitter import TraceEmitter
 
 
 @dataclass
-class StudioJobSpec:
-    """Defines what a studio sub-agent should produce."""
+class JobSpec:
+    """Defines what a sub-agent should produce."""
     prompt: str                          # What to produce
-    style: str = "explainer"             # Video style
+    style: str = "explainer"             # Output style
     budget_usd: float = 10.0             # Max spend
     output_format: str = "mp4"           # Desired output
     duration_seconds: int = 60           # Target duration
@@ -76,7 +76,7 @@ class StudioJobSpec:
 
 @dataclass
 class PackagedJob:
-    """Result of packaging a studio job — everything needed to spawn."""
+    """Result of packaging a job — everything needed to spawn."""
     content_shard_id: str
     task_shard_id: str
     entitlement_token: EntitlementToken
@@ -86,16 +86,16 @@ class PackagedJob:
         """Generate the task text for sessions_spawn.
 
         Includes the serialized entitlement token and shard refs.
-        The studio runner deserializes and hydrates from there.
+        The job runner deserializes and hydrates from there.
         """
         token_str = serialize_token(self.entitlement_token)
         return (
-            f"<studio-job>\n"
+            f"<sw-job>\n"
             f"<entitlement>{token_str}</entitlement>\n"
             f"<content-shard>{self.content_shard_id}</content-shard>\n"
             f"<task-shard>{self.task_shard_id}</task-shard>\n"
-            f"</studio-job>\n\n"
-            f"You are a studio runner agent. Parse the <studio-job> block above.\n"
+            f"</sw-job>\n\n"
+            f"You are a job runner agent. Parse the <sw-job> block above.\n"
             f"Use the entitlement token to decrypt and hydrate the content and task shards.\n"
             f"Execute the production task according to the task shard instructions.\n"
             f"Track all spending against the budget limit.\n"
@@ -106,12 +106,12 @@ class PackagedJob:
 def package_job(
     store: ShardStore,
     content_atoms: list[ShardAtom],
-    job_spec: StudioJobSpec,
+    job_spec: JobSpec,
     agent_id: str = "lilit",
-    granted_to: str = "studio-runner",
+    granted_to: str = "job-runner",
     capabilities: list[str] | None = None,
     secrets: list[str] | None = None,
-    scope_prefix: str = "studio",
+    scope_prefix: str = "job",
     tracer: TraceEmitter | None = None,
 ) -> PackagedJob:
     """Package content + task into encrypted shards with entitlement.
@@ -122,7 +122,7 @@ def package_job(
         job_spec: Production instructions
         agent_id: Who is packaging this job
         granted_to: Sub-agent identity
-        capabilities: What the sub-agent can do (defaults to standard studio set)
+        capabilities: What the sub-agent can do (defaults to standard set)
         secrets: Which API keys the sub-agent can access
         scope_prefix: Scope namespace for this job
 
@@ -138,7 +138,7 @@ def package_job(
         scope=f"{scope_prefix}:content",
         origin=agent_id,
         decay_class=DecayClass.ACTIVE,
-        tags=["studio-content"],
+        tags=["job-content"],
     )
 
     # Build task shard
@@ -148,14 +148,14 @@ def package_job(
         scope=f"{scope_prefix}:task",
         origin=agent_id,
         decay_class=DecayClass.SESSION,
-        tags=["studio-task"],
+        tags=["job-task"],
     )
 
     # Encrypt and store both
     enc_content = store.encrypt_and_store(content_shard, job_key)
     enc_task = store.encrypt_and_store(task_shard, job_key)
 
-    # Default capabilities for studio agents
+    # Default capabilities for job runner agents
     if capabilities is None:
         capabilities = [
             Capability.SHARD_READ,
@@ -201,7 +201,7 @@ def package_job(
             capabilities=token.capabilities,
             budget_usd=job_spec.budget_usd,
         )
-        tracer.studio_job_packaged(
+        tracer.job_packaged(
             content_shard_id=content_shard.shard_id,
             task_shard_id=task_shard.shard_id,
             token_id=token.token_id,

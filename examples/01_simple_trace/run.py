@@ -3,7 +3,7 @@
 
 Shows the core fabric plumbing:
   - ShardStore + ShardAtom basics
-  - TraceEmitter with shard_created, spawn_with_shards, studio_job_completed
+  - TraceEmitter with shard_created, spawn_with_shards, job_completed
   - Subagent emits its own child trace; parent references it by run_id
   - verify_chain() confirms integrity
   - render_trace() produces a Mermaid diagram
@@ -23,8 +23,8 @@ from spiritwriter.fabric.shard import (
 )
 from spiritwriter.fabric.store import ShardStore
 from spiritwriter.fabric.emitter import TraceEmitter, verify_chain
-from spiritwriter.fabric.studio_job import StudioJobSpec, package_job
-from spiritwriter.fabric.studio_runner import (
+from spiritwriter.fabric.jobs import JobSpec, package_job
+from spiritwriter.fabric.runner import (
     hydrate_job, BudgetTracker, create_result_shard,
 )
 from spiritwriter.fabric.visualize import render_trace
@@ -80,7 +80,7 @@ def run_subagent(task_text: str, store: ShardStore, trace_path: str) -> MemorySh
         scope=result.scope,
         atom_count=len(result.atoms),
     )
-    child_tracer.studio_job_completed(
+    child_tracer.job_completed(
         token_id=job.token.token_id,
         result_shard_id=result.shard_id,
         spent_usd=tracker.spent,
@@ -142,7 +142,7 @@ def main(output_dir: Path | None = None) -> int:
         pkg = package_job(
             store=store,
             content_atoms=request_shard.atoms,
-            job_spec=StudioJobSpec(
+            job_spec=JobSpec(
                 prompt="Summarize this document in 2-3 sentences.",
                 budget_usd=0.50,
             ),

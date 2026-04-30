@@ -22,8 +22,8 @@ from spiritwriter.fabric.shard import (
 )
 from spiritwriter.fabric.store import ShardStore
 from spiritwriter.fabric.emitter import TraceEmitter, verify_chain
-from spiritwriter.fabric.studio_job import StudioJobSpec, package_job
-from spiritwriter.fabric.studio_runner import (
+from spiritwriter.fabric.jobs import JobSpec, package_job
+from spiritwriter.fabric.runner import (
     hydrate_job, BudgetTracker, create_result_shard,
 )
 from spiritwriter.fabric.visualize import render_trace
@@ -93,7 +93,7 @@ def run_subagent(
         scope=result.scope,
         atom_count=len(result.atoms),
     )
-    child.studio_job_completed(
+    child.job_completed(
         token_id=job.token.token_id,
         result_shard_id=result.shard_id,
         spent_usd=tracker.spent,
@@ -160,7 +160,7 @@ def main(output_dir: Path | None = None) -> int:
             pkg = package_job(
                 store=store,
                 content_atoms=content_atoms,
-                job_spec=StudioJobSpec(
+                job_spec=JobSpec(
                     prompt=description,
                     budget_usd=0.25,
                 ),

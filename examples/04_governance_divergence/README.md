@@ -11,9 +11,9 @@ every violation and the parent catches the divergence.
 - **Capability checks** — `validate_capability` returns bool;
   `capability_checked` events record every check in the trace
 - **Budget enforcement** — `BudgetTracker.record()` raises
-  `StudioRunnerError` when the budget is exceeded
+  `JobRunnerError` when the budget is exceeded
 - **Governance events** — `capability_denied`, `budget_exceeded`, and
-  `studio_job_failed` are all in the trace chain
+  `job_failed` are all in the trace chain
 - **Parent detection** — the parent reads the child's trace, counts
   governance violations, emits `subagent_failed`, and applies a fallback
 
@@ -32,13 +32,13 @@ python examples/04_governance_divergence/run.py
 [Y] capability_checked: shard:read
     shard_decrypted (content)
     shard_decrypted (task)
-    studio_job_started
+    job_started
 [Y] capability_checked: web:search
 [Y] capability_checked: shard:read
 [$] budget_spent: $0.05 (web_search)
 [$] budget_spent: $0.03 (summarize)
     shard_created
-[+] studio_job_completed: spent $0.08
+[+] job_completed: spent $0.08
 ```
 
 **Run B** (off the rails):
@@ -46,7 +46,7 @@ python examples/04_governance_divergence/run.py
 [Y] capability_checked: shard:read
     shard_decrypted (content)
     shard_decrypted (task)
-    studio_job_started
+    job_started
 [N] capability_checked: upload:youtube
 [!] capability_denied: upload:youtube
 [N] capability_checked: exec:run
@@ -54,7 +54,7 @@ python examples/04_governance_divergence/run.py
 [$] budget_spent: $0.05 (web_search)
 [$] budget_spent: $0.10 (analyze_document)
 [!] budget_exceeded: tried $0.50, already spent $0.15, budget $0.25
-[X] studio_job_failed: Budget exceeded
+[X] job_failed: Budget exceeded
 ```
 
 ### Key governance events in Run B
@@ -67,7 +67,7 @@ python examples/04_governance_divergence/run.py
    $0.50 LLM call. `BudgetTracker.record()` raised and the trace
    records the attempted amount, already-spent total, and budget ceiling.
 
-3. **`studio_job_failed`** — the job terminates with an error. The trace
+3. **`job_failed`** — the job terminates with an error. The trace
    chain is still valid (it records failures, not just successes).
 
 ### Parent response
@@ -77,7 +77,7 @@ The parent reads Run B's trace, finds governance violations, emits
 
 ```
 [+] subagent_completed: worker-a (accepted)
-[!] subagent_failed: 4 violations (capability_denied, capability_denied, budget_exceeded, studio_job_failed)
+[!] subagent_failed: 4 violations (capability_denied, capability_denied, budget_exceeded, job_failed)
 [>] fallback_applied: Run B governance violations detected, using run-a
 ```
 

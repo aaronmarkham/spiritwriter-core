@@ -189,7 +189,7 @@ class TraceEmitter:
             **kwargs,
         )
 
-    def studio_job_packaged(
+    def job_packaged(
         self,
         content_shard_id: str,
         task_shard_id: str,
@@ -197,9 +197,9 @@ class TraceEmitter:
         budget_usd: float,
         **kwargs: Any,
     ) -> dict[str, Any]:
-        """Record studio job packaging."""
+        """Record job packaging."""
         return self.emit(
-            "studio_job_packaged",
+            "job_packaged",
             content_shard_id=content_shard_id,
             task_shard_id=task_shard_id,
             token_id=token_id,
@@ -207,7 +207,7 @@ class TraceEmitter:
             **kwargs,
         )
 
-    def studio_job_started(
+    def job_started(
         self,
         token_id: str,
         content_shard_id: str,
@@ -215,9 +215,9 @@ class TraceEmitter:
         prompt: str | None = None,
         **kwargs: Any,
     ) -> dict[str, Any]:
-        """Record studio job execution start."""
+        """Record job execution start."""
         return self.emit(
-            "studio_job_started",
+            "job_started",
             token_id=token_id,
             content_shard_id=content_shard_id,
             task_shard_id=task_shard_id,
@@ -225,7 +225,7 @@ class TraceEmitter:
             **kwargs,
         )
 
-    def studio_job_completed(
+    def job_completed(
         self,
         token_id: str,
         result_shard_id: str,
@@ -233,9 +233,9 @@ class TraceEmitter:
         outputs: list[dict[str, Any]] | None = None,
         **kwargs: Any,
     ) -> dict[str, Any]:
-        """Record studio job completion."""
+        """Record job completion."""
         return self.emit(
-            "studio_job_completed",
+            "job_completed",
             token_id=token_id,
             result_shard_id=result_shard_id,
             spent_usd=spent_usd,
@@ -243,16 +243,16 @@ class TraceEmitter:
             **kwargs,
         )
 
-    def studio_job_failed(
+    def job_failed(
         self,
         token_id: str,
         error: str,
         spent_usd: float = 0.0,
         **kwargs: Any,
     ) -> dict[str, Any]:
-        """Record studio job failure."""
+        """Record job failure."""
         return self.emit(
-            "studio_job_failed",
+            "job_failed",
             token_id=token_id,
             error=error,
             spent_usd=spent_usd,
