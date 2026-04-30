@@ -380,18 +380,15 @@ See [entitlements.md](entitlements.md) for the full entitlement guide.
 
 ### `JobSpec`
 
+The minimal generic job spec. Subclass and override `to_atoms()` to add domain-specific fields — see [jobs.md](jobs.md#subclassing-for-richer-specs).
+
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `prompt` | `str` | required | What to produce |
-| `style` | `str` | `"explainer"` | Output style |
 | `budget_usd` | `float` | `10.0` | Spend cap |
-| `output_format` | `str` | `"mp4"` | Historical default — override for non-video tasks |
-| `duration_seconds` | `int` | `60` | Historical default — override or ignore |
-| `voice` | `str` | `"nova"` | Historical default — override or ignore |
-| `upload_target` | `str \| None` | `None` | e.g. `"youtube:unlisted"` |
-| `constraints` | `dict[str, Any]` | `{}` | Caller-defined task shape |
+| `constraints` | `dict[str, Any]` | `{}` | Caller-defined task shape (each entry becomes a `constraint.<key>` atom) |
 
-- `to_atoms() -> list[ShardAtom]` — Project the spec into task-shard atoms
+- `to_atoms() -> list[ShardAtom]` — Project the spec into task-shard atoms (`production_prompt`, `budget_limit`, plus one `constraint.<key>` per constraint entry)
 
 ### `PackagedJob`
 

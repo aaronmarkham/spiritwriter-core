@@ -94,19 +94,52 @@ tracer.job_completed(
 ```python
 @dataclass
 class JobSpec:
-    prompt: str                          # what to produce
-    style: str = "explainer"             # output style (free-form label)
-    budget_usd: float = 10.0             # spend cap
-    output_format: str = "mp4"           # historical default — override for non-video tasks
-    duration_seconds: int = 60           # historical default — override or ignore
-    voice: str = "nova"                  # historical default — override or ignore
-    upload_target: str | None = None     # e.g. "youtube:unlisted"
+    prompt: str                                       # what to produce
+    budget_usd: float = 10.0                          # spend cap
     constraints: dict[str, Any] = field(default_factory=dict)
 ```
 
-Only `prompt` is required; everything else has a default. `JobSpec.to_atoms()` projects the spec into a list of `ShardAtom`s so it can be encrypted as the task shard. The video-shaped defaults (`style`, `output_format`, `duration_seconds`, `voice`, `upload_target`) are CSP artifacts that haven't been refactored yet — they show up as task-shard atoms but the runner only reads `prompt` and `constraints` by default. Set them to whatever's appropriate for your task, or ignore them if you're not producing video.
+Only `prompt` is required. `JobSpec.to_atoms()` projects the spec into three kinds of `ShardAtom`s — one for the prompt (`production_prompt`), one for the budget (`budget_limit`), and one per constraint (`constraint.<key>`).
 
-`constraints` is a free-form `dict` for caller-defined task shape — `{"max_words": "60", "tier": "standard"}`. Each entry becomes a `constraint.<key>` atom on the task shard, accessible from the runner side via `job.config["constraint.max_words"]`.
+`constraints` is the escape hatch for caller-defined task shape — `{"max_words": "60", "tier": "standard"}`. Each entry becomes a `constraint.<key>` atom on the task shard, accessible from the runner side via `job.config["constraint.max_words"]`. Use this for shape that's specific to your job but doesn't justify a subclass.
+
+**Constraint values are stringified with f-string `{v}` formatting**, so a non-string value lands in the atom as its `str()` repr — `{"items": [1, 2, 3]}` becomes the literal text `items: [1, 2, 3]`. For predictable atom text use `dict[str, str]`; for richer shapes, subclass and emit your own atoms with explicit serialization.
+
+### Subclassing for Richer Specs
+
+When the constraint dict starts feeling stringly-typed, subclass `JobSpec` and add real fields. The contract is: call `super().to_atoms()` first so the prompt and budget atoms stay in stable positions, then append your own:
+
+```python
+from dataclasses import dataclass
+from spiritwriter.fabric.jobs import JobSpec
+from spiritwriter.fabric.shard import ShardAtom, AtomKind
+
+@dataclass
+class VideoJobSpec(JobSpec):
+    style: str = "explainer"
+    output_format: str = "mp4"
+    duration_seconds: int = 60
+    voice: str = "nova"
+    upload_target: str | None = None
+
+    def to_atoms(self):
+        atoms = super().to_atoms()
+        atoms.append(ShardAtom(
+            text=f"Style: {self.style}, Duration: {self.duration_seconds}s, "
+                 f"Voice: {self.voice}, Format: {self.output_format}",
+            kind=AtomKind.INSTRUCTION,
+            key="production_config",
+        ))
+        if self.upload_target:
+            atoms.append(ShardAtom(
+                text=f"Upload to: {self.upload_target}",
+                kind=AtomKind.INSTRUCTION,
+                key="upload_target",
+            ))
+        return atoms
+```
+
+Pass an instance of the subclass anywhere a `JobSpec` is expected — `package_job(store, atoms, VideoJobSpec(prompt=..., output_format="mov"))`. The runner side reads atoms by `key`, so adding new keys is always safe; renaming or removing a key is the breaking change to watch.
 
 ## PackagedJob
 
