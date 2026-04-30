@@ -267,8 +267,8 @@ Scopes are free-form strings — the format is whatever you want — but these p
 | `frio:profile` | Candidate profiles | Extension submissions |
 | `sw:article` | Cross-consumer articles | Shared between frio & perseus |
 | `perseus:article:{region}` | Regional articles | Internal dedup |
-| `studio:{prefix}:content` | Studio job content | Sub-agent knowledge |
-| `studio:{prefix}:task` | Studio job task spec | Sub-agent instructions |
+| `job:{prefix}:content` | Delegated-job content | Sub-agent knowledge |
+| `job:{prefix}:task` | Delegated-job task spec | Sub-agent instructions |
 
 Entitlement tokens match scopes via `fnmatch`, so `"project:*"` covers any `project:foo`. Pick scope hierarchies that let you grant access at the right granularity.
 

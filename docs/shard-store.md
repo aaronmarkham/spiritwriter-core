@@ -244,7 +244,7 @@ TTL is anchored to `last_checked` if set, otherwise `created_at`. Setting `last_
 | `SESSION` | 24 hours |
 | `CHECKPOINT` | 4 hours |
 
-Pruning is opt-in. Nothing runs automatically — call `prune_expired()` from a cron job, an agent's idle hook, or a `studio` job teardown.
+Pruning is opt-in. Nothing runs automatically — call `prune_expired()` from a cron job, an agent's idle hook, or a job-runner teardown.
 
 ### Statistics
 

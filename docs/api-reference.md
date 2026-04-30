@@ -320,11 +320,11 @@ Hash-chained JSONL event emitter.
 - `capability_checked(token_id, capability, allowed, **kw) -> dict`
 - `budget_spent(token_id, label, amount, total_spent, budget_usd, **kw) -> dict`
 
-**Studio events:**
-- `studio_job_packaged(content_shard_id, task_shard_id, token_id, budget_usd, **kw) -> dict`
-- `studio_job_started(token_id, content_shard_id, task_shard_id, prompt=None, **kw) -> dict`
-- `studio_job_completed(token_id, result_shard_id, spent_usd, outputs=None, **kw) -> dict`
-- `studio_job_failed(token_id, error, spent_usd=0.0, **kw) -> dict`
+**Job events:**
+- `job_packaged(content_shard_id, task_shard_id, token_id, budget_usd, **kw) -> dict`
+- `job_started(token_id, content_shard_id, task_shard_id, prompt=None, **kw) -> dict`
+- `job_completed(token_id, result_shard_id, spent_usd, outputs=None, **kw) -> dict`
+- `job_failed(token_id, error, spent_usd=0.0, **kw) -> dict`
 
 **Decision:**
 - `decision_extracted(shard_id, decision_text, entity=None, rationale=None, **kw) -> dict`
@@ -357,13 +357,13 @@ Verify hash chain integrity. Returns `True` if valid or empty.
 | `trace_parent` | `str \| None` | Trace chain link |
 | `constraints` | `dict` | Application rules |
 
-### `Capability` (Enum)
+### `Capability` (constants holder)
 
-`SHARD_READ`, `SHARD_WRITE`, `KB_CREATE`, `KB_PRODUCE`, `UPLOAD_YOUTUBE`, `WEB_SEARCH`, `WEB_FETCH`, `EXEC_RUN`
+`SHARD_READ`, `SHARD_WRITE`, `KB_CREATE`, `KB_PRODUCE`, `UPLOAD_YOUTUBE`, `WEB_SEARCH`, `WEB_FETCH`, `EXEC_RUN`. Plain string constants, not an `Enum` — pass any string as a custom capability if needed.
 
 ### Functions
 
-- `create_entitlement(granted_to, granted_by, shard_keys, scopes, capabilities, secrets=None, budget_usd=0.0, expires_at=None, constraints=None) -> EntitlementToken`
+- `create_entitlement(granted_to, granted_by, shard_keys, scopes, capabilities, secrets, budget_usd, expires_at=None, constraints=None) -> EntitlementToken` — `secrets`, `scopes`, `capabilities`, `shard_keys`, and `budget_usd` are all required positional/keyword args (no defaults). Pass `secrets=[]` if granting no secret access.
 - `validate_capability(token, action) -> bool`
 - `validate_scope(token, scope) -> bool` — fnmatch pattern matching
 - `validate_budget(token, spent) -> bool`
@@ -371,6 +371,197 @@ Verify hash chain integrity. Returns `True` if valid or empty.
 - `get_shard_key(token, shard_id) -> bytes` — Raises `KeyError`
 - `serialize_token(token) -> str` — JSON
 - `deserialize_token(s) -> EntitlementToken`
+
+See [entitlements.md](entitlements.md) for the full entitlement guide.
+
+---
+
+## spiritwriter.fabric.jobs
+
+### `JobSpec`
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `prompt` | `str` | required | What to produce |
+| `style` | `str` | `"explainer"` | Output style |
+| `budget_usd` | `float` | `10.0` | Spend cap |
+| `output_format` | `str` | `"mp4"` | Historical default — override for non-video tasks |
+| `duration_seconds` | `int` | `60` | Historical default — override or ignore |
+| `voice` | `str` | `"nova"` | Historical default — override or ignore |
+| `upload_target` | `str \| None` | `None` | e.g. `"youtube:unlisted"` |
+| `constraints` | `dict[str, Any]` | `{}` | Caller-defined task shape |
+
+- `to_atoms() -> list[ShardAtom]` — Project the spec into task-shard atoms
+
+### `PackagedJob`
+
+Fields: `content_shard_id`, `task_shard_id`, `entitlement_token`, `job_key` (in-memory only).
+
+- `spawn_task_text() -> str` — Format the `<sw-job>` block + instruction prelude for the sub-agent
+
+### Functions
+
+- `package_job(store, content_atoms, job_spec, agent_id="lilit", granted_to="job-runner", capabilities=None, secrets=None, scope_prefix="job", tracer=None) -> PackagedJob`
+
+---
+
+## spiritwriter.fabric.runner
+
+### `JobRunnerError`
+
+Raised on parse failure, expired token, missing capability, missing shard, or budget exceedance.
+
+### `JobContext`
+
+Fields: `token`, `content_shard`, `task_shard`, `content_shard_id`, `task_shard_id`.
+
+Properties: `prompt`, `budget_usd`, `config` (`{atom.key: atom.text}`), `content_text` (rendered atoms).
+
+### `BudgetTracker(budget_usd, token_id=None, tracer=None)`
+
+- `record(label, amount) -> None` — Raises `JobRunnerError` if would exceed budget
+- `can_spend(amount) -> bool` — Non-raising query
+- `summary() -> dict` — `{budget_usd, spent_usd, remaining_usd, entries}`
+
+Properties: `spent`, `remaining`.
+
+### Functions
+
+- `parse_job_block(task_text) -> tuple[str, str, str]` — `(token_str, content_shard_id, task_shard_id)`
+- `hydrate_job(store, task_text, tracer=None) -> JobContext`
+- `create_result_shard(job, results, agent_id="job-runner") -> MemoryShard`
+
+See [jobs.md](jobs.md) for the full delegated-job guide.
+
+---
+
+## spiritwriter.fabric.network
+
+L2 network resolver for shards not present in the local store. The transport is pluggable; the bundled implementation targets IPFS/Kubo.
+
+### `NetworkResolver` (Protocol)
+
+```python
+@runtime_checkable
+class NetworkResolver(Protocol):
+    def publish(self, shard: MemoryShard) -> ShardLocation: ...
+    def publish_sealed(self, sealed: SealedShard) -> ShardLocation: ...
+    def publish_encrypted(self, encrypted: EncryptedShard) -> ShardLocation: ...
+    def resolve(self, shard_id: str) -> MemoryShard | None: ...
+    def resolve_sealed(self, shard_id: str) -> SealedShard | None: ...
+    def resolve_encrypted(self, shard_id: str) -> EncryptedShard | None: ...
+    def resolve_by_cid(self, cid: str) -> bytes: ...
+    def pin(self, cid: str) -> bool: ...
+    def unpin(self, cid: str) -> bool: ...
+    def publish_manifest(self, manifest: ShardManifest) -> str: ...
+    def resolve_manifest(self, cid: str) -> ShardManifest | None: ...
+    def is_available(self) -> bool: ...
+```
+
+`runtime_checkable`, so `isinstance(resolver, NetworkResolver)` works for duck-typed backends.
+
+### Data Classes
+
+- `ShardLocation(shard_id, cid=None, local=False, pinned=False)` — Where a shard can be found
+- `ShardManifest(scope, entries: list[ShardLocation], published_at, publisher_id)` — Published index of shard locations; `manifest_id` is the content address
+
+### Errors
+
+- `NetworkUnavailable` — backend cannot reach the network
+- `NetworkTimeout` — operation exceeded the configured timeout
+- `IntegrityError` — fetched bytes failed content-hash verification
+- `SwarmMismatchError` — shard belongs to a different private swarm
+
+See [network-distribution.md](network-distribution.md) for the IPFS-specific deployment guide.
+
+---
+
+## spiritwriter.fabric.visualize
+
+Renders trace JSONL into Mermaid diagrams.
+
+- `load_trace(path) -> list[dict]` — Read JSONL into list-of-events
+- `render_simple_workflow(events) -> str` — Linear flow with per-stage spend annotations
+- `render_shard_genealogy(events) -> str` — Content/task/result triangle, entitlements as bridges
+- `render_multi_agent(events) -> str` — Swim lanes by `agent_id`
+- `render_trace(events, diagram_type="workflow") -> str` — Convenience wrapper; `diagram_type` is `"workflow" | "genealogy" | "multi-agent"`
+- `generate_all(trace_path, output_dir) -> dict[str, str]` — Render all three to `<output_dir>/{workflow,genealogy,multi-agent}.mmd`
+
+Output is GitHub-compatible Mermaid markdown. No external Mermaid CLI required for rendering — paste into a GitHub fenced ` ```mermaid ` block.
+
+---
+
+## spiritwriter.fabric.extract
+
+Atom extraction from conversation transcripts. Used by the KB ingest path and conversation-to-shard converters.
+
+- `extract_decisions(text) -> list[ShardAtom]` — Decision-bearing atoms (with `kind=AtomKind.DECISION`)
+- `extract_facts(text) -> list[ShardAtom]` — Fact-bearing atoms (with `kind=AtomKind.FACT`)
+- `extract_atoms(text) -> list[ShardAtom]` — Combined call: decisions + facts
+- `extract_from_conversation(messages, ...) -> list[ShardAtom]` — Apply extraction across an entire chat thread
+- `classify_decay(atom: ShardAtom) -> DecayClass` — Pick a decay class based on atom kind/content
+
+---
+
+## spiritwriter.audit
+
+Tamper-evident security audits for Android APKs. See [audit.md](audit.md) for the full guide.
+
+### Trace event helpers
+
+- `emit_audit_input(emitter, package_name, apk_path, download_source="unknown") -> dict`
+- `emit_audit_evidence(emitter, extraction_dir, patterns=None) -> dict`
+- `emit_audit_strings(emitter, extraction_dir, min_length=8) -> tuple[dict, list[str]]`
+- `emit_audit_finding(emitter, finding, evidence_file_hashes) -> dict`
+- `emit_audit_report(emitter, report_path, report) -> dict`
+
+### Witness generation
+
+- `generate_witness(trace_path, report_path) -> dict`
+- `trace_existing_audit(package_name, apk_path, extraction_dir, report_path, output_dir=None, agent_id="audit-provenance", download_source="unknown") -> tuple[Path, Path]`
+
+### Verification
+
+- `verify(audit_dir, apk_path=None, extraction_dir=None) -> dict[str, list[str]]`
+- `verify_l1(audit_dir) -> list[str]` — Document-hash integrity
+- `verify_l2(audit_dir) -> list[str]` — Hash-chain integrity
+- `verify_l3(audit_dir, apk_path, extraction_dir) -> list[str]` — Evidence still matches witness
+- `verify_l4(audit_dir, extraction_dir) -> list[str]` — Findings derive from evidence
+
+### Findings registry
+
+- `load_registry(db_path=None) -> CanonicalRegistry`
+- `canonical_finding_list(registry) -> str` — Markdown listing
+- `validate_report(report, registry) -> list[dict]` — Naming-drift / category-mismatch / unknown checks
+- `AUDIT_FINDING_SCHEMA` — `CanonicalSchema` for fuzzy name matching
+
+---
+
+## spiritwriter.geo
+
+Domain-agnostic geo-shard primitives — encode/decode geographic view state (zoom, center, layer toggles) as memory shards. Used by Frio and any other geo-spatial app on top of spiritwriter.
+
+### `GeoView`
+
+```python
+@dataclass
+class GeoView:
+    zoom: int
+    center_lat: float
+    center_lng: float
+    layers: list[str] = []
+    annotation: str = ""        # capped at DEFAULT_MAX_ANNOTATION_LENGTH (280)
+```
+
+### Functions
+
+- `geo_view_to_shard(view, origin, *, sealed=False) -> MemoryShard` — Project a `GeoView` into a shard atomized by field
+- `shard_to_geo_view(shard) -> GeoView` — Round-trip a shard back to a `GeoView`
+
+### Constants
+
+- `SCOPE_GEO_VIEW = "geo:view"` — Default scope for plaintext geo views
+- `SCOPE_GEO_VIEW_SEALED = "geo:view:sealed"` — Default scope when sealing
 
 ---
 
