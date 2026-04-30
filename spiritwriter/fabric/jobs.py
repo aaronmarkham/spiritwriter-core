@@ -1,12 +1,20 @@
-"""Job packaging — encrypt content + task into shard pairs.
+"""Job packaging — bundle content + task + entitlement for a sub-agent.
 
-A job consists of:
-1. Content shard: source material (research, atoms, file refs)
-2. Task shard: production instructions (prompt, style, budget, constraints)
-3. Entitlement token: grants sub-agent access to both + specific capabilities
+A job is a generic unit of delegated sub-agent work:
 
-The main agent packages the job, spawns a sub-agent with the
-entitlement token, and the sub-agent hydrates/decrypts to work.
+- Content shard: encrypted source material the sub-agent will reference.
+- Task shard: encrypted production instructions (prompt, budget, constraints).
+- Entitlement token: bearer credential gating decryption, scope, capabilities,
+  and budget.
+
+The issuer calls package_job() to produce a PackagedJob; spawns the
+sub-agent with packaged.spawn_task_text() in its prompt; the sub-agent
+calls hydrate_job() (in spiritwriter.fabric.runner) to validate, decrypt,
+and execute.
+
+JobSpec carries the minimal generic fields: prompt, budget, constraints.
+Callers with richer task shapes — video production, document analysis,
+arbitrary structured tasks — subclass JobSpec and override to_atoms().
 """
 
 from __future__ import annotations
@@ -29,18 +37,23 @@ from spiritwriter.fabric.emitter import TraceEmitter
 
 @dataclass
 class JobSpec:
-    """Defines what a sub-agent should produce."""
-    prompt: str                          # What to produce
-    style: str = "explainer"             # Output style
-    budget_usd: float = 10.0             # Max spend
-    output_format: str = "mp4"           # Desired output
-    duration_seconds: int = 60           # Target duration
-    voice: str = "nova"                  # TTS voice
-    upload_target: str | None = None     # e.g., "youtube:unlisted"
+    """Defines what a sub-agent should produce.
+
+    The minimal generic shape: a prompt, a budget cap, and free-form
+    constraints. Subclass this and override to_atoms() to add domain-
+    specific fields (e.g. VideoJobSpec for media production).
+    """
+    prompt: str
+    budget_usd: float = 10.0
     constraints: dict[str, Any] = field(default_factory=dict)
 
     def to_atoms(self) -> list[ShardAtom]:
-        """Convert job spec to shard atoms."""
+        """Convert job spec to shard atoms.
+
+        Subclasses should call super().to_atoms() and append their own
+        atoms — keeps the prompt/budget/constraint atoms in a stable
+        position for runners that read them by key.
+        """
         atoms = [
             ShardAtom(
                 text=self.prompt,
@@ -48,23 +61,11 @@ class JobSpec:
                 key="production_prompt",
             ),
             ShardAtom(
-                text=f"Style: {self.style}, Duration: {self.duration_seconds}s, "
-                     f"Voice: {self.voice}, Format: {self.output_format}",
-                kind=AtomKind.INSTRUCTION,
-                key="production_config",
-            ),
-            ShardAtom(
                 text=f"Budget: ${self.budget_usd:.2f}",
                 kind=AtomKind.INSTRUCTION,
                 key="budget_limit",
             ),
         ]
-        if self.upload_target:
-            atoms.append(ShardAtom(
-                text=f"Upload to: {self.upload_target}",
-                kind=AtomKind.INSTRUCTION,
-                key="upload_target",
-            ))
         for k, v in self.constraints.items():
             atoms.append(ShardAtom(
                 text=f"{k}: {v}",
