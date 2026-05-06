@@ -59,6 +59,7 @@ from spiritwriter.fabric.crypto import generate_job_key
 
 key = generate_job_key()
 encrypted = store.encrypt_and_store(shard, key)        # AES-256-GCM, operator can decrypt with key
+decrypted = store.decrypt_and_get(encrypted.shard_id, key)
 ```
 
 Zero-knowledge (operator can't decrypt):
@@ -68,6 +69,7 @@ from spiritwriter.fabric.sealed import generate_owner_keypair
 
 keypair = generate_owner_keypair()
 sealed = store.seal_and_store(shard, keypair.public_key)   # only owner's private key opens it
+decrypted = store.unseal_and_get(sealed.shard_id, keypair.private_key)
 ```
 
 ## Entity Resolution (Phalanx)
@@ -91,19 +93,20 @@ with CanonicalRegistry("/tmp/people.db", schema) as registry:
 
 | Guide | Description |
 |-------|-------------|
-| [Getting Started](docs/getting-started.md) | Installation, layered model, use-case reading paths |
-| [Memory Shards](docs/memory-shards.md) | Atoms, decay classes, hydration, content addressing |
-| [Shard Store](docs/shard-store.md) | Storage layout, named refs, scope queries, maintenance |
+| [Getting Started](docs/getting-started.md) | installation, layered model, use-case reading paths |
+| [Memory Shards](docs/memory-shards.md) | atoms, decay classes, hydration, content addressing |
+| [Shard Store](docs/shard-store.md) | storage layout, named refs, scope queries, maintenance |
 | [Encryption](docs/encryption.md) | AES-GCM, NaCl sealed boxes, threat model |
-| [Entitlements](docs/entitlements.md) | Bearer tokens, capabilities, budget, scope enforcement |
-| [Jobs](docs/jobs.md) | Packaging delegated sub-agent work; issuer / runner sides |
+| [Entitlements](docs/entitlements.md) | bearer tokens, capabilities, budget, scope enforcement |
+| [Jobs](docs/jobs.md) | packaging delegated sub-agent work; issuer / runner sides |
+| [Shard Postures](docs/shard-postures.md) | choosing the trust model — encryption, signing, scope, decay, distribution as one dial |
 | [Entity Resolution](docs/entity-resolution.md) | Phalanx (CMC-Lite): ESS, tiered matching, batch processing |
-| [Tracing](docs/tracing.md) | Hash-chained provenance, chain verification, signed traces |
-| [Traced Workflows](docs/traced-workflows.md) | Multi-stage pipelines with checkpoint/resume; CSP as worked example |
+| [Tracing](docs/tracing.md) | hash-chained provenance, chain verification, signed traces |
+| [Traced Workflows](docs/traced-workflows.md) | multi-stage pipelines with checkpoint/resume; CSP as worked example |
 | [Network Distribution](docs/network-distribution.md) | IPFS backend, manifests, private swarm, L1/L2 resolution |
-| [Audit](docs/audit.md) | Tamper-evident Android APK security audits |
-| [Integration Guide](docs/integration-guide.md) | How frio, perseus-news, and Claude Studio Producer use it |
-| [API Reference](docs/api-reference.md) | Complete public API surface |
+| [Audit](docs/audit.md) | tamper-evident Android APK security audits |
+| [Integration Guide](docs/integration-guide.md) | how frio, perseus-news, and Claude Studio Producer use it |
+| [API Reference](docs/api-reference.md) | complete public API surface |
 
 ## Examples
 
@@ -140,17 +143,21 @@ spiritwriter/
     entitlement.py  Scoped access tokens
     canonicalize.py CMC-Lite entity resolution
     emitter.py      Hash-chained trace events
+    extract.py      Atom extraction utilities
     visualize.py    Mermaid diagram rendering
     network.py      NetworkResolver protocol
     backends/
       ipfs.py       IPFS / Kubo backend
     jobs.py         JobSpec, package_job
     runner.py       hydrate_job, BudgetTracker, create_result_shard
+  geo/            Geographic types and view shards (experimental)
   ingest/         Document ingestion (PDF)
+  integrations/   Third-party integration adapters (mempalace, ...)
   kb/             Knowledge base CRUD
   llm/            LLM provider abstraction (Anthropic)
   models/         DocumentAtom, KnowledgeProject
   secrets/        OS keychain API key management
+  stopwords.py    Centralized stopword list
   trace/          Deprecated shim re-exporting fabric/ (removed in 0.6.0)
 ```
 
