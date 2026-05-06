@@ -4,15 +4,23 @@ Content-addressed agent memory for AI systems. Create, store, encrypt, share, an
 
 ## What It Does
 
-- **Memory Shards** — immutable, content-addressed bundles of structured knowledge (SHA-256, Git-style object layout)
-- **Shard Store** — local-first file storage with scope queries, named refs, and DHT-ready network fallback
-- **Encryption** — AES-256-GCM for agent-to-agent sharing; NaCl sealed boxes for zero-knowledge storage
-- **Entitlements** — bearer tokens that bundle decryption keys + scope patterns + capabilities + budget
-- **Delegated Jobs** — package encrypted content + task + entitlement into a unit of sub-agent work; every step traced
-- **Entity Resolution (Phalanx)** — domain-agnostic canonicalization with tiered confidence matching (T1–T4), based on the Consensus Memory Canonicalization (CMC) spec
-- **Tracing** — hash-chained JSONL provenance logs with optional Ed25519 signing; render as Mermaid workflow / genealogy / multi-agent diagrams
-- **IPFS Distribution** — publish and resolve shards over a private IPFS swarm, with cache-on-fetch L2 fallback
-- **Android Audits** — tamper-evident security audits for APKs (`spiritwriter.audit`)
+- **Memory Shards** — knowledge that grows without losing history. New observations supersede old ones via lineage links; identical content from different agents dedupes into a single record. Decay classes (`PERMANENT`, `STABLE`, `ACTIVE`, `SESSION`, `CHECKPOINT`) prune what shouldn't outlive its purpose. *(Content-addressed: SHA-256 over atoms + scope + origin.)*
+
+- **Shard Store** — local-first storage on disk; transparently fetches missing shards from a network when one is configured. Named refs (mutable pointers to immutable shards) handle the "latest version of X" pattern without breaking content addressing. *(Git-style object layout; optional IPFS L2 fallback.)*
+
+- **Encryption** — two layers picked by who you don't trust. AES-256-GCM when the operator and key-holder cooperate. NaCl sealed boxes when the operator must not see content — multi-tenant hosting, source protection, zero-knowledge monitoring.
+
+- **Entitlements** — delegate scoped access to a sub-agent without handing over master keys. Tokens bundle decryption keys + scope patterns + capabilities + budget; the store enforces every constraint before decrypting.
+
+- **Delegated Jobs** — package encrypted content + task + entitlement into one unit of sub-agent work. The orchestrator hands the package over; the sub-agent hydrates, executes, returns a result shard. Every step traced.
+
+- **Entity Resolution (Phalanx)** — tell entities apart even when names collide ("Bear" the dog vs. "Bear" the brand) and merge them when surface forms diverge ("Carlos Martinez" vs. "MARTINEZ, CARLOS A"). Same primitive handles both. *(See [The Bear Problem](#the-bear-problem) below.)*
+
+- **Tracing** — replay exactly what an agent did, prove nothing's been edited, render the run as workflow / genealogy / multi-agent diagrams. Useful for debugging expensive failures, auditing before deploy, or proving a run's integrity to a third party. *(Hash-chained JSONL with optional Ed25519 signing.)*
+
+- **IPFS Distribution** — share shards across machines without running a database. Publish to a private IPFS swarm; consumers transparently fetch missing shards from the network and cache locally.
+
+- **Android Audits** — tamper-evident security audits for APKs. Inputs, evidence, findings, and final report are bound into a hash-chained trace plus a self-hashing witness — anyone with the APK can re-run verification offline.
 
 ## Install
 
@@ -89,6 +97,54 @@ with CanonicalRegistry("/tmp/people.db", schema) as registry:
     cid = registry.upsert(candidate, result, "source_a", "001")
 ```
 
+For why this works — and why we built it the way we did — see below.
+
+## The Bear Problem
+
+You're extracting facts about Aaron from a stack of documents. Document 1 surfaces "Bear is Aaron's favorite." Document 2: "Aaron and Bear were at the park." Document 3: "Aaron's dog Bear, a 10-year-old black lab / border collie mix (a Borador)."
+
+Each document gives partial defining-field coverage, and your extractor classifies Bear three different ways: a name in Document 1, a generic animal in Document 2, a specific dog in Document 3. Three identifiers for the same entity, and they don't align. A naive system keeps them separate (you have three Bears, no convergence as more documents arrive) or collapses by surface name alone (now Bear-the-dog merges with Bear-the-beer brand mentioned in Document 4). Embedding-based systems hallucinate the boundaries — they score "Bear" the dog close to "Bear" the bear close to "Bear" the brand, and the merge decisions become unauditable.
+
+Phalanx hashes the *defining fields* (name + entity type + owner + …) into an **Entity Sense Signature** — a deterministic identity hash. As more documents land, defining fields accumulate per entity. Document 1 gives `name=Bear, owner=Aaron`. Document 3 adds `entity_type=dog, breed=borador`. The growing field set produces a stable ESS the moment you have enough fields to disambiguate. Fields not yet known don't penalize the match — they're absent from the hash, and ESS overlap rewards the fields you *do* share.
+
+The same primitive handles the inverse: "Carlos Martinez", "MARTINEZ, CARLOS A", and "C. Martinez" across three rosters dedupe into one entity, because their defining fields normalize to the same hash regardless of surface spelling.
+
+### Resolution Tiers
+
+| Tier | Match | Action |
+|------|-------|--------|
+| T1 | Exact ESS digest | Auto-merge |
+| T2 | High fuzzy quality + high ESS overlap | Auto-merge |
+| T3 | Fuzzy with lower combined score | Flag, don't merge |
+| T4 | Weak context overlap | Flag only |
+
+### Tech Stack
+
+Two layers, one per concern:
+
+- **`CanonicalRegistry`** — one SQLite file. The entity-resolution index. Three tables: `entities`, `sightings`, `merges`. WAL mode for concurrent readers.
+- **`ShardStore`** — content-addressed JSON-LD atoms on disk. The underlying knowledge the registry points at.
+
+The registry holds *which canonical entity each sighting maps to*; the shards hold *what the entity actually is*. Same architecture whether you're running on a laptop or a multi-node deployment. See [Memory Shards](docs/memory-shards.md) and [Shard Store](docs/shard-store.md) for the atom and storage layers.
+
+### Why These Design Choices
+
+- **Local-first.** A `CanonicalRegistry` is one SQLite file (and the shards it points at are plain JSON-LD on disk). No service to run, no vector DB to host, no daemon to keep alive. The registry *is* the artifact — email it, version-control it, copy it between machines, restore it from a backup.
+
+- **Deterministic before fuzzy.** Auto-merge only at T1 and T2 (the upper rows of the table above). Anything weaker becomes a flagged merge event for human review. False merges are the worst failure mode in entity resolution, and silent ones are unauditable. Phalanx fails loud.
+
+- **No LLM in the auto-merge path.** LLMs hallucinate, and for entity resolution that means silently combining records of two different people. Deterministic + fuzzy with explicit tiers is verifiable end-to-end; LLM judgment isn't. Use an LLM upstream to extract atoms from text if you want; keep it out of the merge decision.
+
+- **Schema-driven, domain-agnostic.** Same engine handles people, products, papers, articles — anything where you can name the defining fields. Tier thresholds are tunable per domain. The schema's hash is stored in the registry on first open; reopening with a different schema raises `ValueError` rather than silently misclassifying records as a different domain's entities.
+
+- **Lightweight to bootstrap.** No embedding model to train or host. No GPU. No vector index to rebuild on schema change. Goes from `pip install` to resolving entities in seconds, on a laptop, offline.
+
+### The Numbers
+
+≥85% recall on semantic duplicates with ≤5% false-merge rate. No embeddings, no LLM calls — SQLite, normalization, and string matching. The full spec draws on academic prior art (EDC/EMNLP 2024, Graphiti/Zep, SimpleMem, EMem-G); Phalanx pulls the three highest-impact ideas — content-addressed identity, tiered escalation, overlapping-window extraction — and ships them with zero new infrastructure.
+
+**Deeper:** [Entity Resolution guide](docs/entity-resolution.md), [CMC-Lite spec](docs/specs/cmc-spec-v0.1.md).
+
 ## Documentation
 
 | Guide | Description |
@@ -161,6 +217,14 @@ spiritwriter/
 └── trace/          # Deprecated shim re-exporting fabric/ (removed in 0.6.0)
 ```
 
+## Integrations
+
+spiritwriter-core ships with a pluggable memory-provider protocol (`spiritwriter/integrations/base.py`) so any external memory system can be backed by content-addressed shards. One adapter is in-tree:
+
+- **[mempalace](https://github.com/aaronmarkham/mempalace)** — atomic memory store with decay-based recall and contextual entity weighting. The `spiritwriter/integrations/mempalace/` adapter wires mempalace's API to spiritwriter's shard store and entity registry.
+
+The same protocol can plug in **Mem0**, **Zep**, **Mastra**, or any custom memory layer — implement `MemoryProvider` and `MemoryBackend` in your adapter; spiritwriter handles shard storage, entity resolution, encryption, and tracing on the back end.
+
 ## Used By
 
 - **[frio](https://frio.help)** — zero-knowledge jail roster monitoring (encrypted search shards, fuzzy name matching)
@@ -171,9 +235,9 @@ spiritwriter/
 ## Tests
 
 ```bash
-python -m pytest tests/ -v                    # full suite
-python -m pytest tests/test_demos.py -v       # the four examples above
-python -m pytest tests/test_ipfs_backend.py -v -m ipfs   # IPFS integration (requires Kubo)
+python -m pytest tests/ -v                              # full suite
+python -m pytest tests/test_demos.py -v                 # the four examples above
+python -m pytest tests/test_ipfs_backend.py -v -m ipfs  # IPFS integration (requires Kubo)
 ```
 
 ## License
