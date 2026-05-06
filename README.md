@@ -1,23 +1,25 @@
 # spiritwriter-core
 
-Content-addressed agent memory for AI systems. Create, store, encrypt, share, and recall structured knowledge — with built-in provenance, access control, and entity resolution.
+Content-addressed agent memory for AI systems. Create, store, encrypt, share, and recall structured knowledge — with built-in provenance, access control, entity resolution, and delegated sub-agent jobs.
 
 ## What It Does
 
-- **Memory Shards** — Immutable, content-addressed bundles of structured knowledge (SHA-256, Git-style object layout)
-- **Shard Store** — Local-first file storage with scope queries, named refs, and DHT-ready network fallback
+- **Memory Shards** — immutable, content-addressed bundles of structured knowledge (SHA-256, Git-style object layout)
+- **Shard Store** — local-first file storage with scope queries, named refs, and DHT-ready network fallback
 - **Encryption** — AES-256-GCM for agent-to-agent sharing; NaCl sealed boxes for zero-knowledge storage
-- **Entitlements** — Scoped access tokens with capability checks, budget tracking, and per-shard decryption keys
-- **Entity Resolution (Phalanx)** — Domain-agnostic canonicalization with tiered confidence matching (T1-T4), based on the Consensus Memory Canonicalization (CMC) spec
-- **Tracing** — Hash-chained JSONL provenance logs with optional Ed25519 signing
-- **IPFS Distribution** — Publish and resolve shards over a private IPFS swarm
+- **Entitlements** — bearer tokens that bundle decryption keys + scope patterns + capabilities + budget
+- **Delegated Jobs** — package encrypted content + task + entitlement into a unit of sub-agent work; every step traced
+- **Entity Resolution (Phalanx)** — domain-agnostic canonicalization with tiered confidence matching (T1–T4), based on the Consensus Memory Canonicalization (CMC) spec
+- **Tracing** — hash-chained JSONL provenance logs with optional Ed25519 signing; render as Mermaid workflow / genealogy / multi-agent diagrams
+- **IPFS Distribution** — publish and resolve shards over a private IPFS swarm, with cache-on-fetch L2 fallback
+- **Android Audits** — tamper-evident security audits for APKs (`spiritwriter.audit`)
 
 ## Install
 
 ```bash
-pip install -e .                      # core
-pip install -e ".[sealed]"            # + NaCl sealed boxes
-pip install -e ".[network]"           # + IPFS backend
+pip install -e .                        # core
+pip install -e ".[sealed]"              # + NaCl sealed boxes
+pip install -e ".[network]"             # + IPFS backend
 pip install -e ".[dev,sealed,network]"  # everything
 ```
 
@@ -29,7 +31,8 @@ Requires Python 3.9+.
 from spiritwriter.fabric.shard import MemoryShard, ShardAtom, AtomKind, DecayClass
 from spiritwriter.fabric.store import ShardStore
 
-# Create a shard
+store = ShardStore("~/.myapp/shards")
+
 shard = MemoryShard(
     atoms=[
         ShardAtom(text="Project uses FastAPI", kind=AtomKind.FACT,
@@ -43,35 +46,30 @@ shard = MemoryShard(
     decay_class=DecayClass.STABLE,
 )
 
-# Store it
-store = ShardStore("~/.myapp/shards")
-ref = store.put(shard)
-
-# Retrieve by content address
-retrieved = store.get(ref.shard_id)
-
-# Hydrate as agent context
-context = retrieved.hydrate_context()
+ref = store.put(shard)              # idempotent — same content, same ID
+context = store.hydrate([ref])      # XML-tagged context ready for prompt injection
 ```
+
+See [docs/getting-started.md](docs/getting-started.md) for the layered model and use-case reading paths.
 
 ## Encryption
 
 ```python
-from spiritwriter.fabric.crypto import generate_job_key, encrypt_shard, decrypt_shard
+from spiritwriter.fabric.crypto import generate_job_key
 
 key = generate_job_key()
-encrypted = encrypt_shard(shard, key)
-decrypted = decrypt_shard(encrypted, key)
+encrypted = store.encrypt_and_store(shard, key)        # AES-256-GCM, operator can decrypt with key
+decrypted = store.decrypt_and_get(encrypted.shard_id, key)
 ```
 
 Zero-knowledge (operator can't decrypt):
 
 ```python
-from spiritwriter.fabric.sealed import generate_owner_keypair, seal_shard, unseal_shard
+from spiritwriter.fabric.sealed import generate_owner_keypair
 
 keypair = generate_owner_keypair()
-sealed = seal_shard(shard, keypair.public_key)
-decrypted = unseal_shard(sealed, keypair.private_key)
+sealed = store.seal_and_store(shard, keypair.public_key)   # only owner's private key opens it
+decrypted = store.unseal_and_get(sealed.shard_id, keypair.private_key)
 ```
 
 ## Entity Resolution (Phalanx)
@@ -95,18 +93,24 @@ with CanonicalRegistry("/tmp/people.db", schema) as registry:
 
 | Guide | Description |
 |-------|-------------|
-| [Getting Started](docs/getting-started.md) | Installation, core concepts, quick examples |
-| [Memory Shards](docs/memory-shards.md) | Atoms, decay classes, hydration, content addressing |
-| [Shard Store](docs/shard-store.md) | Storage layout, named refs, scope queries, maintenance |
-| [Encryption](docs/encryption.md) | AES-GCM, NaCl sealed boxes, entitlements |
+| [Getting Started](docs/getting-started.md) | installation, layered model, use-case reading paths |
+| [Memory Shards](docs/memory-shards.md) | atoms, decay classes, hydration, content addressing |
+| [Shard Store](docs/shard-store.md) | storage layout, named refs, scope queries, maintenance |
+| [Encryption](docs/encryption.md) | AES-GCM, NaCl sealed boxes, threat model |
+| [Entitlements](docs/entitlements.md) | bearer tokens, capabilities, budget, scope enforcement |
+| [Jobs](docs/jobs.md) | packaging delegated sub-agent work; issuer / runner sides |
+| [Shard Postures](docs/shard-postures.md) | choosing the trust model — encryption, signing, scope, decay, distribution as one dial |
 | [Entity Resolution](docs/entity-resolution.md) | Phalanx (CMC-Lite): ESS, tiered matching, batch processing |
-| [Tracing](docs/tracing.md) | Hash-chained provenance, chain verification |
-| [Integration Guide](docs/integration-guide.md) | How frio, perseus-news, and claude-studio-producer use it |
-| [API Reference](docs/api-reference.md) | Complete public API surface |
+| [Tracing](docs/tracing.md) | hash-chained provenance, chain verification, signed traces |
+| [Traced Workflows](docs/traced-workflows.md) | multi-stage pipelines with checkpoint/resume; CSP as worked example |
+| [Network Distribution](docs/network-distribution.md) | IPFS backend, manifests, private swarm, L1/L2 resolution |
+| [Audit](docs/audit.md) | tamper-evident Android APK security audits |
+| [Integration Guide](docs/integration-guide.md) | how frio, perseus-news, and Claude Studio Producer use it |
+| [API Reference](docs/api-reference.md) | complete public API surface |
 
 ## Examples
 
-The `examples/` directory contains self-contained demos that exercise the fabric APIs end-to-end — no LLM calls, no network, just Python functions composing shards, traces, entitlements, and studio jobs. Each demo runs with `python examples/NN_xxx/run.py` and exits 0.
+The `examples/` directory contains self-contained demos that exercise the fabric APIs end-to-end — no LLM calls, no network, plain Python functions composing shards, traces, entitlements, and jobs. Each demo runs with `python examples/NN_xxx/run.py` and exits 0.
 
 | Demo | What it shows |
 |------|---------------|
@@ -123,41 +127,53 @@ Run the test suite with `python -m pytest tests/test_demos.py -v`.
 python -m pytest benchmarks/ -v -s
 ```
 
-See [benchmarks/README.md](benchmarks/README.md) for details on what's measured and how to interpret results.
+See [benchmarks/README.md](benchmarks/README.md) for what's measured and how to interpret results.
 
 ## Architecture
 
 ```
 spiritwriter/
-├── models/      # Data models (DocumentAtom, KnowledgeProject)
-├── secrets/     # OS keychain API key management
-├── classify/    # Content/theme classification
-├── llm/         # LLM provider abstraction (Anthropic)
-├── ingest/      # PDF document ingestion
-├── kb/          # Knowledge base CRUD
-└── trace/       # Memory shard system
-    ├── shard.py         # MemoryShard, ShardAtom, ShardRef
-    ├── store.py         # ShardStore (Git-style content addressing)
-    ├── crypto.py        # AES-256-GCM encryption
-    ├── sealed.py        # NaCl sealed boxes, Ed25519 signing
-    ├── entitlement.py   # Scoped access tokens
-    ├── canonicalize.py  # CMC-Lite entity resolution
-    ├── emitter.py       # Hash-chained trace events
-    ├── network.py       # NetworkResolver protocol
-    └── backends/
-        └── ipfs.py      # IPFS/Kubo backend
+├── audit/          # Tamper-evident Android APK security audits
+├── classify/       # Content/theme classification
+├── fabric/         # Shards, store, encryption, entitlements, jobs, traces, network
+│   ├── shard.py         # MemoryShard, ShardAtom, ShardRef
+│   ├── store.py         # ShardStore (Git-style content addressing)
+│   ├── crypto.py        # AES-256-GCM encryption
+│   ├── sealed.py        # NaCl sealed boxes, Ed25519 signing
+│   ├── entitlement.py   # Scoped access tokens
+│   ├── canonicalize.py  # CMC-Lite entity resolution
+│   ├── emitter.py       # Hash-chained trace events
+│   ├── extract.py       # Atom extraction utilities
+│   ├── visualize.py     # Mermaid diagram rendering
+│   ├── network.py       # NetworkResolver protocol
+│   ├── jobs.py          # JobSpec, package_job
+│   ├── runner.py        # hydrate_job, BudgetTracker, create_result_shard
+│   └── backends/
+│       └── ipfs.py      # IPFS / Kubo backend
+├── geo/            # Geographic types and view shards (experimental)
+├── ingest/         # Document ingestion (PDF)
+├── integrations/   # Third-party integration adapters (mempalace, ...)
+├── kb/             # Knowledge base CRUD
+├── llm/            # LLM provider abstraction (Anthropic)
+├── models/         # DocumentAtom, KnowledgeProject
+├── secrets/        # OS keychain API key management
+├── stopwords.py    # Centralized stopword list
+└── trace/          # Deprecated shim re-exporting fabric/ (removed in 0.6.0)
 ```
 
 ## Used By
 
-- **[frio](https://frio.help)** — Zero-knowledge jail roster monitoring (encrypted search shards, fuzzy name matching)
-- **[texascrime.org](https://texascrime.org)** — Dual-perspective enforcement news with cross-consumer shard sharing
+- **[frio](https://frio.help)** — zero-knowledge jail roster monitoring (encrypted search shards, fuzzy name matching)
+- **[texascrime.org](https://texascrime.org)** — dual-perspective enforcement news with cross-consumer shard sharing
 - **[podcasts.spiritwriter.ai](https://podcasts.spiritwriter.ai)** — AI-generated podcasts from multi-agent video production
+- **[Claude Studio Producer](https://github.com/aaronmarkham/claude-studio-producer)** — media production pipeline; the canonical worked example in `traced-workflows.md`
 
 ## Tests
 
 ```bash
-python -m pytest tests/ -v
+python -m pytest tests/ -v                    # full suite
+python -m pytest tests/test_demos.py -v       # the four examples above
+python -m pytest tests/test_ipfs_backend.py -v -m ipfs   # IPFS integration (requires Kubo)
 ```
 
 ## License
