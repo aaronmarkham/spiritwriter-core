@@ -133,32 +133,32 @@ See [benchmarks/README.md](benchmarks/README.md) for what's measured and how to 
 
 ```
 spiritwriter/
-  audit/          Tamper-evident Android APK security audits
-  classify/       Content/theme classification
-  fabric/         Shards, store, encryption, entitlements, jobs, traces, network
-    shard.py        MemoryShard, ShardAtom, ShardRef
-    store.py        ShardStore (Git-style content addressing)
-    crypto.py       AES-256-GCM encryption
-    sealed.py       NaCl sealed boxes, Ed25519 signing
-    entitlement.py  Scoped access tokens
-    canonicalize.py CMC-Lite entity resolution
-    emitter.py      Hash-chained trace events
-    extract.py      Atom extraction utilities
-    visualize.py    Mermaid diagram rendering
-    network.py      NetworkResolver protocol
-    backends/
-      ipfs.py       IPFS / Kubo backend
-    jobs.py         JobSpec, package_job
-    runner.py       hydrate_job, BudgetTracker, create_result_shard
-  geo/            Geographic types and view shards (experimental)
-  ingest/         Document ingestion (PDF)
-  integrations/   Third-party integration adapters (mempalace, ...)
-  kb/             Knowledge base CRUD
-  llm/            LLM provider abstraction (Anthropic)
-  models/         DocumentAtom, KnowledgeProject
-  secrets/        OS keychain API key management
-  stopwords.py    Centralized stopword list
-  trace/          Deprecated shim re-exporting fabric/ (removed in 0.6.0)
+├── audit/          # Tamper-evident Android APK security audits
+├── classify/       # Content/theme classification
+├── fabric/         # Shards, store, encryption, entitlements, jobs, traces, network
+│   ├── shard.py         # MemoryShard, ShardAtom, ShardRef
+│   ├── store.py         # ShardStore (Git-style content addressing)
+│   ├── crypto.py        # AES-256-GCM encryption
+│   ├── sealed.py        # NaCl sealed boxes, Ed25519 signing
+│   ├── entitlement.py   # Scoped access tokens
+│   ├── canonicalize.py  # CMC-Lite entity resolution
+│   ├── emitter.py       # Hash-chained trace events
+│   ├── extract.py       # Atom extraction utilities
+│   ├── visualize.py     # Mermaid diagram rendering
+│   ├── network.py       # NetworkResolver protocol
+│   ├── jobs.py          # JobSpec, package_job
+│   ├── runner.py        # hydrate_job, BudgetTracker, create_result_shard
+│   └── backends/
+│       └── ipfs.py      # IPFS / Kubo backend
+├── geo/            # Geographic types and view shards (experimental)
+├── ingest/         # Document ingestion (PDF)
+├── integrations/   # Third-party integration adapters (mempalace, ...)
+├── kb/             # Knowledge base CRUD
+├── llm/            # LLM provider abstraction (Anthropic)
+├── models/         # DocumentAtom, KnowledgeProject
+├── secrets/        # OS keychain API key management
+├── stopwords.py    # Centralized stopword list
+└── trace/          # Deprecated shim re-exporting fabric/ (removed in 0.6.0)
 ```
 
 ## Used By
