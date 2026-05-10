@@ -268,3 +268,181 @@ class TestDemo04GovernanceDivergence:
     def test_mermaid_diagrams_generated(self):
         assert (self._traces / "run_a_workflow.mmd").exists()
         assert (self._traces / "run_b_workflow.mmd").exists()
+
+
+# ── Flavor doc worked examples ────────────────────────────────────────
+#
+# The hex values below mirror the worked examples in
+# docs/substrate-flavor.md. Any drift in canonicalization, hashing,
+# signing, or signing-payload composition will break these — which is
+# exactly the alarm we want, because the doc is the contract a
+# library-free implementer reads to be interoperable.
+#
+# When intentionally changing the wire format: regenerate by running
+# `python examples/flavor_examples.py` and update both the doc and the
+# expected values here in lockstep.
+
+
+EXPECTED_FLAVOR_VALUES = {
+    "root_pubkey": "4cb5abf6ad79fbf5abbccafcc269d85cd2651ed4b885b5869f241aedf0a5ba29",
+    "orch_pubkey": "7422b9887598068e32c4448a949adb290d0f4e35b9e01b0ee5f1a1e600fe2674",
+    "worker_pubkey": "f381626e41e7027ea431bfe3009e94bdd25a746beec468948d6c3c7c5dc9a54b",
+    "worker_thumbprint": "c2b6bf688fb8be003dcf12ee147bfd0708d7931a786c0d42ba9f5381a722998f",
+    "unsigned_shard_id": "7e25b712ff54f42e333da4c526de24177ffe9e6fc71dff549a38b46f25b58d9c",
+    "root_cap_id": "0c5f215c1aa6d704c57c7eacda4ef3edd8c5b9c45b64a12a8410ae3b14ae9134",
+    "orch_cap_id": "855c4b0ea32ceb294378f06fe61c79b34a16e4b9a3ecc4ebca8c2d7e4cb6a93f",
+    "worker_cap_id": "0bb95a741cffeba06a377d564a9484c7305cf9dfb43318c97cccc5f508427aa6",
+    "produced_shard_id": "2e23e1733453531bd6a640c500049767ea12ddd2333c8cb1acd5c50e222b37fe",
+    "produced_signature": "c33490397c7c22705e869197aae112bf0a8494da134a1c412d32a19b5eb5fcbbe3b1b0a1840298ffcd31b44019467603f73146cff9ec1eed9545a7356c215408",
+}
+
+
+class TestFlavorDocExamples:
+    """Pin the worked-example values used by docs/substrate-flavor.md.
+
+    A failure here means external implementations following the doc
+    will produce different bytes than this library — i.e., the wire
+    format changed.
+    """
+
+    @pytest.fixture(scope="class")
+    def computed(self):
+        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import (
+            Ed25519PrivateKey,
+        )
+        from spiritwriter.fabric.shard import (
+            MemoryShard,
+            ShardAtom,
+            AtomKind,
+            DecayClass,
+            pubkey_thumbprint,
+        )
+        from spiritwriter.fabric.entitlement import (
+            Capability,
+            Caveat,
+            CaveatType,
+            create_entitlement,
+            issue_delegated,
+        )
+
+        def _kp(seed_int: int) -> tuple[bytes, bytes]:
+            seed = seed_int.to_bytes(32, "big")
+            sk = Ed25519PrivateKey.from_private_bytes(seed)
+            sk_b = sk.private_bytes(
+                encoding=serialization.Encoding.Raw,
+                format=serialization.PrivateFormat.Raw,
+                encryption_algorithm=serialization.NoEncryption(),
+            )
+            pk_b = sk.public_key().public_bytes(
+                encoding=serialization.Encoding.Raw,
+                format=serialization.PublicFormat.Raw,
+            )
+            return sk_b, pk_b
+
+        root_sk, root_pk = _kp(1)
+        orch_sk, orch_pk = _kp(2)
+        worker_sk, worker_pk = _kp(3)
+
+        unsigned = MemoryShard(
+            atoms=[ShardAtom(
+                text="The Fugaku supercomputer is in Kobe, Japan.",
+                kind=AtomKind.FACT,
+                entity="Fugaku", key="location", value="Kobe, Japan",
+            )],
+            scope="sw:article:run-abc",
+            origin="agent:builder-2",
+            decay_class=DecayClass.PERMANENT,
+            created_at="2026-05-10T12:00:00Z",
+        )
+
+        root = create_entitlement(
+            granted_to="aaron", granted_by="self", shard_keys={},
+            scopes=["sw:*"],
+            capabilities=[Capability.SHARD_READ, Capability.SHARD_WRITE],
+            secrets=[], budget_usd=100.0,
+        )
+        root.token_id = "00000000-0000-0000-0000-000000000001"
+        root.created_at = "2026-05-10T12:00:00Z"
+        root.subject_pubkey = root_pk
+        root.caveats = [Caveat(CaveatType.MAX_DELEGATION_DEPTH, 3)]
+        root.sign(root_sk)
+
+        orch = issue_delegated(
+            root, root_sk,
+            subject_pubkey=orch_pk,
+            granted_to="orchestrator:run-abc",
+            scopes=["sw:article:run-abc:*"],
+            capabilities=[Capability.SHARD_WRITE],
+            caveats=[Caveat(CaveatType.EXPIRES_AT, "2026-05-10T13:00:00Z")],
+        )
+        orch.token_id = "00000000-0000-0000-0000-000000000002"
+        orch.created_at = "2026-05-10T12:00:00Z"
+        orch.signature = None
+        orch.sign(root_sk)
+
+        leaf = issue_delegated(
+            orch, orch_sk,
+            subject_pubkey=worker_pk,
+            granted_to="worker:builder-2",
+            capabilities=[Capability.SHARD_WRITE],
+        )
+        leaf.token_id = "00000000-0000-0000-0000-000000000003"
+        leaf.created_at = "2026-05-10T12:00:00Z"
+        leaf.signature = None
+        leaf.sign(orch_sk)
+
+        produced = MemoryShard(
+            atoms=[ShardAtom(
+                text="Fugaku is currently the world's fourth-fastest supercomputer.",
+                kind=AtomKind.FACT,
+                entity="Fugaku", key="ranking", value="4",
+            )],
+            scope="sw:article:run-abc:builder-2",
+            origin="agent:builder-2",
+            decay_class=DecayClass.PERMANENT,
+            created_at="2026-05-10T12:30:00Z",
+            cap_id=leaf.cap_id,
+        )
+        produced.sign(worker_sk)
+
+        return {
+            "root_pubkey": root_pk.hex(),
+            "orch_pubkey": orch_pk.hex(),
+            "worker_pubkey": worker_pk.hex(),
+            "worker_thumbprint": pubkey_thumbprint(worker_pk),
+            "unsigned_shard_id": unsigned.shard_id,
+            "root_cap_id": root.cap_id,
+            "orch_cap_id": orch.cap_id,
+            "worker_cap_id": leaf.cap_id,
+            "produced_shard_id": produced.shard_id,
+            "produced_signature": produced.signature,
+            # For verification round-trip:
+            "_chain": [root, orch, leaf],
+            "_root_pk_bytes": root_pk,
+            "_worker_pk_bytes": worker_pk,
+            "_produced": produced,
+        }
+
+    @pytest.mark.parametrize("name", list(EXPECTED_FLAVOR_VALUES.keys()))
+    def test_pinned_value(self, computed, name):
+        assert computed[name] == EXPECTED_FLAVOR_VALUES[name], (
+            f"{name} drifted — re-run examples/flavor_examples.py and update "
+            "docs/substrate-flavor.md and EXPECTED_FLAVOR_VALUES in tandem."
+        )
+
+    def test_full_verification_round_trip(self, computed):
+        """End-to-end: chain verifies, authorizes the shard's scope at issue
+        time, and the leaf signature validates against the worker's pubkey."""
+        from spiritwriter.fabric.entitlement import (
+            verify_chain as verify_cap_chain,
+            authorize_chain,
+        )
+        chain = computed["_chain"]
+        verify_cap_chain(chain, root_pubkeys=[computed["_root_pk_bytes"]])
+        assert authorize_chain(
+            chain,
+            scope=computed["_produced"].scope,
+            now_iso="2026-05-10T12:30:00Z",
+        )
+        computed["_produced"].verify(computed["_worker_pk_bytes"])
