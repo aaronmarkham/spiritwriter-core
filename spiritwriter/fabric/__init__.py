@@ -7,7 +7,13 @@ Content-addressed memory shards with DHT-ready distribution,
 provenance tracking, and scoped entitlements.
 """
 
-from spiritwriter.fabric.shard import MemoryShard, ShardAtom, ShardRef
+from spiritwriter.fabric.shard import (
+    MemoryShard,
+    ShardAtom,
+    ShardRef,
+    generate_signing_keypair,
+    pubkey_thumbprint,
+)
 from spiritwriter.fabric.store import ShardStore
 from spiritwriter.fabric.emitter import TraceEmitter, verify_chain
 from spiritwriter.fabric.crypto import (
@@ -50,6 +56,8 @@ __all__ = [
     "MemoryShard",
     "ShardAtom",
     "ShardRef",
+    "generate_signing_keypair",
+    "pubkey_thumbprint",
     "ShardStore",
     "TraceEmitter",
     "EncryptedShard",

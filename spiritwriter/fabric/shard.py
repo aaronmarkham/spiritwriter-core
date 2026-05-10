@@ -21,6 +21,12 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import (
+    Ed25519PrivateKey,
+    Ed25519PublicKey,
+)
+
 
 class DecayClass(str, Enum):
     """How long a shard or atom should live."""
@@ -57,6 +63,40 @@ def _sha256(data: bytes) -> str:
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def generate_signing_keypair() -> tuple[bytes, bytes]:
+    """Generate an Ed25519 keypair for shard signing.
+
+    Returns ``(private_key_seed, public_key)`` — both 32 bytes raw.
+    The seed is the canonical Ed25519 private key form; pass it to
+    :meth:`MemoryShard.sign`. Store with restricted permissions.
+
+    Uses cryptography (already a hard dep) rather than PyNaCl so signed
+    shards work without the optional ``[sealed]`` extra. Keys are
+    interchangeable with PyNaCl-generated Ed25519 keys at the byte level.
+    """
+    sk = Ed25519PrivateKey.generate()
+    sk_bytes = sk.private_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PrivateFormat.Raw,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+    pk_bytes = sk.public_key().public_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw,
+    )
+    return sk_bytes, pk_bytes
+
+
+def pubkey_thumbprint(pubkey_bytes: bytes) -> str:
+    """sha256 hex digest of an Ed25519 public key.
+
+    Used as the shard's ``created_by`` field to identify the signer
+    without embedding the full key. Reproducible cross-language from
+    raw key bytes — matches the project's hex-everywhere convention.
+    """
+    return hashlib.sha256(pubkey_bytes).hexdigest()
 
 
 @dataclass
@@ -164,6 +204,10 @@ class MemoryShard:
     meta: dict[str, Any] = field(default_factory=dict)
     last_checked: str | None = None      # ISO timestamp — last time content was verified/polled
     check_count: int = 0                 # number of verification/poll cycles completed
+    # Authorship / authorization (optional — unsigned shards still work)
+    signature: str | None = None         # hex Ed25519 signature over signing_payload()
+    created_by: str | None = None        # sha256 hex thumbprint of signer pubkey
+    cap_id: str | None = None            # reference to the capability that authorized this
 
     @property
     def shard_id(self) -> str:
@@ -222,6 +266,12 @@ class MemoryShard:
             d["last_checked"] = self.last_checked
         if self.check_count:
             d["check_count"] = self.check_count
+        if self.cap_id is not None:
+            d["cap_id"] = self.cap_id
+        if self.created_by is not None:
+            d["created_by"] = self.created_by
+        if self.signature is not None:
+            d["signature"] = self.signature
         return d
 
     def to_json(self) -> str:
@@ -242,6 +292,9 @@ class MemoryShard:
             meta=d.get("meta", {}),
             last_checked=d.get("last_checked"),
             check_count=d.get("check_count", 0),
+            signature=d.get("signature"),
+            created_by=d.get("created_by"),
+            cap_id=d.get("cap_id"),
         )
         # Verify content address if provided
         stored_id = d.get("shard_id")
@@ -255,6 +308,83 @@ class MemoryShard:
     @classmethod
     def from_json(cls, raw: str) -> MemoryShard:
         return cls.from_dict(json.loads(raw))
+
+    # === Signing / Verification (Ed25519) ===
+
+    def signing_payload(self) -> bytes:
+        """Canonical bytes covered by the signature.
+
+        Includes every envelope field except `signature` itself and the
+        operational counters (`last_checked`, `check_count`) that change
+        as a shard is polled. Excluding those means polling doesn't
+        invalidate the signature.
+
+        shard_id stays in the signed payload — it's recomputed in
+        to_dict() from {atoms, scope, origin}, so the signature ends
+        up binding the content address to the envelope.
+        """
+        d = self.to_dict()
+        d.pop("signature", None)
+        d.pop("last_checked", None)
+        d.pop("check_count", None)
+        return _canonical_json(d)
+
+    def sign(
+        self,
+        private_key_bytes: bytes,
+        *,
+        pubkey_bytes: bytes | None = None,
+    ) -> None:
+        """Sign this shard in place with an Ed25519 private key.
+
+        Sets `signature` (hex Ed25519) and `created_by` (sha256 hex of
+        the public key). If `created_by` was already set, validates that
+        it matches the signing key's pubkey thumbprint.
+
+        Args:
+            private_key_bytes: 32-byte Ed25519 seed (raw private key).
+            pubkey_bytes: optional 32-byte raw public key. Derived from
+                the private key if omitted.
+        """
+        sk = Ed25519PrivateKey.from_private_bytes(private_key_bytes)
+        derived_pk = sk.public_key().public_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PublicFormat.Raw,
+        )
+        if pubkey_bytes is not None and pubkey_bytes != derived_pk:
+            raise ValueError("Provided pubkey does not match private key")
+        pk = pubkey_bytes or derived_pk
+        thumbprint = pubkey_thumbprint(pk)
+        if self.created_by is not None and self.created_by != thumbprint:
+            raise ValueError(
+                f"created_by mismatch: shard claims {self.created_by[:12]}…, "
+                f"signing key thumbprint is {thumbprint[:12]}…"
+            )
+        self.created_by = thumbprint
+        self.signature = sk.sign(self.signing_payload()).hex()
+
+    def verify(self, pubkey_bytes: bytes) -> bool:
+        """Verify the shard's signature against a public key.
+
+        Returns True on success.
+
+        Raises:
+            ValueError: shard is unsigned, or the provided pubkey
+                doesn't match the shard's `created_by` thumbprint.
+            cryptography.exceptions.InvalidSignature: signature is bad.
+        """
+        if self.signature is None:
+            raise ValueError("Shard has no signature to verify")
+        if self.created_by is not None:
+            thumbprint = pubkey_thumbprint(pubkey_bytes)
+            if thumbprint != self.created_by:
+                raise ValueError(
+                    f"Pubkey thumbprint {thumbprint[:12]}… does not match "
+                    f"created_by {self.created_by[:12]}…"
+                )
+        pk = Ed25519PublicKey.from_public_bytes(pubkey_bytes)
+        pk.verify(bytes.fromhex(self.signature), self.signing_payload())
+        return True
 
     def get_atom(self, key: str) -> ShardAtom | None:
         """Find the first atom with a matching key."""
