@@ -327,22 +327,34 @@ class TestDemo05DelegationWithTrace:
                 assert e.get("subject_thumbprint"), f"{role} event missing subject_thumbprint"
 
     def test_produced_shards_link_back_to_trace(self):
-        """trace_ref on the produced shard should point at an event in
-        the worker's chain — proving the 'which event produced this
-        shard?' question is answerable."""
+        """The trace_ref on each produced shard must encode an event hash
+        that actually appears in that worker's trace log — otherwise the
+        'which event produced this shard?' question silently goes
+        unanswerable. This is the property the integration exists to
+        provide; verify it explicitly by loading the shard and
+        cross-checking the hash."""
+        from spiritwriter.fabric.store import ShardStore
+
+        store = ShardStore(self._dir / "shards")
         for role in ("builder", "inspector", "critic"):
             events = _load_events(self._dir / f"{role}.jsonl")
             shard_event = next(e for e in events if e["type"] == "shard_produced")
+            shard = store.get(shard_event["shard_id"])
+            assert shard is not None, f"{role} shard {shard_event['shard_id'][:12]} not in store"
+
+            # trace_ref format: "chain:<run_id>#<event_hash>"
+            assert shard.trace_ref is not None, f"{role} shard missing trace_ref"
             run_id = shard_event["run_id"]
-            # Some prior event's hash should appear inside one of the
-            # produced shards' trace_ref. We don't have shard objects
-            # here, but we can verify the format and presence on at
-            # least one event by hash lookup.
-            hashes = {e["hash"] for e in events}
-            # The shard was created BEFORE the shard_produced event,
-            # so trace_ref points at the prior event (intermediate_finding).
-            # That event's hash must be in the chain.
-            assert any(h in {e["hash"] for e in events} for h in hashes)
+            assert shard.trace_ref.startswith(f"chain:{run_id}#"), (
+                f"{role} trace_ref has unexpected format: {shard.trace_ref!r}"
+            )
+            ref_hash = shard.trace_ref.split("#", 1)[1]
+
+            event_hashes = {e["hash"] for e in events}
+            assert ref_hash in event_hashes, (
+                f"{role} trace_ref points at hash {ref_hash[:16]}... "
+                f"which is NOT in this worker's trace log — the link is broken"
+            )
 
     def test_provenance_queries_isolate_role(self):
         from spiritwriter.fabric.emitter import events_by_role
