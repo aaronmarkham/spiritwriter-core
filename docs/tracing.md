@@ -163,7 +163,7 @@ Any single-field edit, event insertion, mid-chain removal, or reordering breaks 
 
 ## Cap Context and Provenance Queries
 
-When an agent is operating under a delegated capability (see [entitlements.md](entitlements.md#delegation) and [substrate-flavor.md](substrate-flavor.md#3-capabilities)), the trace emitter can tag every event with the authorizing chain. Pass cap context to the constructor and every subsequent event picks it up automatically:
+When an agent operates under a delegated capability, pass the authorizing chain to the emitter's constructor and every event picks it up:
 
 ```python
 from spiritwriter.fabric.emitter import TraceEmitter
@@ -180,12 +180,14 @@ emitter = TraceEmitter(
 )
 
 emitter.emit("step_started", task="analyze")
-# → event now carries cap_id, cap_chain, subject_thumbprint, role
+# event now carries cap_id, cap_chain, subject_thumbprint, role
 ```
 
-Per-event keyword arguments override the sticky defaults for the rare case where one event runs under a different cap. Cap context is included in the event's hash, so any tampering with cap_id or chain after the fact breaks `verify_chain`.
+See [entitlements.md](entitlements.md#delegation) for issuing the cap and [substrate-flavor.md](substrate-flavor.md#3-capabilities) for the wire format.
 
-To stamp a shard produced under a traced operation with its emitting event:
+Per-event keyword arguments override the sticky defaults when one event runs under a different cap. Cap context is inside the event's hash, so tampering with cap_id or chain after the fact breaks `verify_chain`.
+
+To link a produced shard to the trace event that emitted it:
 
 ```python
 shard = MemoryShard(
@@ -198,9 +200,9 @@ shard = MemoryShard(
 shard.sign(worker_private_key)
 ```
 
-`current_trace_ref()` returns `"chain:<run_id>#<last_event_hash>"` — a stable pointer to the most recent event. Readers can later answer "which trace event was this shard emitted under?" by parsing the ref.
+`current_trace_ref()` returns `"chain:<run_id>#<last_event_hash>"` — a stable pointer to the most recent event. Parse the ref to answer "which trace event was this shard emitted under?"
 
-Once events carry cap context, the four filter helpers turn the log into a queryable provenance store:
+Once events carry cap context, four filter helpers turn the log into a queryable provenance store:
 
 ```python
 from spiritwriter.fabric.emitter import (
@@ -217,9 +219,9 @@ events_by_signer(merged, key_thumbprint)           # everything signed by a spec
 events_under_chain(merged, user_root_cap.cap_id)   # everything under user X's authority
 ```
 
-`events_under_chain` is the most powerful: it returns every event whose `cap_chain` contains the given ancestor, surfacing every descendant worker's activity regardless of role. If events have `cap_id` but no `cap_chain` (degraded emitter setup), it falls back to a direct leaf-id match.
+`events_under_chain` is the powerful one: it returns every event whose `cap_chain` contains the given ancestor, surfacing every descendant worker's activity regardless of role. If events have `cap_id` but no `cap_chain`, it falls back to a direct leaf-id match.
 
-See [`examples/05_delegation_with_trace/`](../examples/05_delegation_with_trace/run.py) for an end-to-end walk: root → orchestrator → 3 workers, each producing signed shards under its leaf cap, with full chain + signature verification and provenance queries demonstrated.
+See [`examples/05_delegation_with_trace/`](../examples/05_delegation_with_trace/run.py) for the full pattern: root → orchestrator → 3 workers, each producing signed shards under its leaf cap, with chain + signature verification and provenance queries demonstrated.
 
 ## Signed Traces
 

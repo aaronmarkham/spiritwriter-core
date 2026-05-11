@@ -1,29 +1,29 @@
 #!/usr/bin/env python3
 """Demo 5: Per-key delegation with trace observability.
 
-End-to-end walk of the cap-chain primitives shipped in 0.6.0, composed
-with the trace system:
+End-to-end walk of the cap-chain primitives shipped in 0.6.0,
+composed with the trace system:
 
   Root → Orchestrator → {Builder, Inspector, Critic}
 
 Each worker:
   - Holds its own Ed25519 keypair (generated at spawn)
   - Builds a TraceEmitter pre-loaded with its cap_id / cap_chain /
-    subject_thumbprint / role (so every event auto-tags itself)
-  - Emits a small sequence of trace events under its leaf cap
-  - Produces one signed MemoryShard with trace_ref pointing at the
-    event during which it was emitted, and cap_id pointing at its
+    subject_thumbprint / role, so every event auto-tags itself
+  - Emits a small sequence of events under its leaf cap
+  - Produces one signed MemoryShard whose trace_ref points at the
+    event it was emitted under and whose cap_id points at its
     authorizing leaf cap
 
-Then we verify:
-  - Each per-worker trace chain (hash linkage intact)
-  - The cap chain root→leaf for each worker (signatures + linkage)
-  - Each produced shard's leaf signature against its worker's pubkey
-  - The intersection of caveats authorizes each shard's scope at issue
-    time
+Verification covers four chains per worker:
+  - The trace chain (hash linkage intact)
+  - The cap chain root → leaf (signatures + parent-child linkage)
+  - The shard's leaf signature against the worker's pubkey
+  - Caveat intersection across the chain authorizes the shard's
+    scope at issue time
 
-Finally we demonstrate provenance queries against the merged event
-log: filter by role, by leaf signer, by ancestor cap.
+Provenance queries on the merged event log then filter by role,
+leaf signer, and ancestor cap.
 
 Usage:
     python examples/05_delegation_with_trace/run.py
