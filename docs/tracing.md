@@ -161,6 +161,66 @@ Any single-field edit, event insertion, mid-chain removal, or reordering breaks 
 
 **One thing `verify_chain` cannot detect: tail-truncation.** Dropping events from the *end* of a chain leaves every remaining event still hashing correctly and linking to its predecessor. To detect a truncated tail, emit a terminal event (e.g. `pipeline_completed`, `run_completed`) and have your consumer assert it's present — or, for stronger guarantees, pin the chain length with an external commitment (a final hash-of-all-priors, or a length receipt to a separate log).
 
+## Cap Context and Provenance Queries
+
+When an agent is operating under a delegated capability (see [entitlements.md](entitlements.md#delegation) and [substrate-flavor.md](substrate-flavor.md#3-capabilities)), the trace emitter can tag every event with the authorizing chain. Pass cap context to the constructor and every subsequent event picks it up automatically:
+
+```python
+from spiritwriter.fabric.emitter import TraceEmitter
+from spiritwriter.fabric.shard import pubkey_thumbprint
+
+emitter = TraceEmitter(
+    run_id="run-abc",
+    agent_id="worker:builder-2",
+    out_path="/tmp/traces/builder-2.jsonl",
+    cap_id=leaf_cap.cap_id,
+    cap_chain=[c.cap_id for c in [root, orchestrator, leaf_cap]],
+    subject_thumbprint=pubkey_thumbprint(worker_pubkey),
+    role="builder",
+)
+
+emitter.emit("step_started", task="analyze")
+# → event now carries cap_id, cap_chain, subject_thumbprint, role
+```
+
+Per-event keyword arguments override the sticky defaults for the rare case where one event runs under a different cap. Cap context is included in the event's hash, so any tampering with cap_id or chain after the fact breaks `verify_chain`.
+
+To stamp a shard produced under a traced operation with its emitting event:
+
+```python
+shard = MemoryShard(
+    atoms=[...],
+    scope="sw:article:run-abc:builder-2",
+    origin="worker:builder-2",
+    cap_id=leaf_cap.cap_id,
+    trace_ref=emitter.current_trace_ref(),
+)
+shard.sign(worker_private_key)
+```
+
+`current_trace_ref()` returns `"chain:<run_id>#<last_event_hash>"` — a stable pointer to the most recent event. Readers can later answer "which trace event was this shard emitted under?" by parsing the ref.
+
+Once events carry cap context, the four filter helpers turn the log into a queryable provenance store:
+
+```python
+from spiritwriter.fabric.emitter import (
+    events_by_cap, events_by_signer, events_by_role, events_under_chain,
+)
+
+merged = []
+for path in trace_dir.glob("*.jsonl"):
+    merged.extend(json.loads(line) for line in path.read_text().splitlines() if line)
+
+events_by_cap(merged, builder_cap.cap_id)          # everything builder #4 did
+events_by_role(merged, "inspector")                # everything any inspector did
+events_by_signer(merged, key_thumbprint)           # everything signed by a specific key
+events_under_chain(merged, user_root_cap.cap_id)   # everything under user X's authority
+```
+
+`events_under_chain` is the most powerful: it returns every event whose `cap_chain` contains the given ancestor, surfacing every descendant worker's activity regardless of role. If events have `cap_id` but no `cap_chain` (degraded emitter setup), it falls back to a direct leaf-id match.
+
+See [`examples/05_delegation_with_trace/`](../examples/05_delegation_with_trace/run.py) for an end-to-end walk: root → orchestrator → 3 workers, each producing signed shards under its leaf cap, with full chain + signature verification and provenance queries demonstrated.
+
 ## Signed Traces
 
 For non-repudiation — proving the chain came from a specific keypair holder — pass an Ed25519 signer to the emitter:

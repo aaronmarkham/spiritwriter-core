@@ -22,6 +22,20 @@ class TraceEmitter:
     Each event is linked to the previous via prev_event_hash,
     forming a tamper-evident chain. Events can optionally be
     signed with an Ed25519 key (when signer is provided).
+
+    **Cap context** (optional): If you construct the emitter with
+    ``cap_id`` / ``cap_chain`` / ``subject_thumbprint`` / ``role``,
+    every emitted event automatically carries those fields. This makes
+    every event traceable back to the specific cap under whose
+    authority it was produced — enabling provenance queries like
+    "everything builder #4 did" or "everything under run-abc". Per-event
+    overrides via ``emit(..., cap_id=...)`` still work for the unusual
+    case where a single event runs under a different cap than the
+    emitter's default.
+
+    All cap-context fields are optional; emitters built before this
+    feature, or that don't operate under a delegation chain, work
+    unchanged.
     """
 
     def __init__(
@@ -30,16 +44,33 @@ class TraceEmitter:
         agent_id: str,
         out_path: str,
         signer: Any | None = None,
+        *,
+        cap_id: str | None = None,
+        cap_chain: list[str] | None = None,
+        subject_thumbprint: str | None = None,
+        role: str | None = None,
     ):
         self.run_id = run_id
         self.agent_id = agent_id
         self.out_path = out_path
         self.signer = signer  # Optional Ed25519 signer
         self.prev_hash: str | None = None
+        # Cap context — sticky defaults applied to every emitted event
+        # unless overridden per-call.
+        self.cap_id = cap_id
+        self.cap_chain = list(cap_chain) if cap_chain is not None else None
+        self.subject_thumbprint = subject_thumbprint
+        self.role = role
         os.makedirs(os.path.dirname(out_path) if os.path.dirname(out_path) else ".", exist_ok=True)
 
     def emit(self, event_type: str, **kwargs: Any) -> dict[str, Any]:
-        """Emit a trace event, chain it, optionally sign it."""
+        """Emit a trace event, chain it, optionally sign it.
+
+        Cap-context fields (cap_id, cap_chain, subject_thumbprint, role)
+        from the emitter's constructor are attached automatically and
+        included in the chained hash. Pass them as kwargs to override
+        for a single event.
+        """
         evt: dict[str, Any] = {
             "type": event_type,
             "run_id": self.run_id,
@@ -48,6 +79,15 @@ class TraceEmitter:
             "agent_id": self.agent_id,
             "prev_event_hash": self.prev_hash,
         }
+        # Attach cap context — kwargs may override per-event.
+        if "cap_id" not in kwargs and self.cap_id is not None:
+            evt["cap_id"] = self.cap_id
+        if "cap_chain" not in kwargs and self.cap_chain is not None:
+            evt["cap_chain"] = list(self.cap_chain)
+        if "subject_thumbprint" not in kwargs and self.subject_thumbprint is not None:
+            evt["subject_thumbprint"] = self.subject_thumbprint
+        if "role" not in kwargs and self.role is not None:
+            evt["role"] = self.role
         evt.update(kwargs)
 
         # Compute hash over everything except hash and sig
@@ -62,6 +102,20 @@ class TraceEmitter:
         self.prev_hash = h
         self._write(evt)
         return evt
+
+    def current_trace_ref(self) -> str | None:
+        """Stable pointer to the most recent event in this chain.
+
+        Format: ``chain:<run_id>#<last_event_hash>``. Use to populate
+        :attr:`MemoryShard.trace_ref` when a shard is produced during
+        a traced operation — readers can later answer "which trace
+        event was this shard emitted under?"
+
+        Returns None before any event has been emitted.
+        """
+        if self.prev_hash is None:
+            return None
+        return f"chain:{self.run_id}#{self.prev_hash}"
 
     def _write(self, evt: dict[str, Any]) -> None:
         with open(self.out_path, "a", encoding="utf-8") as f:
@@ -287,6 +341,70 @@ class TraceEmitter:
                 return [json.loads(line) for line in f if line.strip()]
         except FileNotFoundError:
             return []
+
+
+# === Provenance queries =====================================================
+#
+# These operate on already-loaded event lists (from `emitter.get_events()` or
+# `_load_events(jsonl_path)`). They're filters, not indices — fine for trace
+# logs in the hundreds-of-thousands range; build a real index if you need
+# faster than that.
+#
+# All filters preserve event order, so chain integrity (verifiable via
+# verify_chain) is not affected by querying.
+
+
+def events_by_cap(events: list[dict[str, Any]], cap_id: str) -> list[dict[str, Any]]:
+    """Events whose leaf cap_id matches.
+
+    Use to answer "what specifically did this worker do?" — assumes the
+    worker's emitter was constructed with that cap_id (or each event
+    overrode it explicitly).
+    """
+    return [e for e in events if e.get("cap_id") == cap_id]
+
+
+def events_by_signer(
+    events: list[dict[str, Any]], subject_thumbprint: str
+) -> list[dict[str, Any]]:
+    """Events emitted by a specific signing identity.
+
+    `subject_thumbprint` is the sha256 hex of the signer's public key
+    (matches ``MemoryShard.created_by``). Useful when a single identity
+    operated under multiple caps (e.g., rotation) — captures everything
+    the *key* did regardless of which cap it was wielded under.
+    """
+    return [e for e in events if e.get("subject_thumbprint") == subject_thumbprint]
+
+
+def events_by_role(events: list[dict[str, Any]], role: str) -> list[dict[str, Any]]:
+    """Events by role label (e.g., ``builder``, ``inspector``, ``critic``).
+
+    Roles are opaque to the substrate but useful for grouping spans
+    when an orchestrator spawns multiple workers under distinct roles.
+    """
+    return [e for e in events if e.get("role") == role]
+
+
+def events_under_chain(
+    events: list[dict[str, Any]], ancestor_cap_id: str
+) -> list[dict[str, Any]]:
+    """Events whose cap_chain contains ``ancestor_cap_id``.
+
+    Use to answer "everything that ran under user X's authority" by
+    passing X's bootstrap/root cap_id — captures every descendant
+    worker's events regardless of role. Requires events to carry
+    ``cap_chain`` (set on the emitter); falls back to checking ``cap_id``
+    when no chain is recorded (a leaf-only signal).
+    """
+    out: list[dict[str, Any]] = []
+    for e in events:
+        chain = e.get("cap_chain")
+        if chain is not None and ancestor_cap_id in chain:
+            out.append(e)
+        elif chain is None and e.get("cap_id") == ancestor_cap_id:
+            out.append(e)
+    return out
 
 
 def verify_chain(events: list[dict[str, Any]]) -> bool:
