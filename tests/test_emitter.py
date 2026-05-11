@@ -81,6 +81,29 @@ class TestCapContextAttached:
         assert evt["cap_id"] == "cap:other"
         assert evt["role"] == "inspector"
 
+    def test_explicit_none_kwarg_treated_as_absent(self, tmp_path):
+        """Passing cap_id=None on a single emit should fall back to the
+        emitter's sticky default rather than writing null into the event
+        payload. Otherwise a caller like ``emit("x", cap_id=maybe_none)``
+        where maybe_none comes from a .get() would silently corrupt the
+        chained hash with a null field."""
+        e = TraceEmitter(
+            run_id="r", agent_id="a", out_path=str(tmp_path / "t.jsonl"),
+            cap_id="cap:default", role="builder",
+        )
+        evt = e.emit("x", cap_id=None, role=None)
+        assert evt["cap_id"] == "cap:default"
+        assert evt["role"] == "builder"
+
+    def test_explicit_none_with_no_sticky_default_omits_field(self, tmp_path):
+        """When the emitter has no sticky default AND the caller passes
+        None, the field should be omitted entirely — not written as null."""
+        e = TraceEmitter(run_id="r", agent_id="a", out_path=str(tmp_path / "t.jsonl"))
+        evt = e.emit("x", cap_id=None, cap_chain=None, role=None)
+        assert "cap_id" not in evt
+        assert "cap_chain" not in evt
+        assert "role" not in evt
+
     def test_cap_chain_is_isolated_copy(self, tmp_path):
         """Mutating the list passed to the constructor must not leak
         into emitted events — otherwise a caller-side reorder would
@@ -238,6 +261,38 @@ class TestProvenanceQueries:
         events = e.get_events()
         assert events_under_chain(events, "cap:leaf") == events
         assert events_under_chain(events, "cap:something-else") == []
+
+    def test_events_under_chain_treats_empty_chain_as_missing(self, tmp_path):
+        """An emitter built with cap_chain=[] writes ``cap_chain: []``
+        on every event. Without special-casing, the chain branch would
+        never match (nothing is in []) and the fallback branch wouldn't
+        fire either (chain isn't None) — so leaf-id queries would
+        silently return zero results. Empty list is treated like
+        missing chain: fall through to the cap_id fallback."""
+        e = TraceEmitter(
+            run_id="r", agent_id="a", out_path=str(tmp_path / "t.jsonl"),
+            cap_id="cap:leaf",
+            cap_chain=[],  # explicit empty
+        )
+        e.emit("step")
+        events = e.get_events()
+        assert events[0]["cap_chain"] == []  # confirm the input shape
+        assert events_under_chain(events, "cap:leaf") == events
+        assert events_under_chain(events, "cap:nope") == []
+
+    def test_events_under_chain_matches_leaf_in_its_own_chain(self, tmp_path):
+        """The leaf's own cap_id is the last entry of its own cap_chain,
+        so querying with the leaf cap_id matches via the chain branch
+        (not the fallback). Confirms the docstring's note about which
+        path fires when."""
+        e = TraceEmitter(
+            run_id="r", agent_id="a", out_path=str(tmp_path / "t.jsonl"),
+            cap_id="cap:leaf",
+            cap_chain=["cap:root", "cap:orch", "cap:leaf"],
+        )
+        e.emit("step")
+        events = e.get_events()
+        assert events_under_chain(events, "cap:leaf") == events
 
     def test_empty_input_returns_empty(self):
         assert events_by_cap([], "cap:x") == []

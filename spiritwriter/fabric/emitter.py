@@ -65,6 +65,11 @@ class TraceEmitter:
         Cap-context fields (cap_id, cap_chain, subject_thumbprint, role)
         set on the emitter attach automatically and are covered by the
         chained hash. Override per-event by passing them as kwargs.
+        Explicit ``None`` on a cap-context kwarg is treated as
+        "not passed" (so the emitter's sticky default still applies) —
+        otherwise a caller like ``emit("x", cap_id=maybe_none)`` would
+        silently write ``cap_id: null`` into the event, which is almost
+        never what you want.
         """
         evt: dict[str, Any] = {
             "type": event_type,
@@ -74,6 +79,12 @@ class TraceEmitter:
             "agent_id": self.agent_id,
             "prev_event_hash": self.prev_hash,
         }
+        # Treat None on cap-context kwargs as "absent" so explicit-None
+        # doesn't accidentally write null into the event payload (and
+        # into the chained hash).
+        for _ctx_field in ("cap_id", "cap_chain", "subject_thumbprint", "role"):
+            if _ctx_field in kwargs and kwargs[_ctx_field] is None:
+                del kwargs[_ctx_field]
         # Attach cap context — kwargs may override per-event.
         if "cap_id" not in kwargs and self.cap_id is not None:
             evt["cap_id"] = self.cap_id
@@ -362,12 +373,18 @@ def events_by_cap(events: list[dict[str, Any]], cap_id: str) -> list[dict[str, A
 def events_by_signer(
     events: list[dict[str, Any]], subject_thumbprint: str
 ) -> list[dict[str, Any]]:
-    """Events emitted by a specific signing identity.
+    """Events emitted under a specific signing *key*.
 
     `subject_thumbprint` is the sha256 hex of the signer's public key
-    (matches ``MemoryShard.created_by``). Useful when one identity
-    operated under multiple caps (e.g., rotation) — captures everything
-    the *key* did regardless of which cap wielded it.
+    (matches ``MemoryShard.created_by``). Captures everything that
+    specific key signed regardless of which cap wielded it — useful
+    when one identity operated under multiple caps issued to the same
+    key.
+
+    Note: this filters per-thumbprint, not per-*principal*. If an
+    identity rotated keys (and so has multiple thumbprints over its
+    lifetime), the caller needs to union the results of one call per
+    historical thumbprint to see the whole principal's activity.
     """
     return [e for e in events if e.get("subject_thumbprint") == subject_thumbprint]
 
@@ -391,14 +408,24 @@ def events_under_chain(
     events regardless of role. Requires events to carry ``cap_chain``;
     falls back to checking ``cap_id`` when no chain is recorded (a
     leaf-only signal).
+
+    Note on the leaf: a worker's own ``cap_chain`` ends with its leaf
+    cap, so querying with the leaf's cap_id matches via the chain
+    branch (not the fallback). The fallback only fires for events that
+    were emitted without ``cap_chain`` at all.
+
+    Empty ``cap_chain`` (``[]``) is treated as "no chain recorded" and
+    falls through to the cap_id fallback — same as missing chain.
     """
     out: list[dict[str, Any]] = []
     for e in events:
         chain = e.get("cap_chain")
-        if chain is not None and ancestor_cap_id in chain:
-            out.append(e)
-        elif chain is None and e.get("cap_id") == ancestor_cap_id:
-            out.append(e)
+        if chain:  # non-empty list
+            if ancestor_cap_id in chain:
+                out.append(e)
+        else:  # None or []
+            if e.get("cap_id") == ancestor_cap_id:
+                out.append(e)
     return out
 
 

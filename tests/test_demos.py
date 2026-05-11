@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -33,7 +34,6 @@ def _load_demo(subdir: str):
     mod_name = f"demo_{subdir}"
     spec = importlib.util.spec_from_file_location(mod_name, run_path)
     mod = importlib.util.module_from_spec(spec)
-    import sys
     sys.modules[mod_name] = mod
     spec.loader.exec_module(mod)
     return mod
