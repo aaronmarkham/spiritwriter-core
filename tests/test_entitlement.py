@@ -11,8 +11,7 @@ from spiritwriter.fabric.entitlement import (
     serialize_token, deserialize_token,
     Caveat, CaveatType, KNOWN_CAVEAT_TYPES, UnknownCaveatError,
     validate_caveat, validate_caveats,
-    verify_chain as verify_cap_chain,
-    authorize_chain, issue_delegated,
+    verify_cap_chain, authorize_chain, issue_delegated,
 )
 from spiritwriter.fabric.shard import generate_signing_keypair, pubkey_thumbprint
 
@@ -141,6 +140,41 @@ class TestValidateCaveat:
         c = Caveat(CaveatType.EXPIRES_AT, "2026-06-01T00:00:00Z")
         assert validate_caveat(c, now_iso="2026-05-01T00:00:00Z") is True
         assert validate_caveat(c, now_iso="2026-07-01T00:00:00Z") is False
+
+    def test_expires_at_rejects_non_z_form(self):
+        """`+00:00` form lex-sorts before `Z` (ASCII: '+' < 'Z'), which
+        would silently mis-evaluate expiry. Must be rejected at validate
+        time so the lex-comparison invariant is enforced."""
+        c = Caveat(CaveatType.EXPIRES_AT, "2099-01-01T00:00:00+00:00")
+        with pytest.raises(ValueError, match="trailing 'Z'"):
+            validate_caveat(c)
+
+    def test_expires_at_rejects_offset_form(self):
+        c = Caveat(CaveatType.EXPIRES_AT, "2099-01-01T00:00:00+05:00")
+        with pytest.raises(ValueError, match="trailing 'Z'"):
+            validate_caveat(c)
+
+    def test_expires_at_rejects_non_iso(self):
+        c = Caveat(CaveatType.EXPIRES_AT, "not a timestamp")
+        with pytest.raises(ValueError, match="trailing 'Z'"):
+            validate_caveat(c)
+
+    def test_expires_at_rejects_non_string(self):
+        c = Caveat(CaveatType.EXPIRES_AT, 1740000000)
+        with pytest.raises(ValueError, match="must be an ISO 8601 string"):
+            validate_caveat(c)
+
+    def test_expires_at_rejects_invalid_iso_with_z(self):
+        """Z suffix alone isn't enough — the rest must parse as ISO 8601."""
+        c = Caveat(CaveatType.EXPIRES_AT, "tomorrow-ishZ")
+        with pytest.raises(ValueError, match="not a valid ISO 8601"):
+            validate_caveat(c)
+
+    def test_expires_at_rejects_non_z_now_iso(self):
+        """The provided `now_iso` must also be in canonical Z form."""
+        c = Caveat(CaveatType.EXPIRES_AT, "2099-01-01T00:00:00Z")
+        with pytest.raises(ValueError, match="now_iso"):
+            validate_caveat(c, now_iso="2026-05-10T12:00:00+00:00")
 
     def test_scope_limit_match(self):
         c = Caveat(CaveatType.SCOPE_LIMIT, "sw:article:run-abc:*")
@@ -453,6 +487,37 @@ class TestVerifyChain:
     def test_empty_chain_rejected(self):
         with pytest.raises(ValueError, match="Empty chain"):
             verify_cap_chain([], root_pubkeys=[])
+
+    def test_root_without_subject_pubkey_rejected(self):
+        """Every cap in the chain must have subject_pubkey set, including
+        a single-link [root]. A root without subject_pubkey can't issue
+        children or attribute produced shards — reject up front rather
+        than letting the chain pass into a useless state."""
+        sk, pk = generate_signing_keypair()
+        root = _root_token(sk, pk)
+        root.subject_pubkey = None
+        # Re-sign so the signature is fresh; we want to prove the
+        # pre-flight check fires, not catch a stale signature.
+        root.signature = None
+        root.sign(sk)
+        with pytest.raises(ValueError, match="position 0 has no subject_pubkey"):
+            verify_cap_chain([root], root_pubkeys=[pk])
+
+    def test_middle_cap_without_subject_pubkey_rejected(self):
+        """The pre-flight catches missing subject_pubkey on any cap."""
+        root_sk, root_pk = generate_signing_keypair()
+        _, child_pk = generate_signing_keypair()
+        root = _root_token(root_sk, root_pk)
+        child = issue_delegated(
+            root, root_sk,
+            subject_pubkey=child_pk,
+            granted_to="child",
+        )
+        child.subject_pubkey = None
+        child.signature = None
+        child.sign(root_sk)
+        with pytest.raises(ValueError, match="position 1 has no subject_pubkey"):
+            verify_cap_chain([root, child], root_pubkeys=[root_pk])
 
 
 class TestAuthorizeChain:

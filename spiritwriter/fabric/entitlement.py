@@ -6,7 +6,7 @@ decrypt specific shards and perform specific actions.
 Tokens may also carry typed caveats (``expires_at``, ``scope_limit``,
 ``max_delegation_depth``) and form **delegation chains** via
 ``parent_cap_id`` + Ed25519 signatures. A leaf token's authority is
-the intersection of every caveat in its chain. See ``verify_chain``
+the intersection of every caveat in its chain. See ``verify_cap_chain``
 and ``authorize_chain``.
 """
 
@@ -96,6 +96,30 @@ class Caveat:
         return cls(type=d["type"], value=d["value"])
 
 
+def _require_z_utc(value: object, *, label: str) -> str:
+    """Validate an ISO 8601 timestamp is in canonical Z-suffixed UTC form.
+
+    Lex comparison between e.g. "2099-01-01T00:00:00+00:00" and a
+    Z-suffixed "now" string is **wrong** ('+' < 'Z' in ASCII), which
+    would silently make a future-dated cap evaluate as expired. We
+    require the Z form everywhere to keep the lex-sort invariant safe.
+    """
+    if not isinstance(value, str):
+        raise ValueError(
+            f"{label} must be an ISO 8601 string, got {type(value).__name__}"
+        )
+    if not value.endswith("Z"):
+        raise ValueError(
+            f"{label} must use trailing 'Z' UTC form for safe lex comparison; "
+            f"got {value!r}"
+        )
+    try:
+        datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError(f"{label} is not a valid ISO 8601 timestamp: {value!r}") from exc
+    return value
+
+
 def validate_caveat(
     caveat: Caveat,
     *,
@@ -110,19 +134,25 @@ def validate_caveat(
         scope: scope being requested. ``None`` skips scope_limit checks.
         delegation_depth: number of links *below* this cap in the chain
             (the leaf has 0 below it). Used by max_delegation_depth.
-        now_iso: current time as ISO 8601. Defaults to wall clock.
+        now_iso: current time as ISO 8601 (must use trailing ``Z`` UTC form).
+            Defaults to wall clock, which is always in Z form.
 
     Returns:
         True if the caveat permits the operation, False otherwise.
 
     Raises:
         UnknownCaveatError: caveat type is not recognized.
+        ValueError: an EXPIRES_AT caveat (or now_iso) is not in canonical
+            Z-suffixed UTC form. Fail closed: a non-Z timestamp would
+            lex-compare incorrectly and silently mis-evaluate expiry.
     """
     if caveat.type not in KNOWN_CAVEAT_TYPES:
         raise UnknownCaveatError(f"Unknown caveat type: {caveat.type!r}")
 
     if caveat.type == CaveatType.EXPIRES_AT:
+        _require_z_utc(caveat.value, label="expires_at caveat value")
         now = now_iso or _now_iso()
+        _require_z_utc(now, label="now_iso")
         return now < caveat.value  # ISO 8601 with Z sorts lexically
 
     if caveat.type == CaveatType.SCOPE_LIMIT:
@@ -258,7 +288,7 @@ class EntitlementToken:
     def verify(self) -> bool:
         """Verify this token's own signature against ``issuer_pubkey``.
 
-        Does NOT walk the chain — use :func:`verify_chain` for that.
+        Does NOT walk the chain — use :func:`verify_cap_chain` for that.
         Returns True on success.
 
         Raises:
@@ -389,14 +419,15 @@ def _max_delegation_depth(caveats: list[Caveat]) -> int | None:
     return None
 
 
-def verify_chain(
+def verify_cap_chain(
     chain: list[EntitlementToken],
     *,
     root_pubkeys: list[bytes],
 ) -> bool:
-    """Verify a delegation chain from root (chain[0]) to leaf (chain[-1]).
+    """Verify a capability delegation chain from root (chain[0]) to leaf (chain[-1]).
 
     Confirms:
+      - Every cap has both ``subject_pubkey`` and ``issuer_pubkey`` set.
       - Every link's signature verifies against its ``issuer_pubkey``.
       - Each link's ``issuer_pubkey`` equals the parent's ``subject_pubkey``.
       - Each link's ``parent_cap_id`` equals the parent's ``cap_id``.
@@ -410,6 +441,14 @@ def verify_chain(
     """
     if not chain:
         raise ValueError("Empty chain")
+
+    # Pre-flight: every cap must carry a subject pubkey. Even on a
+    # single-link [root] chain, a root without subject_pubkey is in a
+    # confusing state — it can't issue children and can't have produced
+    # shards attributed to it. Reject up front.
+    for i, cap in enumerate(chain):
+        if cap.subject_pubkey is None:
+            raise ValueError(f"Cap at position {i} has no subject_pubkey")
 
     root = chain[0]
     if root.parent_cap_id is not None:
@@ -426,10 +465,6 @@ def verify_chain(
     for i in range(1, len(chain)):
         parent = chain[i - 1]
         link = chain[i]
-        if parent.subject_pubkey is None:
-            raise ValueError(
-                f"Parent cap at position {i - 1} has no subject_pubkey"
-            )
         if link.issuer_pubkey != parent.subject_pubkey:
             raise ValueError(
                 f"Chain broken at position {i}: issuer "
@@ -457,7 +492,7 @@ def authorize_chain(
     """Check that the *intersection* of every cap's caveats permits the operation.
 
     Each cap is checked with its own ``delegation_depth`` (the count of
-    descendants below it in the chain). Use after :func:`verify_chain`.
+    descendants below it in the chain). Use after :func:`verify_cap_chain`.
 
     Args:
         chain: non-empty list of caps from root (index 0) to leaf.
@@ -516,7 +551,7 @@ def issue_delegated(
 
     .. warning::
 
-        Callers SHOULD run :func:`verify_chain` on the parent's full
+        Callers SHOULD run :func:`verify_cap_chain` on the parent's full
         chain before issuing a child. This function trusts ``parent``
         as supplied — a manually constructed or tampered parent token
         will still produce a syntactically valid child, but the child

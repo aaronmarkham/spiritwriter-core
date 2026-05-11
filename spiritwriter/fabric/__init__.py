@@ -38,8 +38,7 @@ from spiritwriter.fabric.entitlement import (
     is_expired, get_shard_key, serialize_token, deserialize_token,
     Caveat, CaveatType, KNOWN_CAVEAT_TYPES, UnknownCaveatError,
     validate_caveat, validate_caveats,
-    verify_chain as verify_cap_chain,
-    authorize_chain, issue_delegated,
+    verify_cap_chain, authorize_chain, issue_delegated,
 )
 from spiritwriter.fabric.jobs import (
     JobSpec, PackagedJob, package_job,

@@ -186,6 +186,7 @@ restored = deserialize_token(serialized)   # EntitlementToken — same shape, re
 Two things to know:
 
 - **`shard_keys` is base64url-encoded after serialization.** `create_entitlement` does this conversion for you on the way in; `deserialize_token` keeps the strings as-is. Use `get_shard_key(token, shard_id)` to get the raw bytes back.
+- **`shard_keys` is deliberately outside the cap signing payload.** AES keys may be added or rotated after a token is issued (a granter can hand the same cap to a worker, then later attach keys for newly-encrypted shards). If signing covered `shard_keys`, every key rotation would invalidate the cap. The signing payload covers authority (who, what scope, what caveats); key material is bookkeeping that travels alongside.
 - **Re-validate after deserializing.** A serialized token is just text — anyone who held it could have edited it. The store's `hydrate_with_entitlement` re-validates on every call, but if your code uses fields directly (like reading `token.budget_usd` to size a `BudgetTracker`), assume the value could be tampered with and constrain elsewhere.
 
 For wire-format integrity beyond what `verify_chain` provides, sign the token with Ed25519 (see [encryption.md](encryption.md#ed25519-signing-for-result-integrity)) and verify the signature before trusting any field.

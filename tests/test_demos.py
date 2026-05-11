@@ -435,8 +435,7 @@ class TestFlavorDocExamples:
         """End-to-end: chain verifies, authorizes the shard's scope at issue
         time, and the leaf signature validates against the worker's pubkey."""
         from spiritwriter.fabric.entitlement import (
-            verify_chain as verify_cap_chain,
-            authorize_chain,
+            verify_cap_chain, authorize_chain,
         )
         chain = computed["_chain"]
         verify_cap_chain(chain, root_pubkeys=[computed["_root_pk_bytes"]])

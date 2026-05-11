@@ -195,8 +195,7 @@ def main() -> None:
     # === Verification round-trip ========================================
     _print_section("VERIFICATION ROUND-TRIP")
     from spiritwriter.fabric.entitlement import (
-        verify_chain as verify_cap_chain,
-        authorize_chain,
+        verify_cap_chain, authorize_chain,
     )
     chain = [root, orch, leaf]
     verify_cap_chain(chain, root_pubkeys=[root_pk])
