@@ -46,6 +46,7 @@ from spiritwriter.fabric.emitter import (
     TraceEmitter, verify_chain,
     events_by_cap, events_by_signer, events_by_role, events_under_chain,
 )
+from spiritwriter.fabric.visualize import render_trace
 from spiritwriter.fabric.entitlement import (
     EntitlementToken, Capability, Caveat, CaveatType,
     create_entitlement, issue_delegated,
@@ -277,6 +278,21 @@ def main(output_dir: Path | None = None) -> int:
     assert len(critic_evts) == 4
     assert len(under_orch) == 12    # 3 workers × 4 events each
     assert len(under_root) == 12
+
+    # 5. Render mermaid diagrams from the merged event log ------------
+    # delegation_tree.mmd: the cap tree (root → orch → workers), derived
+    # from the cap_chain fields. Shows authority structure.
+    # multi-agent.mmd: per-worker event timelines in subgraphs. Shows
+    # what each worker actually did.
+    (output_dir / "delegation_tree.mmd").write_text(
+        render_trace(merged, diagram_type="delegation"),
+        encoding="utf-8",
+    )
+    (output_dir / "multi-agent.mmd").write_text(
+        render_trace(merged, diagram_type="multi-agent"),
+        encoding="utf-8",
+    )
+    print(f"\nDiagrams: delegation_tree.mmd, multi-agent.mmd")
 
     print(f"\n[ok] demo 5 complete — {len(merged)} traced events across 3 workers")
     return 0

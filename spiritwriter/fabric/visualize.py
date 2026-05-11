@@ -302,6 +302,104 @@ def render_multi_agent(events: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
+# === Diagram 4: Delegation Tree ===
+
+def render_delegation_tree(events: list[dict[str, Any]]) -> str:
+    """Render the capability delegation tree inferred from event cap_chains.
+
+    Each event's ``cap_chain`` is a path through the delegation tree
+    (root at index 0, leaf at the end). Aggregating across events
+    reconstructs the tree: a cap's parent is whichever cap_id
+    immediately precedes it in any chain that contains it.
+
+    Each node shows its cap_id prefix; leaf nodes additionally show
+    the role (if events tagged one) and the count of events emitted
+    under that leaf. The tree is purely structural — it shows the
+    authority relationships, not event sequence. Use
+    :func:`render_multi_agent` for the per-worker event timeline.
+
+    Returns a valid (if minimal) graph when no cap-tagged events are
+    present, so callers don't need to special-case the legacy-trace
+    case.
+    """
+    # Reconstruct tree structure: cap_id → parent cap_id (None = root)
+    parent_of: dict[str, str | None] = {}
+    # Per-leaf annotation: role and event count (only set for caps that
+    # actually emitted events with cap_id matching them).
+    leaf_role: dict[str, str] = {}
+    leaf_event_count: dict[str, int] = {}
+
+    for evt in events:
+        chain = evt.get("cap_chain")
+        if chain:
+            for i, cap_id in enumerate(chain):
+                if cap_id not in parent_of:
+                    parent_of[cap_id] = chain[i - 1] if i > 0 else None
+            leaf_id = chain[-1]
+            # An event emitted under a leaf cap will have cap_id == that leaf.
+            # (Some events may carry chain without cap_id — those don't tag
+            # the leaf, just the chain.)
+            if evt.get("cap_id") == leaf_id:
+                role = evt.get("role")
+                if role and leaf_id not in leaf_role:
+                    leaf_role[leaf_id] = role
+                leaf_event_count[leaf_id] = leaf_event_count.get(leaf_id, 0) + 1
+        else:
+            # No chain — degraded emitter setup. Treat the leaf-only cap_id
+            # as a root in the rendered tree; better than silently dropping.
+            cap_id = evt.get("cap_id")
+            if cap_id:
+                parent_of.setdefault(cap_id, None)
+                role = evt.get("role")
+                if role and cap_id not in leaf_role:
+                    leaf_role[cap_id] = role
+                leaf_event_count[cap_id] = leaf_event_count.get(cap_id, 0) + 1
+
+    if not parent_of:
+        return "graph TD\n    %% no cap-tagged events in input"
+
+    children_of: dict[str, set[str]] = {}
+    for cap_id, parent in parent_of.items():
+        if parent is not None:
+            children_of.setdefault(parent, set()).add(cap_id)
+
+    lines = [
+        "graph TD",
+        "    classDef root fill:#5a189a,stroke:#3c096c,color:#fff",
+        "    classDef branch fill:#7b2cbf,stroke:#5a189a,color:#fff",
+        "    classDef leaf fill:#023e8a,stroke:#03045e,color:#fff",
+        "",
+    ]
+
+    def _node_id(cap_id: str) -> str:
+        return f"C_{cap_id[:8]}"
+
+    # Sort for deterministic output — important for diff-based tests.
+    for cap_id in sorted(parent_of):
+        if parent_of[cap_id] is None:
+            css = "root"
+        elif cap_id in children_of:
+            css = "branch"
+        else:
+            css = "leaf"
+
+        parts = [f"{cap_id[:12]}…"]
+        if cap_id in leaf_role:
+            parts.append(f"role: {leaf_role[cap_id]}")
+        if cap_id in leaf_event_count:
+            n = leaf_event_count[cap_id]
+            parts.append(f"{n} event{'s' if n != 1 else ''}")
+        label = "<br/>".join(parts)
+
+        lines.append(f'    {_node_id(cap_id)}["{label}"]:::{css}')
+
+    for cap_id, parent in sorted(parent_of.items()):
+        if parent is not None:
+            lines.append(f"    {_node_id(parent)} --> {_node_id(cap_id)}")
+
+    return "\n".join(lines)
+
+
 # === Convenience wrapper ===
 
 def render_trace(
@@ -310,12 +408,13 @@ def render_trace(
 ) -> str:
     """Convenience wrapper — render events with a named diagram type.
 
-    diagram_type: "workflow", "genealogy", or "multi-agent"
+    diagram_type: "workflow", "genealogy", "multi-agent", or "delegation".
     """
     renderers = {
         "workflow": render_simple_workflow,
         "genealogy": render_shard_genealogy,
         "multi-agent": render_multi_agent,
+        "delegation": render_delegation_tree,
     }
     renderer = renderers.get(diagram_type)
     if renderer is None:
@@ -342,6 +441,7 @@ def generate_all(trace_path: str | Path, output_dir: str | Path) -> dict[str, st
         "workflow": render_simple_workflow(events),
         "genealogy": render_shard_genealogy(events),
         "multi-agent": render_multi_agent(events),
+        "delegation": render_delegation_tree(events),
     }
 
     for name, content in diagrams.items():
