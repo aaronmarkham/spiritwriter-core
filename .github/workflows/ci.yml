@@ -1,0 +1,91 @@
+###############################################################################
+# Spiritwriter Core CI — runs on every pull request to main
+#
+# Two jobs:
+#  - test:   pytest against this PR's code on Python 3.12. Blocking.
+#  - canary: build zeitghost against this PR's sw-core. Non-blocking (informational).
+#            Designed to surface downstream breakage early without holding up PRs
+#            when zeitghost is red for unrelated reasons.
+#
+# Required secrets:
+#  - ZG_CANARY_PAT — fine-grained PAT with `Contents: read` on
+#    aaronmarkham/zeitghost. Used to check out the private downstream repo.
+#    If the secret is missing or invalid, the canary job fails on checkout;
+#    the test job is unaffected.
+#
+# Notes:
+#  - Ruff intentionally NOT included yet — the codebase currently has ~47
+#    pre-existing lint warnings (mostly F401 unused imports). Add ruff in a
+#    follow-up PR alongside the cleanup.
+#  - Codecov upload deferred. Easy to add once a Codecov project + token exist.
+#  - The single-version target (3.12) matches the spiritwriter ecosystem's
+#    deployment env. `requires-python = ">=3.9"` in pyproject is the install-
+#    surface guarantee, not a CI matrix promise.
+###############################################################################
+
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install with optional extras
+        run: pip install -e ".[dev,sealed,network]"
+
+      - name: Run tests
+        run: python -m pytest tests/ -v --tb=short
+
+  canary:
+    name: Downstream canary (zeitghost)
+    runs-on: ubuntu-latest
+    continue-on-error: true  # informational — won't block PR merge
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: spiritwriter-core
+
+      - uses: actions/checkout@v4
+        with:
+          repository: aaronmarkham/zeitghost
+          ref: main
+          token: ${{ secrets.ZG_CANARY_PAT }}
+          path: zeitghost
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install zeitghost against this PR's spiritwriter-core
+        working-directory: zeitghost
+        run: |
+          pip install ../spiritwriter-core
+          pip install -e ".[dev]"
+
+      - name: Run zeitghost tests
+        working-directory: zeitghost
+        run: python -m pytest tests/ -v --tb=short
+
+      # Mirror what a fresh production container looks like — no cwd-relative
+      # state. Catches module-import-time file I/O (logs/, output/, .env)
+      # that would silently 500 in prod. Mirrors zeitghost's own CI step.
+      - name: Clean-cwd import smoke (production container parity)
+        run: |
+          mkdir -p /tmp/canary-import-test
+          cd /tmp/canary-import-test
+          python -c "import zeitghost; from zeitghost.cli import main; print('canary ok')"
