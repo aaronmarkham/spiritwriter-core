@@ -12,6 +12,8 @@ from spiritwriter.fabric.shard import (
     ShardRef,
     AtomKind,
     DecayClass,
+    generate_signing_keypair,
+    pubkey_thumbprint,
 )
 from spiritwriter.fabric.store import ShardStore
 from spiritwriter.fabric.emitter import TraceEmitter
@@ -854,6 +856,253 @@ class TestRefNameEncoding:
         assert store.get_ref("trailing-dot.") == "a"
         assert store.get_ref("trailing-space ") == "b"
         assert sorted(store.list_refs()) == ["trailing-dot.", "trailing-space "]
+
+
+class TestShardSigning:
+    """Ed25519 signing for shard authorship attribution.
+
+    These tests cover the leaf-attestation half of the cap-shard model:
+    every produced shard can carry a signature from its producer's key,
+    plus a created_by thumbprint and a cap_id linking to authority.
+    Signing is opt-in — unsigned shards continue to work unchanged.
+    """
+
+    def _make_shard(self, **kwargs):
+        defaults = dict(
+            atoms=[ShardAtom(text="signed fact", kind=AtomKind.FACT)],
+            scope="project:test",
+            origin="agent:test",
+        )
+        defaults.update(kwargs)
+        return MemoryShard(**defaults)
+
+    # === Keypair / thumbprint helpers ===
+
+    def test_generate_signing_keypair_lengths(self):
+        sk, pk = generate_signing_keypair()
+        assert len(sk) == 32
+        assert len(pk) == 32
+
+    def test_generate_signing_keypair_unique(self):
+        sk1, pk1 = generate_signing_keypair()
+        sk2, pk2 = generate_signing_keypair()
+        assert sk1 != sk2
+        assert pk1 != pk2
+
+    def test_pubkey_thumbprint_deterministic(self):
+        _, pk = generate_signing_keypair()
+        assert pubkey_thumbprint(pk) == pubkey_thumbprint(pk)
+
+    def test_pubkey_thumbprint_format(self):
+        _, pk = generate_signing_keypair()
+        tp = pubkey_thumbprint(pk)
+        assert len(tp) == 64
+        int(tp, 16)  # valid hex
+
+    def test_pubkey_thumbprint_differs_for_different_keys(self):
+        _, pk1 = generate_signing_keypair()
+        _, pk2 = generate_signing_keypair()
+        assert pubkey_thumbprint(pk1) != pubkey_thumbprint(pk2)
+
+    # === Signing ===
+
+    def test_sign_sets_signature_and_created_by(self):
+        sk, pk = generate_signing_keypair()
+        shard = self._make_shard()
+        assert shard.signature is None
+        assert shard.created_by is None
+        shard.sign(sk)
+        assert shard.signature is not None
+        assert len(shard.signature) == 128  # 64-byte sig as hex
+        assert shard.created_by == pubkey_thumbprint(pk)
+
+    def test_sign_is_deterministic(self):
+        """Ed25519 is deterministic — same key + same payload = same signature.
+
+        Pin created_at so the two shards have byte-identical signing payloads;
+        the default factory uses wall-clock time and drifts between calls.
+        """
+        sk, _ = generate_signing_keypair()
+        ts = "2026-05-10T12:00:00Z"
+        s1 = self._make_shard(created_at=ts)
+        s2 = self._make_shard(created_at=ts)
+        s1.sign(sk)
+        s2.sign(sk)
+        assert s1.signature == s2.signature
+
+    def test_sign_different_keys_yield_different_signatures(self):
+        sk1, _ = generate_signing_keypair()
+        sk2, _ = generate_signing_keypair()
+        s1 = self._make_shard()
+        s2 = self._make_shard()
+        s1.sign(sk1)
+        s2.sign(sk2)
+        assert s1.signature != s2.signature
+
+    def test_sign_with_explicit_pubkey(self):
+        sk, pk = generate_signing_keypair()
+        shard = self._make_shard()
+        shard.sign(sk, pubkey_bytes=pk)
+        assert shard.created_by == pubkey_thumbprint(pk)
+
+    def test_sign_rejects_mismatched_pubkey(self):
+        sk, _ = generate_signing_keypair()
+        _, wrong_pk = generate_signing_keypair()
+        shard = self._make_shard()
+        with pytest.raises(ValueError, match="does not match"):
+            shard.sign(sk, pubkey_bytes=wrong_pk)
+
+    def test_sign_rejects_mismatched_created_by(self):
+        """If created_by is preset, signing key must match it."""
+        sk1, _ = generate_signing_keypair()
+        _, pk2 = generate_signing_keypair()
+        shard = self._make_shard(created_by=pubkey_thumbprint(pk2))
+        with pytest.raises(ValueError, match="created_by mismatch"):
+            shard.sign(sk1)
+
+    def test_sign_accepts_matching_preset_created_by(self):
+        sk, pk = generate_signing_keypair()
+        shard = self._make_shard(created_by=pubkey_thumbprint(pk))
+        shard.sign(sk)  # no error
+        assert shard.signature is not None
+
+    # === Verification ===
+
+    def test_verify_valid_signature(self):
+        sk, pk = generate_signing_keypair()
+        shard = self._make_shard()
+        shard.sign(sk)
+        assert shard.verify(pk) is True
+
+    def test_verify_unsigned_raises(self):
+        _, pk = generate_signing_keypair()
+        shard = self._make_shard()
+        with pytest.raises(ValueError, match="no signature"):
+            shard.verify(pk)
+
+    def test_verify_wrong_pubkey_raises(self):
+        sk, _ = generate_signing_keypair()
+        _, wrong_pk = generate_signing_keypair()
+        shard = self._make_shard()
+        shard.sign(sk)
+        with pytest.raises(ValueError, match="does not match"):
+            shard.verify(wrong_pk)
+
+    def test_verify_tampered_signature_fails(self):
+        from cryptography.exceptions import InvalidSignature
+        sk, pk = generate_signing_keypair()
+        shard = self._make_shard()
+        shard.sign(sk)
+        # Flip a byte in the signature
+        sig_bytes = bytearray(bytes.fromhex(shard.signature))
+        sig_bytes[0] ^= 0xFF
+        shard.signature = sig_bytes.hex()
+        with pytest.raises(InvalidSignature):
+            shard.verify(pk)
+
+    def test_verify_tampered_envelope_field_fails(self):
+        """Mutating a signed envelope field after signing breaks verification."""
+        from cryptography.exceptions import InvalidSignature
+        sk, pk = generate_signing_keypair()
+        shard = self._make_shard(created_at="2026-01-01T00:00:00Z")
+        shard.sign(sk)
+        shard.created_at = "2099-12-31T23:59:59Z"
+        with pytest.raises(InvalidSignature):
+            shard.verify(pk)
+
+    def test_verify_tampered_cap_id_fails(self):
+        from cryptography.exceptions import InvalidSignature
+        sk, pk = generate_signing_keypair()
+        shard = self._make_shard(cap_id="cap:original")
+        shard.sign(sk)
+        shard.cap_id = "cap:swapped"
+        with pytest.raises(InvalidSignature):
+            shard.verify(pk)
+
+    # === Operational metadata is excluded from signing ===
+
+    def test_last_checked_change_does_not_break_signature(self):
+        """last_checked is mutable poll metadata — must not invalidate sig."""
+        sk, pk = generate_signing_keypair()
+        shard = self._make_shard()
+        shard.sign(sk)
+        shard.last_checked = "2026-05-10T12:00:00Z"
+        shard.check_count = 5
+        assert shard.verify(pk) is True
+
+    # === Content address vs. signature ===
+
+    def test_signature_does_not_affect_shard_id(self):
+        """shard_id is over {atoms, scope, origin} only — signing must not change it."""
+        sk, _ = generate_signing_keypair()
+        unsigned = self._make_shard()
+        signed = self._make_shard()
+        signed.sign(sk)
+        assert signed.shard_id == unsigned.shard_id
+
+    def test_cap_id_does_not_affect_shard_id(self):
+        """cap_id is envelope metadata, not content. Same content = same id."""
+        s1 = self._make_shard(cap_id="cap:abc")
+        s2 = self._make_shard(cap_id="cap:def")
+        assert s1.shard_id == s2.shard_id
+
+    # === Serialization ===
+
+    def test_signed_shard_roundtrip(self):
+        sk, pk = generate_signing_keypair()
+        shard = self._make_shard(cap_id="cap:run-x:builder-2")
+        shard.sign(sk)
+        raw = shard.to_json()
+        restored = MemoryShard.from_json(raw)
+        assert restored.signature == shard.signature
+        assert restored.created_by == shard.created_by
+        assert restored.cap_id == "cap:run-x:builder-2"
+        assert restored.verify(pk) is True
+
+    def test_unsigned_shard_omits_new_fields(self):
+        """Sparse serialization — don't include None fields."""
+        shard = self._make_shard()
+        d = json.loads(shard.to_json())
+        assert "signature" not in d
+        assert "created_by" not in d
+        assert "cap_id" not in d
+
+    def test_old_shard_loads_without_signing_fields(self):
+        """Pre-signing shards still load cleanly."""
+        d = {
+            "atoms": [{"text": "old fact", "kind": "fact"}],
+            "scope": "project:legacy",
+            "origin": "agent:old",
+            "decay_class": "stable",
+            "created_at": "2024-01-01T00:00:00Z",
+        }
+        shard = MemoryShard.from_dict(d)
+        assert shard.signature is None
+        assert shard.created_by is None
+        assert shard.cap_id is None
+
+    def test_cap_id_alone_roundtrips_without_signature(self):
+        """cap_id can be set without signing (e.g., during construction)."""
+        shard = self._make_shard(cap_id="cap:abc")
+        raw = shard.to_json()
+        restored = MemoryShard.from_json(raw)
+        assert restored.cap_id == "cap:abc"
+        assert restored.signature is None
+
+    def test_verify_after_json_roundtrip_with_extra_fields(self):
+        """Signed shards with optional fields (cap_id, parent_shard_id, meta,
+        tags) must verify after round-tripping through JSON."""
+        sk, pk = generate_signing_keypair()
+        shard = self._make_shard(
+            cap_id="cap:abc",
+            parent_shard_id="parent:xyz",
+            tags=["alpha", "beta"],
+            meta={"k": "v"},
+            trace_ref="chain:abc#1",
+        )
+        shard.sign(sk)
+        restored = MemoryShard.from_json(shard.to_json())
+        assert restored.verify(pk) is True
 
 
 class TestMoveScope:

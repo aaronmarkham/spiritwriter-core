@@ -154,6 +154,7 @@ The registry holds *which canonical entity each sighting maps to*; the shards ho
 | [Shard Store](docs/shard-store.md) | storage layout, named refs, scope queries, maintenance |
 | [Encryption](docs/encryption.md) | AES-GCM, NaCl sealed boxes, threat model |
 | [Entitlements](docs/entitlements.md) | bearer tokens, capabilities, budget, scope enforcement |
+| [Substrate Flavor](docs/substrate-flavor.md) | wire format + verification rules — bootstrap contract for library-free implementers in any language |
 | [Jobs](docs/jobs.md) | packaging delegated sub-agent work; issuer / runner sides |
 | [Shard Postures](docs/shard-postures.md) | choosing the trust model — encryption, signing, scope, decay, distribution as one dial |
 | [Entity Resolution](docs/entity-resolution.md) | Phalanx (CMC-Lite): ESS, tiered matching, batch processing |
@@ -213,8 +214,7 @@ spiritwriter/
 ├── llm/            # LLM provider abstraction (Anthropic)
 ├── models/         # DocumentAtom, KnowledgeProject
 ├── secrets/        # OS keychain API key management
-├── stopwords.py    # Centralized stopword list
-└── trace/          # Deprecated shim re-exporting fabric/ (removed in 0.6.0)
+└── stopwords.py    # Centralized stopword list
 ```
 
 ## Integrations

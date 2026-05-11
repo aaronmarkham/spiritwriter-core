@@ -5,11 +5,28 @@ the "fabric" through which all agent memory flows.
 
 Content-addressed memory shards with DHT-ready distribution,
 provenance tracking, and scoped entitlements.
+
+Note on chain-verification naming: two different "chains" live in this
+package. ``verify_trace_chain`` (alias of ``verify_chain`` from the
+emitter module) walks a hash-linked trace event log. ``verify_cap_chain``
+walks a signed capability delegation chain. They serve different
+purposes; pick the name that matches your chain type. The plain
+``verify_chain`` is preserved for back-compat with existing callers.
 """
 
-from spiritwriter.fabric.shard import MemoryShard, ShardAtom, ShardRef
+from spiritwriter.fabric.shard import (
+    MemoryShard,
+    ShardAtom,
+    ShardRef,
+    generate_signing_keypair,
+    pubkey_thumbprint,
+)
 from spiritwriter.fabric.store import ShardStore
-from spiritwriter.fabric.emitter import TraceEmitter, verify_chain
+from spiritwriter.fabric.emitter import (
+    TraceEmitter,
+    verify_chain,
+    verify_chain as verify_trace_chain,
+)
 from spiritwriter.fabric.crypto import (
     EncryptedShard, DecryptionError,
     generate_job_key, encrypt_shard, decrypt_shard,
@@ -19,6 +36,9 @@ from spiritwriter.fabric.entitlement import (
     EntitlementToken, Capability,
     create_entitlement, validate_capability, validate_scope,
     is_expired, get_shard_key, serialize_token, deserialize_token,
+    Caveat, CaveatType, KNOWN_CAVEAT_TYPES, UnknownCaveatError,
+    validate_caveat, validate_caveats,
+    verify_cap_chain, authorize_chain, issue_delegated,
 )
 from spiritwriter.fabric.jobs import (
     JobSpec, PackagedJob, package_job,
@@ -50,6 +70,8 @@ __all__ = [
     "MemoryShard",
     "ShardAtom",
     "ShardRef",
+    "generate_signing_keypair",
+    "pubkey_thumbprint",
     "ShardStore",
     "TraceEmitter",
     "EncryptedShard",
@@ -68,6 +90,15 @@ __all__ = [
     "get_shard_key",
     "serialize_token",
     "deserialize_token",
+    "Caveat",
+    "CaveatType",
+    "KNOWN_CAVEAT_TYPES",
+    "UnknownCaveatError",
+    "validate_caveat",
+    "validate_caveats",
+    "verify_cap_chain",
+    "authorize_chain",
+    "issue_delegated",
     "JobSpec",
     "PackagedJob",
     "package_job",
@@ -95,5 +126,6 @@ __all__ = [
     "age_to_bucket",
     "fuzzy_score",
     "verify_chain",
+    "verify_trace_chain",
     "render_trace",
 ]
