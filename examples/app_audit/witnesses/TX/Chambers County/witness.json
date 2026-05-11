@@ -1,7 +1,7 @@
 {
   "witness_version": "1.0",
-  "witness_sha256": "79bbd1433a9279914430baba0be54ba9fbc82565b3518e57fbe7bb2edbe248bc",
-  "generated_at": "2026-03-31T05:32:12Z",
+  "witness_sha256": "32f57d2f2aaddc943b9facef4ca31c6cfba34556444c808c3bc3b0302603ac7d",
+  "generated_at": "2026-05-11T14:17:40Z",
   "input": {
     "package_name": "com.ocv.a619",
     "apk_sha256": "a7ce3cc0d2987e8105c099ed4c8c6366592d1113c6093f997fea812e212237aa",
@@ -492,8 +492,8 @@
     }
   ],
   "report": {
-    "path": "..\\docs\\audits\\ocv\\TX\\Chambers County\\report.json",
-    "sha256": "9a80ef3110b7f34f38a01b2efef339848e29b32cd722fd9d75de6846da18c424",
+    "path": "report.json",
+    "sha256": "b3a73f39f5c24df638f54c9859385bd715a2aef9a9b7b0bdd53bd63f31408d59",
     "finding_count": 17,
     "permission_count": 18,
     "hardcoded_secret_count": 13,
@@ -501,8 +501,8 @@
     "narrative": "com.ocv.a619 is the official Chambers County Sheriff's Office (Texas) mobile app, built on the OCV (Online Church Vision / TheGovApp) white-label platform. Despite being marketed as a community safety and communication tool, the app embeds a substantial surveillance and analytics stack that is disproportionate to its stated purpose.\n\nThe app contains 17 distinct tracker/analytics/surveillance components spanning three independent analytics pipelines: (1) Firebase Analytics + Google Measurement SDK, which collects app usage events, screen views, and user engagement data and transmits them to Google; (2) Amazon Pinpoint via the AWS Amplify SDK, which provides a second independent analytics pipeline collecting custom events, session data, and push notification tracking, all routed through AWS us-east-1; and (3) BugSnag, which collects crash reports, ANR events, performance traces, and user navigation breadcrumbs.\n\nThe Google Advertising ID (GAID) is actively collected via the play-services-ads-identifier SDK (v18.0.0). The AdMob SDK is present with database schema references (admob_app_id column) and the app communicates with Google's ad syndication servers (pagead2.googlesyndication.com). This means the precise GPS location collected via ACCESS_FINE_LOCATION can be correlated with a persistent cross-app advertising identifier, enabling location-based behavioral profiling of users -- a serious concern for an app distributed by a law enforcement agency.\n\nTwo features are particularly concerning from a surveillance perspective. First, the AssetTracker system maintains a local SQLite database of GPS-tagged items or persons with full CRUD operations, location history, and sharing capabilities. Second, the TagAlong feature enables real-time GPS location sharing between users via OCV's cloud servers (api.myocv.com), recording trip histories, dropped pins, and session timestamps. Both features transmit location data to OCV-controlled infrastructure.\n\nThe app also integrates Appriss VINE (a victim notification and inmate search system) and OffenderWatch (a sex offender registry), connecting users to criminal justice databases. The VINE integration includes search, registration, and charge lookup APIs routed through OCV's proxy (appriss.api.myocv.com), meaning OCV can log and analyze all inmate searches conducted through the app.\n\nThe Facebook SDK is bundled via AWS auth (aws-android-sdk-auth-facebook:2.7.6), enabling Facebook login and potentially sharing app events with Meta's advertising infrastructure.\n\nThe permission set, while smaller than some other OCV apps (notably lacking SMS, microphone, and calendar permissions), still includes ACCESS_FINE_LOCATION, READ_PHONE_STATE, CALL_PHONE, READ_CONTACTS, and CAMERA. The READ_PHONE_STATE permission exposes hardware identifiers (IMEI/IMSI) that can uniquely fingerprint a device. The DUMP permission is unusual and potentially exposes system diagnostic data.\n\nMultiple hardcoded secrets are embedded in the APK, including two Google API keys, a Firebase App ID, AWS Cognito pool credentials, an OCV mobile client key, and a Firebase Realtime Database URL. The Cognito Identity Pool (us-east-1:2793e471-e8b3-4dba-8270-d1a4192c0d17) is shared across OCV apps, meaning a vulnerability in any OCV app could compromise the entire platform's identity infrastructure.\n\nFor residents of Chambers County who install this app expecting a simple community safety tool, the reality is significantly different. Their precise location, device identifiers, advertising profile, contacts, and app usage patterns are collected and distributed across at least three cloud providers (Google, Amazon, BugSnag) and OCV's own infrastructure. The inmate search queries they make are proxied through OCV servers and could be logged. The TagAlong and AssetTracker features create detailed location dossiers. No data broker SDKs (Kochava, X-Mode/Outlogic) were detected, but the combination of GAID collection, precise location tracking, and multiple analytics pipelines creates a functionally equivalent surveillance capability under the banner of a sheriff's office community app."
   },
   "trace_chain": {
-    "trace_path": "..\\docs\\audits\\ocv\\TX\\Chambers County\\trace.jsonl",
-    "trace_sha256": "444220d194c327a7307cb306035afc236c2a9d8e42abd74246cbd6f241ba0b18",
+    "trace_path": "trace.jsonl",
+    "trace_sha256": "4a0950bc721247a7612c5a97910ea2c9fac873b6ce5ce8b8813041355c66b4ef",
     "event_count": 21,
     "first_event_hash": "43945ad3637c3fada648f5bf63a5eae8f1d7267b12b0287a041f2de90cc14139",
     "last_event_hash": "168159f93a8696c5a57a7db6ab084c6adb1b3a1f02d9cc672cfeab7473bb4c30",

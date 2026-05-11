@@ -1,7 +1,7 @@
 {
   "witness_version": "1.0",
-  "witness_sha256": "469318cb157425d92f895641d7e2548beb75b7ef22d7b5a0d8fbd5be1fab1b98",
-  "generated_at": "2026-03-31T05:32:17Z",
+  "witness_sha256": "d0a07f7d4913a8dddf1cb8d9562d7ba87d35882a1c5332aa398aeeabe85488be",
+  "generated_at": "2026-05-11T14:17:40Z",
   "input": {
     "package_name": "com.ocv.a825",
     "apk_sha256": "f6a91a956bf598581168752550f14afd11da4683dd89007433ae2242fc57404a",
@@ -519,8 +519,8 @@
     }
   ],
   "report": {
-    "path": "..\\docs\\audits\\ocv\\GA\\Liberty County\\report.json",
-    "sha256": "a341ad81035a0d8312973185b7c5dabe959fe3a759a65f567b3f5a238e2a01b0",
+    "path": "report.json",
+    "sha256": "63b8cff353e5aacf74dd8375fd697d363704ac9df38f1bd00b0c6bbbc2d193cf",
     "finding_count": 20,
     "permission_count": 20,
     "hardcoded_secret_count": 7,
@@ -528,8 +528,8 @@
     "narrative": "com.ocv.a825 is the Liberty County, Georgia Sheriff's Office community app, built on the OCV (Our Community Voice) platform and marketed under the 'theSheriffApp' brand. At 64.9 MB and 6 DEX files, it is a large app with an extensive SDK footprint that goes well beyond what a county sheriff's community information app would reasonably need.\n\nThe app runs two completely independent analytics pipelines in parallel: Google Firebase Analytics (21.1.0) and Amazon Pinpoint (via AWS Amplify), each collecting usage events, sessions, and user engagement data. On top of these, it collects Google Advertising IDs (GAID) via the AdMob ads-identifier SDK and sends conversion tracking data to Google ad servers -- meaning a sheriff's office app is feeding behavioral data into Google's advertising network.\n\nThe most alarming feature is TagAlong, a real-time GPS tracking system that continuously uploads user coordinates to OCV servers (api.myocv.com/apps/tagalong/). This creates a persistent location trail tied to user identity. Combined with ACCESS_FINE_LOCATION permission and the AssetTracker module (which stores GPS-tagged asset records in a local SQLite database and can marshal coordinates to Pinpoint), the app has full geolocation surveillance capability.\n\nThe app integrates deeply with criminal justice infrastructure: Appriss VINE for inmate search and victim notification (proxied through OCV servers at vine.prod3.myocv.com), OffenderWatch for sex offender registry lookups with map overlays, and iCrimeWatch for offender registration details. All inmate and offender searches route through OCV's proxy servers, meaning OCV has visibility into who is searching for which inmates.\n\nAWS IoT client endpoints are present in the DEX code (data.iot.us-east-1.amazonaws.com), suggesting the app may communicate via MQTT for real-time device state updates. The full AWS Cognito authentication stack handles user identity with a us-east-1 identity pool. Facebook SDK is included via the AWS Amplify auth module for social login.\n\nTwo Google API keys are hardcoded and extractable: one for YouTube (shared across OCV apps) and one app-specific key for Google Maps. A Cognito Identity Pool ID and an AWS API Gateway beta endpoint are also exposed.\n\nFor a county sheriff's office app whose stated purpose is community engagement -- news, weather, contact information -- the presence of real-time location tracking (TagAlong), dual analytics pipelines, advertising network integration, criminal justice database proxying, and AWS IoT device telemetry represents a significant and disproportionate surveillance capability. Users who download this app expecting a simple community information tool are exposing themselves to comprehensive behavioral tracking across multiple corporate data collectors."
   },
   "trace_chain": {
-    "trace_path": "..\\docs\\audits\\ocv\\GA\\Liberty County\\trace.jsonl",
-    "trace_sha256": "af8121f2c534946556a4200147a6b977dfbfb6ebf4682dc95e599e6e8031a45c",
+    "trace_path": "trace.jsonl",
+    "trace_sha256": "aed8dc534ab34a1ed1cb43f6064d449d802162055ddc2dad804a47524fea4e8c",
     "event_count": 24,
     "first_event_hash": "6f5719ef1e0b6376c7c8562bc3401af3ce69af35c2c2e1da5476f252bc6008ad",
     "last_event_hash": "15834c5ff8b1bad714e0d671b0332f7f0f149caed18e3071b7022ce7735ba491",
