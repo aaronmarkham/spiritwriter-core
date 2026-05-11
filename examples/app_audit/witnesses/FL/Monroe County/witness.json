@@ -1,7 +1,7 @@
 {
   "witness_version": "1.0",
-  "witness_sha256": "1285fad984b509b476cfa08c681d79b94117a95eccae51b5080c14cc99833635",
-  "generated_at": "2026-03-31T05:32:13Z",
+  "witness_sha256": "31b05758963d19ab38d985549d89fe68d034b801714d89bab3578dbad4838def",
+  "generated_at": "2026-05-11T14:17:40Z",
   "input": {
     "package_name": "com.ocv.a913",
     "apk_sha256": "d980018163e82ac610096b1f0a230d968f92488a0058659ce6189f21414dba0f",
@@ -474,8 +474,8 @@
     }
   ],
   "report": {
-    "path": "..\\docs\\audits\\ocv\\FL\\Monroe County\\report.json",
-    "sha256": "ee75c7c4ad0267b5128bd7c8e9217e0f53699dcbcdb3a9f0d3b35db3997bbe9d",
+    "path": "report.json",
+    "sha256": "484b6e4700e9a7299ccf2dc4265eb6a669239e4282bd311ded32cf040b5826f7",
     "finding_count": 17,
     "permission_count": 19,
     "hardcoded_secret_count": 8,
@@ -483,8 +483,8 @@
     "narrative": "com.ocv.a913 is the Monroe County FL Sheriff's Office community app, built on the OCV (Our Community Voice) platform. At 61.9 MB with six DEX files, it is an unusually large and feature-rich app for a county sheriff's office, containing 54 distinct feature modules ranging from weather and YouTube playlists to real-time location tracking (TagAlong), asset tracking, inmate search, sex offender mapping, and VINE victim notification integration.\n\nThe app embeds a dual analytics pipeline: Google Firebase Analytics (v21.1.0) and Amazon Pinpoint (AWS SDK 2.16.13), both collecting user engagement, session data, and device identifiers. The Google Advertising ID (GAID) is actively collected via play-services-ads-identifier, and ad conversion tracking pings are sent to both pagead2.googlesyndication.com and googleadservices.com. This means a sheriff's office community app is participating in Google's advertising ecosystem, sending device-level behavioral signals that can be cross-referenced with ad profiles.\n\nThe TagAlong feature is particularly concerning: it implements real-time GPS location sharing with trip recording, dropped pins, and session management, all transmitted to OCV's servers (api.myocv.com/apps/tagalong/). Combined with the AssetTracker feature (which maintains a local SQLite database of tracked items and their locations), and the AWS IoT endpoints embedded in the app, there is infrastructure for persistent location surveillance.\n\nThe criminal justice integration is extensive. The app connects to Appriss VINE (victim notification system) through OCV's proxy servers at vine.prod3.myocv.com, with full inmate search, charges lookup, and registration capabilities. It also integrates OffenderWatch for sex offender registry data and mapping. The inmate_search feature module provides notification capabilities, suggesting the app can alert users about specific inmates. These integrations mean user search queries for incarcerated individuals and sex offenders flow through both OCV's infrastructure and the criminal justice data brokers (Appriss, OffenderWatch).\n\nTwo hardcoded AWS Cognito credentials (Identity Pool ID us-east-1:2793e471-e8b3-4dba-8270-d1a4192c0d17 and User Pool ID us-east-1_5UBW9jlLO) are exposed in resources.arsc, revealing the app's full AWS authentication infrastructure. Two Google API keys are also hardcoded. All four credentials are trivially extractable from the APK.\n\nFor a sheriff's office app that community members might install to receive safety alerts and local news, the combination of precise location tracking, advertising ID collection, dual analytics pipelines, criminal justice database access, and real-time location sharing represents a disproportionate data collection posture. Residents who install this app to stay informed about their community are also providing their sheriff's office vendor with GPS location history, device identifiers, advertising profiles, and a record of every inmate or sex offender they search for."
   },
   "trace_chain": {
-    "trace_path": "..\\docs\\audits\\ocv\\FL\\Monroe County\\trace.jsonl",
-    "trace_sha256": "c1b1c3d75dcb903e67de8d6bbfbe25b4ea261c18fa5760826395208d93ce5ac6",
+    "trace_path": "trace.jsonl",
+    "trace_sha256": "c6bbb45ce1b37ae7009508e31da95586224eb4f5d478ef2f62bd76a9dc57b884",
     "event_count": 21,
     "first_event_hash": "62ab441f4cd62dc2599bc49866be8ec12150e10c3ec0ffd3590346de863b173f",
     "last_event_hash": "36e273399e17cb44237e36301f7d44844dcfea713f3bbdc6f000ab9b85c3c572",

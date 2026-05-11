@@ -1,7 +1,7 @@
 {
   "witness_version": "1.0",
-  "witness_sha256": "0d5c16283d08b2f717331c06553ec54921bec8ac8ca8cbf6df811ce8b2000212",
-  "generated_at": "2026-03-31T05:38:58Z",
+  "witness_sha256": "805c54705e38f83005ce261bf83928a7a450b8185f139138167d0fd6ba90aeac",
+  "generated_at": "2026-05-11T14:17:40Z",
   "input": {
     "package_name": "com.ocv.a834",
     "apk_sha256": "6d9a55861c9feb7f7dab0df11a2a3065e2c69aee4594df61c3ef15903456f0ce",
@@ -268,7 +268,7 @@
     {
       "permission": "android.permission.CAMERA",
       "risk": "medium",
-      "notes": "Camera access (likely for barcode scanning \u00e2\u20ac\u201d barcode-scanning SDK present)"
+      "notes": "Camera access (likely for barcode scanning â€” barcode-scanning SDK present)"
     },
     {
       "permission": "android.permission.READ_CALL_LOG",
@@ -308,7 +308,7 @@
     {
       "permission": "android.permission.ACCESS_MEDIA_LOCATION",
       "risk": "medium",
-      "notes": "Reads GPS EXIF data from photos \u00e2\u20ac\u201d location exfiltration via images"
+      "notes": "Reads GPS EXIF data from photos â€” location exfiltration via images"
     },
     {
       "permission": "android.permission.READ_EXTERNAL_STORAGE",
@@ -323,7 +323,7 @@
     {
       "permission": "android.permission.RECEIVE_BOOT_COMPLETED",
       "risk": "medium",
-      "notes": "App auto-starts on device reboot \u00e2\u20ac\u201d persistent background execution"
+      "notes": "App auto-starts on device reboot â€” persistent background execution"
     },
     {
       "permission": "android.permission.INTERNET",
@@ -361,39 +361,39 @@
       "type": "Google API Key (YouTube Data API v3)",
       "value": "AIzaSyASZbllDc_ielyHaBZw120XkaOoeQ11n2Y",
       "risk": "medium",
-      "notes": "Hardcoded in classes.dex \u00e2\u20ac\u201d extractable by any user. May be abused for quota theft or data scraping against the app's YouTube playlist."
+      "notes": "Hardcoded in classes.dex â€” extractable by any user. May be abused for quota theft or data scraping against the app's YouTube playlist."
     },
     {
       "type": "Firebase App ID",
       "value": "1:396507442436:android:428931794b6e4bfa317451",
       "risk": "low",
-      "notes": "Standard Firebase App ID embedded in resources \u00e2\u20ac\u201d expected but discloses GCP project number 396507442436."
+      "notes": "Standard Firebase App ID embedded in resources â€” expected but discloses GCP project number 396507442436."
     },
     {
       "type": "Firebase Storage Bucket",
       "value": "ocvapps5.firebasestorage.app",
       "risk": "low",
-      "notes": "Storage bucket name disclosed \u00e2\u20ac\u201d could be probed for misconfigured public access rules."
+      "notes": "Storage bucket name disclosed â€” could be probed for misconfigured public access rules."
     },
     {
       "type": "OCV Content CDN Endpoint",
       "value": "https://cdn.myocv.com/ocvapps/a83489423/public/int_manifestMenu.json",
       "risk": "low",
-      "notes": "App configuration manifest served over CDN \u00e2\u20ac\u201d discloses internal OCV app ID a83489423."
+      "notes": "App configuration manifest served over CDN â€” discloses internal OCV app ID a83489423."
     }
   ],
   "report": {
-    "path": "..\\docs\\audits\\ocv\\NV\\Douglas County\\report.json",
-    "sha256": "b663a3018ff8af7bb3449dc771ef5ec1ba9afb0e6dfeccbc987df7c8a05927e9",
+    "path": "report.json",
+    "sha256": "64f28e57e6d904c39ac2136ca96680a91c793b67f1123a2100b38f097f22764a",
     "finding_count": 11,
     "permission_count": 26,
     "hardcoded_secret_count": 4,
     "overall_risk_rating": "HIGH",
-    "narrative": "com.ocv.a834 is a community/church mobile app built on the OCV (Online Church Vision) platform. It embeds an unusually wide set of SDKs and declares a large number of sensitive permissions relative to its apparent purpose. The tracker stack includes Firebase Analytics + FCM (Google), Facebook SDK, Google AdMob (with Advertising ID collection), AWS Amplify + Amazon Pinpoint (a second independent analytics pipeline), BugSnag (crash and performance), and Google Maps/Location. The two most significant concerns are: (1) The simultaneous collection of precise GPS location (ACCESS_FINE_LOCATION) combined with AdMob Advertising ID collection \u00e2\u20ac\u201d together these enable precise location-based ad profiling; and (2) The declaration of READ_SMS, READ_CALL_LOG, READ_CONTACTS, RECORD_AUDIO, and PROCESS_OUTGOING_CALLS permissions, which are highly sensitive and difficult to justify for a church community app. A Google YouTube API key is hardcoded in the DEX bytecode and is trivially extractable, creating a quota-abuse risk. No data broker SDKs (Kochava, X-Mode/Outlogic) were detected."
+    "narrative": "com.ocv.a834 is a community/church mobile app built on the OCV (Online Church Vision) platform. It embeds an unusually wide set of SDKs and declares a large number of sensitive permissions relative to its apparent purpose. The tracker stack includes Firebase Analytics + FCM (Google), Facebook SDK, Google AdMob (with Advertising ID collection), AWS Amplify + Amazon Pinpoint (a second independent analytics pipeline), BugSnag (crash and performance), and Google Maps/Location. The two most significant concerns are: (1) The simultaneous collection of precise GPS location (ACCESS_FINE_LOCATION) combined with AdMob Advertising ID collection â€” together these enable precise location-based ad profiling; and (2) The declaration of READ_SMS, READ_CALL_LOG, READ_CONTACTS, RECORD_AUDIO, and PROCESS_OUTGOING_CALLS permissions, which are highly sensitive and difficult to justify for a church community app. A Google YouTube API key is hardcoded in the DEX bytecode and is trivially extractable, creating a quota-abuse risk. No data broker SDKs (Kochava, X-Mode/Outlogic) were detected."
   },
   "trace_chain": {
-    "trace_path": "..\\docs\\audits\\ocv\\NV\\Douglas County\\trace.jsonl",
-    "trace_sha256": "d0042e238fb39a760d71f8fadb9c013dff253b4eec9418b7d83786ddf59bd1a9",
+    "trace_path": "trace.jsonl",
+    "trace_sha256": "ad542015763bdbc1412c743a2275396874708659a315dd717918b8b0ca2f22b1",
     "event_count": 15,
     "first_event_hash": "75db5a0f1f8bce43210811dd2543b928501210ec368b28d6521e8794d523d2d0",
     "last_event_hash": "36da3a0b769662fb690fb74a3a7664cb47e87c1aa2d71ad4b546730d286a5fb1",

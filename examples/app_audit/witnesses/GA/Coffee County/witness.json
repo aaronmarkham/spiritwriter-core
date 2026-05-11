@@ -1,7 +1,7 @@
 {
   "witness_version": "1.0",
-  "witness_sha256": "24f7744885049715c4e2fb1ae35fd2f88b03d7c259b8a95bbb18b04d45ff7d75",
-  "generated_at": "2026-03-31T05:32:16Z",
+  "witness_sha256": "ae5fb26f21110d8cd2841c4d7a9b3e0309e60f75e0f7013410621f4a058a69a5",
+  "generated_at": "2026-05-11T14:17:40Z",
   "input": {
     "package_name": "com.ocv.a878",
     "apk_sha256": "a2728c3196bf702a2b93fe2a3158e202780b1873c849f0daf0f1d3bc4ccf3bd6",
@@ -505,8 +505,8 @@
     }
   ],
   "report": {
-    "path": "..\\docs\\audits\\ocv\\GA\\Coffee County\\report.json",
-    "sha256": "c372fc474b4fe4df7b76a950c49864d8a94f25f837a2fee323975198e2d14d47",
+    "path": "report.json",
+    "sha256": "e078bca1a8eb3c65906322da668bc0902c2bcd58b7a7f0f09e038ebf2f53f459",
     "finding_count": 19,
     "permission_count": 20,
     "hardcoded_secret_count": 7,
@@ -514,8 +514,8 @@
     "narrative": "com.ocv.a878 is the official Coffee County GA Sheriff's Office community app, built on the OCV (Our Community Voice) white-label platform. It is marketed as a public safety tool, but the app contains a substantial surveillance and analytics infrastructure that goes far beyond what community members would expect.\n\nThe app bundles 18 distinct tracker and analytics components across three independent data pipelines: Google (Firebase Analytics + FCM + AdMob advertising ID), Amazon (Amplify + Pinpoint + Cognito + IoT), and Bugsnag (crash + performance + OTLP tracing). This means user behavior data flows to at least three separate corporate analytics backends simultaneously.\n\nThe most concerning feature is TagAlong, a real-time GPS location sharing system that uploads continuous location coordinates to OCV's servers (api.myocv.com). Combined with the ACCESS_FINE_LOCATION permission, this gives the app the ability to track a user's precise movements and share them with other users in the same session. For a sheriff's office app, this creates an uncomfortable dynamic: community members who install the app to receive public safety alerts are opting into a system that can track their physical movements.\n\nThe app also integrates two criminal justice databases directly: Appriss VINE (victim notification and inmate search, with full booking details, charges, and inmate photos via vine.prod3.myocv.com) and OffenderWatch/iCrimeWatch (sex offender registry with map-based proximity alerts, offender tiers, and photos). While these serve legitimate public safety purposes, they also mean the app is pulling in and displaying sensitive criminal justice data alongside advertising ID collection and analytics tracking.\n\nThe Google Advertising ID (GAID) is actively collected through the play-services-ads-identifier SDK, and AdMob infrastructure is present in the DEX bytecode. This means the app collects a persistent cross-app advertising identifier that can be used to build behavioral profiles, even though this is a government sheriff's office app. The googleadservices.com deep link conversion tracking endpoint confirms the app is instrumented for Google Ads campaign attribution.\n\nHardcoded secrets are a significant concern. A single Google API key (AIzaSyASZbllDc_ielyHaBZw120XkaOoeQ11n2Y) is shared across YouTube, Calendar, and Maps APIs and appears in both the manifest and DEX bytecode. More critically, an AWS Cognito Identity Pool ID (us-east-1:2793e471-e8b3-4dba-8270-d1a4192c0d17) is embedded in the DEX, which could allow an attacker to obtain temporary AWS credentials if the pool permits unauthenticated access. An AWS API Gateway 'beta' endpoint is also exposed.\n\nThe permission set demands READ_PHONE_STATE (which exposes device identifiers like IMEI), READ_CONTACTS (reads the user's address book), and CALL_PHONE (can initiate calls without the dialer). None of these are well-justified for a community safety app.\n\nNo data broker SDKs (Kochava, X-Mode/Outlogic, Comscore) or Palantir/Foundry components were detected. The AssetTracker feature with local SQLite storage of equipment serial numbers and locations is notable but appears to be a general OCV platform capability rather than a surveillance-specific tool.\n\nIn summary: a resident of Coffee County GA who installs this app to get weather alerts and sheriff's office news is unknowingly opting into real-time location tracking, advertising ID collection, triple-pipeline analytics reporting, and an app that has permission to read their contacts and phone state. The app's surveillance capabilities significantly exceed what a reasonable person would expect from a county sheriff's community engagement tool."
   },
   "trace_chain": {
-    "trace_path": "..\\docs\\audits\\ocv\\GA\\Coffee County\\trace.jsonl",
-    "trace_sha256": "0e58ddfa3364b082102c0a20e25b798b497dddcfd0eaed3a75c4508083f35037",
+    "trace_path": "trace.jsonl",
+    "trace_sha256": "32931eb8d0f64e444de5ab5cdc849c140f1ee7a3abdd4118000565e11a8c2901",
     "event_count": 23,
     "first_event_hash": "fbc401121b76e64047b74e99c220bf953e9ba1497de0aee58586326bb9abf79b",
     "last_event_hash": "75b7e7a9917b5f649eb89152b3749cc00e72b90b39def3d963b9a13c86f4e494",

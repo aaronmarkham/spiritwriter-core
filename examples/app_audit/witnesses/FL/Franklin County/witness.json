@@ -1,7 +1,7 @@
 {
   "witness_version": "1.0",
-  "witness_sha256": "0cc87e563662f3027c92f8ecbe2ed0787a46f5fc3f0aaf3861867001c779ed92",
-  "generated_at": "2026-03-31T05:32:13Z",
+  "witness_sha256": "63dc56f4ad316d74e7558206373aff5b424a5181f2367d45c52ccafdd3b36bde",
+  "generated_at": "2026-05-11T14:17:40Z",
   "input": {
     "package_name": "com.ocv.a933",
     "apk_sha256": "c8f01857b0876d65b417d6fae75e1ef936c45b33cd0f03759ba0fccdbf6cca3d",
@@ -507,8 +507,8 @@
     }
   ],
   "report": {
-    "path": "..\\docs\\audits\\ocv\\FL\\Franklin County\\report.json",
-    "sha256": "d183bc0d05652b4f8b1d541f89401c4cdf41ec3842353e4edd04f450dc335c3a",
+    "path": "report.json",
+    "sha256": "dbe914f4f8543e3c23b3cc833950c1aa8981fb4846f416aaf965a985f8cb4528",
     "finding_count": 20,
     "permission_count": 17,
     "hardcoded_secret_count": 8,
@@ -516,8 +516,8 @@
     "narrative": "com.ocv.a933 is the Franklin County FL Sheriff's Office community app, built on the OCV (Our County Voice) platform. Despite being positioned as a public safety communication tool, the app embeds an extensive surveillance and analytics infrastructure that far exceeds what a sheriff's community app requires.\n\nThe app bundles 20 distinct tracking components across three independent analytics pipelines: Google (Firebase Analytics + AdMob + FCM), Amazon (AWS Amplify + Pinpoint + Cognito), and BugSnag. It collects the Google Advertising ID (GAID) -- a persistent cross-app device identifier used for ad targeting -- and sends behavioral data to both Google and Amazon analytics backends simultaneously.\n\nThe most concerning features are TagAlong and AssetTracker. TagAlong is a real-time GPS tracking system that uploads location points during active sessions via the OCV API, effectively turning the phone into a live tracking beacon. AssetTracker maintains a persistent local SQLite database of tracked items and their GPS coordinates, with sharing capabilities between users. In the context of a sheriff's office app, these features could be used to track people -- not just physical assets.\n\nThe app also integrates directly with two criminal justice databases: Appriss VINE (victim notification and inmate search/tracking) and OffenderWatch/iCrimeWatch (sex offender registries). These integrations route through OCV's proxy API (appriss.api.myocv.com), meaning OCV can log every inmate search and offender lookup made through the app. Users searching for information about incarcerated family members or checking sex offender registries are generating queryable records on OCV's servers.\n\nThe permission profile is aggressive: READ_PHONE_STATE exposes device identifiers (IMEI/IMSI), READ_CONTACTS accesses the full contact list, CALL_PHONE can initiate calls programmatically, and CAMERA plus ACCESS_FINE_LOCATION provide precise physical surveillance capabilities. The DUMP permission is unusual and grants access to system diagnostic information.\n\nHardcoded secrets include two Google API keys, an AWS Cognito Identity Pool ID, a BugSnag API key, and an AWS API Gateway endpoint still on a 'beta' stage. These are trivially extractable from the APK and represent credential hygiene concerns.\n\nFor residents of Franklin County who install this app expecting simple sheriff's office updates, the reality is that they are opting into a multi-layered data collection system that tracks their location in real time, reads their device identifiers and contacts, sends behavioral analytics to Google and Amazon, and logs their interactions with criminal justice databases. No data broker SDKs (Kochava, X-Mode/Outlogic) were detected, but the combination of AdMob advertising ID collection with precise GPS tracking achieves a similar outcome through first-party data aggregation."
   },
   "trace_chain": {
-    "trace_path": "..\\docs\\audits\\ocv\\FL\\Franklin County\\trace.jsonl",
-    "trace_sha256": "5e805034ee48f9ad09a120764bcc7c4d09424ba15eba886ea663881cff9a20f8",
+    "trace_path": "trace.jsonl",
+    "trace_sha256": "236af4276182df214740b3ecfdae518aebfb675eb6fecd742a3a8c8d9f4cc8a2",
     "event_count": 24,
     "first_event_hash": "502c792eb4e0de38138b8b976b62bf8588b64431757ea9d30654bb4c159c4773",
     "last_event_hash": "2baaa1614db6d2f112d2e266c5bef7b03a7cba9089899c706d551a6617c9c781",

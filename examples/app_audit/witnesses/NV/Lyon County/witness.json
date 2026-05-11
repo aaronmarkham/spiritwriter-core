@@ -1,7 +1,7 @@
 {
   "witness_version": "1.0",
-  "witness_sha256": "8b3b76014277569850eb33d9a8317d4211691c8ba2665adf66f22312f674068d",
-  "generated_at": "2026-03-31T05:38:57Z",
+  "witness_sha256": "4fb2e682b18a9d1354ff46c17096e7626f9f649fe27a68344fdb484d313fc0ef",
+  "generated_at": "2026-05-11T14:17:40Z",
   "input": {
     "package_name": "com.ocv.a958",
     "apk_sha256": "6785aad6f71e80aa9674054b81831bdae37bf8906fad65ab098573e109085bd1",
@@ -443,8 +443,8 @@
     }
   ],
   "report": {
-    "path": "..\\docs\\audits\\ocv\\NV\\Lyon County\\report.json",
-    "sha256": "f4c97ab6fee4baa3c89f446cc18207480d4172d9b284b3f586efe1a848fd1f2d",
+    "path": "report.json",
+    "sha256": "419f495868bba1529e58000adace8e35cf6714caec072c5b7603ad25880c285d",
     "finding_count": 17,
     "permission_count": 17,
     "hardcoded_secret_count": 7,
@@ -452,8 +452,8 @@
     "narrative": "The Lyon County NV Sheriff's Office app (com.ocv.a958) is built on the OCV (TheSheriffApp.com) platform and presents itself as a community safety tool for Lyon County residents. Despite this limited stated purpose, the app embeds a substantial surveillance and analytics infrastructure across 16 identified SDK integrations.\n\nThe most significant concern is the app's deep location tracking capability. It combines Google Play Services Location (with semantic location updates and geofencing), AWS IoT real-time data plane connectivity (9 regional IoT endpoints), an AssetTracker module with persistent SQLite GPS logging, and a TagAlong feature that performs continuous trip-level location tracking via the OCV API. The Pinpoint analytics pipeline adds GPS-based user segmentation (SegmentLocation/GPSPointDimension) on top of this. Together these create a comprehensive location surveillance system far exceeding what a county sheriff's community app requires.\n\nThe advertising infrastructure is also notable: Google AdMob with Advertising ID collection is present, including the pagead2.googlesyndication.com tracking pixel and googleadservices.com conversion tracking endpoint. This means the GAID cross-app device identifier is collected alongside precise GPS coordinates, enabling location-based ad profiling of users who install this law enforcement app.\n\nThe app integrates directly with Appriss/VINE inmate notification services and OffenderWatch/iCrimeWatch sex offender registries, proxying these through OCV's backend API rather than linking users to the services directly. This means OCV's servers intermediate all inmate searches and sex offender lookups, creating a centralized log of which users are searching for which inmates.\n\nTwo Google API keys are hardcoded in the APK (one shared across all OCV apps for YouTube/Calendar, one unique to this app group in resources.arsc). An AWS Cognito Identity Pool ID is also embedded, along with a full Amplify configuration pointing to the us-east-1 region.\n\nCompared to the Douglas County (a83489423) audit, the Lyon County app is nearly twice the size (55.7 MB vs 28.8 MB), has 5 DEX files instead of 4, and includes the additional AWS IoT, AssetTracker, TagAlong, and Google Calendar integrations not seen in the smaller app. The permission set is narrower (17 vs 26 -- notably missing READ_SMS, READ_CALL_LOG, RECORD_AUDIO, RECEIVE_SMS, PROCESS_OUTGOING_CALLS, and WRITE_CONTACTS), but the location tracking infrastructure is more extensive due to IoT and TagAlong.\n\nNo data broker SDKs (Kochava, X-Mode/Outlogic, Adjust, AppsFlyer) were detected. No Palantir/Foundry components were found. The 'xmode' string hits were false positives (Android graphics VertexMode class). The 'sentry' hits were false positives (ApprissEntryID and cache entry classes)."
   },
   "trace_chain": {
-    "trace_path": "..\\docs\\audits\\ocv\\NV\\Lyon County\\trace.jsonl",
-    "trace_sha256": "2a0c0fbb6463a9759dd5ec68adbe7a2cd347d0b1be666dd4c15dc960a38c4166",
+    "trace_path": "trace.jsonl",
+    "trace_sha256": "767269cfcd6518223c269ee8adf2aa994dc2be3c324fb7c4d3791fd3d0d457ef",
     "event_count": 21,
     "first_event_hash": "536d9da7d1f6c0fff34e9408d97e45aa1642a20b3f2e59d9c50f386eb25704b2",
     "last_event_hash": "f46f6facbad2ba81699bc7c395f9161284a120edd3b83d1f90c65ee1b5997d78",
