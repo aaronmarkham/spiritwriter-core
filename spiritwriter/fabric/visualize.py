@@ -1,9 +1,11 @@
 """Trace visualization — render trace events as Mermaid diagrams.
 
-Generates three diagram types:
+Generates four diagram types:
 1. Simple workflow: linear shard flow (package → decrypt → work → result)
 2. Genealogy: shard lineage tree (parent → child → grandchild)
-3. Multi-agent: nested agent spawns with trace chains
+3. Multi-agent: per-agent event timelines in subgraphs
+4. Delegation tree: cap delegation structure reconstructed from cap_chain
+   fields (root → branches → leaves), with role + event count labels
 
 Supports failure states (job_failed events).
 """
@@ -333,6 +335,12 @@ def render_delegation_tree(events: list[dict[str, Any]]) -> str:
         chain = evt.get("cap_chain")
         if chain:
             for i, cap_id in enumerate(chain):
+                # First-write-wins: if two events disagree about a cap's
+                # parent (which would indicate a corrupted log or a
+                # mis-built emitter), the first observation is kept and
+                # subsequent ones are silently ignored. Treating chain
+                # provenance as authoritative rather than majority-vote
+                # avoids letting noisy late events rewrite tree shape.
                 if cap_id not in parent_of:
                     parent_of[cap_id] = chain[i - 1] if i > 0 else None
             leaf_id = chain[-1]
@@ -372,7 +380,7 @@ def render_delegation_tree(events: list[dict[str, Any]]) -> str:
     ]
 
     def _node_id(cap_id: str) -> str:
-        return f"C_{cap_id[:8]}"
+        return f"C_{_short_id(cap_id)}"
 
     # Sort for deterministic output — important for diff-based tests.
     for cap_id in sorted(parent_of):
@@ -383,9 +391,14 @@ def render_delegation_tree(events: list[dict[str, Any]]) -> str:
         else:
             css = "leaf"
 
-        parts = [f"{cap_id[:12]}…"]
+        # Use _short_id for the visible label too — keeps node IDs and
+        # the label's cap_id prefix the same length, matching the
+        # convention in the other renderers.
+        parts = [f"{_short_id(cap_id)}…"]
         if cap_id in leaf_role:
-            parts.append(f"role: {leaf_role[cap_id]}")
+            # Route role through _escape() — it's caller-supplied text and
+            # Mermaid labels can break on quotes, brackets, or newlines.
+            parts.append(f"role: {_escape(leaf_role[cap_id])}")
         if cap_id in leaf_event_count:
             n = leaf_event_count[cap_id]
             parts.append(f"{n} event{'s' if n != 1 else ''}")

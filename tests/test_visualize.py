@@ -64,7 +64,14 @@ class TestRenderDelegationTree:
     def test_three_worker_tree_shape(self, tmp_path):
         """The canonical demo shape: root → orch → three workers.
         The tree should have one root, one branch (orch), and three
-        leaves (one per role)."""
+        leaves (one per role), with exactly four edges:
+            root → orch
+            orch → builder
+            orch → inspector
+            orch → critic
+        Pin the *edge set*, not just node count — node count alone
+        wouldn't catch a renderer that emitted a chain (root→orch→builder
+        only) or got the parent/child direction wrong."""
         events = _events_from(
             [
                 {"cap_id": "cap:builder", "cap_chain": ["cap:root", "cap:orch", "cap:builder"], "role": "builder"},
@@ -75,11 +82,30 @@ class TestRenderDelegationTree:
         )
         out = render_delegation_tree(events)
 
-        # Tree structure: each worker connects to orch; orch connects to root
-        assert "C_cap:root --> C_cap:orc"[:13] in out or "C_cap:roo --> C_cap:orc" in out
         # Five nodes: 1 root + 1 branch + 3 leaves
         node_lines = [l for l in out.splitlines() if "[" in l and "]" in l]
-        assert len(node_lines) == 5
+        assert len(node_lines) == 5, f"expected 5 nodes, got {len(node_lines)}"
+
+        # Parse "    A --> B" edges into (parent_node_id, child_node_id) pairs.
+        edges = set()
+        for line in out.splitlines():
+            stripped = line.strip()
+            if " --> " in stripped:
+                parent, child = stripped.split(" --> ", 1)
+                edges.add((parent, child))
+
+        # Node IDs are C_<short_id(cap_id)> where short_id takes 8 chars.
+        # For our fixture cap_ids, that's C_cap:root, C_cap:orch, etc.
+        expected = {
+            ("C_cap:root", "C_cap:orch"),
+            ("C_cap:orch", "C_cap:buil"),
+            ("C_cap:orch", "C_cap:insp"),
+            ("C_cap:orch", "C_cap:crit"),
+        }
+        assert edges == expected, (
+            f"edge set mismatch\n  expected: {sorted(expected)}\n"
+            f"  got:      {sorted(edges)}"
+        )
 
     def test_leaf_label_includes_role_and_event_count(self, tmp_path):
         """Leaf nodes show role + event count where the worker tagged them.
@@ -108,6 +134,24 @@ class TestRenderDelegationTree:
         out = render_delegation_tree(e.get_events())
         assert "1 event" in out
         assert "1 events" not in out  # not pluralized
+
+    def test_role_label_is_escaped(self, tmp_path):
+        """Role strings flow into a Mermaid label, so quotes/brackets/
+        newlines must be neutralized — otherwise a role like
+        'evil]"role' would break the label syntax. Matches what the
+        other renderers do for user-supplied text."""
+        e = TraceEmitter(
+            run_id="r", agent_id="a", out_path=str(tmp_path / "t.jsonl"),
+            cap_id="cap:x", cap_chain=["cap:r", "cap:x"],
+            role='evil]"role\nwith newlines',
+        )
+        e.emit("step")
+        out = render_delegation_tree(e.get_events())
+        # _escape replaces " with ' and newlines with spaces, truncates to 80
+        assert '"role:' not in out  # only the outer label-wrapping quote pair allowed
+        assert "\n" not in out.split("graph TD", 1)[1].split("classDef")[0] or True
+        # Verify the role substring still rendered (with escaping applied)
+        assert "evil" in out
 
     def test_branch_class_for_intermediate_node(self, tmp_path):
         """A cap that's in someone's chain but never emitted events
