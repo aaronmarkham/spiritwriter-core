@@ -223,6 +223,17 @@ events_under_chain(merged, user_root_cap.cap_id)   # everything under user X's a
 
 See [`examples/05_delegation_with_trace/`](../examples/05_delegation_with_trace/run.py) for the full pattern: root → orchestrator → 3 workers, each producing signed shards under its leaf cap, with chain + signature verification and provenance queries demonstrated.
 
+For a visual of the cap structure rather than the event timeline, render the delegation tree:
+
+```python
+from spiritwriter.fabric.visualize import render_trace
+
+mermaid = render_trace(merged_events, diagram_type="delegation")
+Path("delegation.mmd").write_text(mermaid, encoding="utf-8")
+```
+
+The output reconstructs the tree from `cap_chain` across all events — root cap at the top, branches for intermediate delegators, leaves labeled with their `role` and event count. `render_trace(events, diagram_type="multi-agent")` complements this with per-worker event timelines.
+
 ## Signed Traces
 
 For non-repudiation — proving the chain came from a specific keypair holder — pass an Ed25519 signer to the emitter:

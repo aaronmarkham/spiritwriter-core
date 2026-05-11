@@ -379,6 +379,32 @@ class TestDemo05DelegationWithTrace:
         under_orch = events_under_chain(merged, orch_cap_id)
         assert len(under_orch) == 12  # 3 workers × 4 events each
 
+    def test_diagrams_produced(self):
+        """The demo renders two mermaid diagrams from the merged event
+        log: a delegation tree (cap structure) and a multi-agent view
+        (per-worker timelines). If these stop being produced, demo 5
+        loses its visual story even though the trace data is fine."""
+        delegation = self._dir / "delegation_tree.mmd"
+        multi_agent = self._dir / "multi-agent.mmd"
+        assert delegation.exists(), "delegation_tree.mmd not produced"
+        assert multi_agent.exists(), "multi-agent.mmd not produced"
+
+        d = delegation.read_text(encoding="utf-8")
+        assert d.startswith("graph TD"), "delegation_tree.mmd is not a valid mermaid graph"
+        # Tree should show role-labeled leaves for each worker
+        for role in ("builder", "inspector", "critic"):
+            assert f"role: {role}" in d, f"delegation tree missing {role} leaf"
+        # Should have exactly 5 nodes (root + orch + 3 workers)
+        node_lines = [l for l in d.splitlines() if "[" in l and "]" in l and ":::" in l]
+        assert len(node_lines) == 5, f"expected 5 cap nodes, got {len(node_lines)}"
+
+        m = multi_agent.read_text(encoding="utf-8")
+        assert m.startswith("graph TD"), "multi-agent.mmd is not a valid mermaid graph"
+        for role in ("builder", "inspector", "critic"):
+            assert f"worker_{role}" in m or f"worker:{role}" in m, (
+                f"multi-agent diagram missing {role} agent"
+            )
+
 
 # ── Flavor doc worked examples ────────────────────────────────────────
 #

@@ -481,8 +481,9 @@ Renders trace JSONL into Mermaid diagrams.
 - `render_simple_workflow(events) -> str` — Linear flow with per-stage spend annotations
 - `render_shard_genealogy(events) -> str` — Content/task/result triangle, entitlements as bridges
 - `render_multi_agent(events) -> str` — Swim lanes by `agent_id`
-- `render_trace(events, diagram_type="workflow") -> str` — Convenience wrapper; `diagram_type` is `"workflow" | "genealogy" | "multi-agent"`
-- `generate_all(trace_path, output_dir) -> dict[str, str]` — Render all three to `<output_dir>/{workflow,genealogy,multi-agent}.mmd`
+- `render_delegation_tree(events) -> str` — Cap delegation tree reconstructed from `cap_chain` fields (root → orchestrator → workers); leaf nodes label `role` and event count
+- `render_trace(events, diagram_type="workflow") -> str` — Convenience wrapper; `diagram_type` is `"workflow" | "genealogy" | "multi-agent" | "delegation"`
+- `generate_all(trace_path, output_dir) -> dict[str, str]` — Render all four to `<output_dir>/{workflow,genealogy,multi-agent,delegation}.mmd`
 
 Output is GitHub-compatible Mermaid markdown. No external Mermaid CLI required for rendering — paste into a GitHub fenced ` ```mermaid ` block.
 
