@@ -31,7 +31,7 @@ pip install -e ".[network]"             # + IPFS backend
 pip install -e ".[dev,sealed,network]"  # everything
 ```
 
-Requires Python 3.9+.
+Requires Python 3.12+.
 
 ## Quick Start
 

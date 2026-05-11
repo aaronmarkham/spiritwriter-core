@@ -22,7 +22,7 @@ pip install -e ".[network]"
 pip install -e ".[dev,sealed,network]"
 ```
 
-Requires Python 3.9+.
+Requires Python 3.12+.
 
 ## A Tiny End-to-End
 
