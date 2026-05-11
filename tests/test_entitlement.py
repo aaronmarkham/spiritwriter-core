@@ -441,7 +441,10 @@ class TestVerifyChain:
         )
         # Tamper: point at a different parent
         child.parent_cap_id = "x" * 64
-        # Resign so the signature still verifies — the chain check should still reject
+        # Re-sign with the same issuer key so the child's own signature is
+        # still cryptographically valid. The point is to prove chain
+        # *linkage* (parent_cap_id matches the actual parent's cap_id) is
+        # checked independently from per-link signature validity.
         child.signature = None
         child.sign(root_sk)
         with pytest.raises(ValueError, match="parent_cap_id"):
@@ -530,6 +533,12 @@ class TestAuthorizeChain:
         # Don't re-sign; authorize_chain doesn't require signatures
         with pytest.raises(UnknownCaveatError):
             authorize_chain([root])
+
+    def test_empty_chain_rejected(self):
+        """An empty chain must NOT silently authorize. Symmetry with
+        verify_chain([]), and prevents a vacuous True from upstream bugs."""
+        with pytest.raises(ValueError, match="Empty chain"):
+            authorize_chain([])
 
 
 class TestIssueDelegated:
@@ -656,3 +665,15 @@ class TestIssueDelegated:
         verify_cap_chain(chain, root_pubkeys=[root_pk])
         assert authorize_chain(chain, scope="sw:article:run-abc:builder-2") is True
         assert authorize_chain(chain, scope="sw:secrets:anything") is False
+
+
+def test_verify_trace_chain_aliases_emitter_verify_chain():
+    """The fabric package exposes two different chain verifiers — one for
+    trace event hash chains and one for capability delegation chains.
+    verify_trace_chain is an explicit alias for the emitter helper, added
+    to disambiguate from verify_cap_chain. They must be the same callable."""
+    from spiritwriter.fabric import verify_chain as fabric_verify_chain
+    from spiritwriter.fabric import verify_trace_chain
+    from spiritwriter.fabric.emitter import verify_chain as emitter_verify_chain
+    assert verify_trace_chain is emitter_verify_chain
+    assert verify_trace_chain is fabric_verify_chain

@@ -459,9 +459,22 @@ def authorize_chain(
     Each cap is checked with its own ``delegation_depth`` (the count of
     descendants below it in the chain). Use after :func:`verify_chain`.
 
-    Returns True if all caveats pass; False if any cap denies.
-    Raises UnknownCaveatError if any caveat type is unrecognized.
+    Args:
+        chain: non-empty list of caps from root (index 0) to leaf.
+        scope: requested scope. Passing ``None`` causes ``scope_limit``
+            caveats to vacuously pass — only do this when the operation
+            genuinely has no scope (e.g., a generic capability check).
+            For shard writes, always pass the shard's scope.
+        now_iso: current time as ISO 8601. Defaults to wall clock.
+
+    Returns True if all caveats on all caps pass; False if any cap denies.
+
+    Raises:
+        ValueError: chain is empty.
+        UnknownCaveatError: any caveat type is unrecognized (fail closed).
     """
+    if not chain:
+        raise ValueError("Empty chain")
     n = len(chain)
     for level, token in enumerate(chain):
         depth_below = n - 1 - level
@@ -500,6 +513,14 @@ def issue_delegated(
     Caveats from the parent are NOT auto-inherited — the parent's
     caveats still apply via chain intersection at authorize time. This
     keeps each cap's caveats focused on what *that level* added.
+
+    .. warning::
+
+        Callers SHOULD run :func:`verify_chain` on the parent's full
+        chain before issuing a child. This function trusts ``parent``
+        as supplied — a manually constructed or tampered parent token
+        will still produce a syntactically valid child, but the child
+        will fail chain verification downstream. Verify first.
     """
     parent_max = _max_delegation_depth(parent.caveats)
     if parent_max is not None and parent_max <= 0:

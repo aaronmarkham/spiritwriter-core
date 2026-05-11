@@ -17,10 +17,19 @@ from spiritwriter.fabric.shard import (
     ShardAtom,
     AtomKind,
     DecayClass,
-    _canonical_json,
     pubkey_thumbprint,
     generate_signing_keypair,
 )
+
+
+def canonical_json(obj) -> bytes:
+    """Canonical JSON for content addressing — sorted keys, no whitespace,
+    UTF-8 with non-ASCII unescaped. This is the rule the substrate flavor
+    doc describes; an implementer in another language only needs these
+    three options on their JSON encoder."""
+    return json.dumps(
+        obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    ).encode("utf-8")
 from spiritwriter.fabric.entitlement import (
     EntitlementToken,
     Capability,
@@ -98,7 +107,7 @@ def main() -> None:
     print(f"shard_id (sha256 hex of canonical {{atoms, scope, origin}}):")
     print(f"  {shard.shard_id}")
     print("\nCanonical JSON of {atoms, scope, origin}:")
-    canon = _canonical_json({
+    canon = canonical_json({
         "atoms": [a.to_dict() for a in shard.atoms],
         "scope": shard.scope,
         "origin": shard.origin,
