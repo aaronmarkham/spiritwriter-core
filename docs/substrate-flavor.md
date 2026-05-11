@@ -11,7 +11,7 @@ encoder that supports sorted keys. Every modern stdlib has these or a
 single small dependency.
 
 > **Status.** Describes what is currently implemented in
-> `spiritwriter-core` v0.5+. The surface is intentionally small. Future
+> `spiritwriter-core` v0.6+. The surface is intentionally small. Future
 > additions (revocation sets, trust epochs, a `shards.spiritwriter.ai`
 > HTTP protocol) are deferred until the primitives below are exercised
 > in production. Worked examples are reproducible —

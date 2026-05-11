@@ -213,8 +213,7 @@ spiritwriter/
 ├── llm/            # LLM provider abstraction (Anthropic)
 ├── models/         # DocumentAtom, KnowledgeProject
 ├── secrets/        # OS keychain API key management
-├── stopwords.py    # Centralized stopword list
-└── trace/          # Deprecated shim re-exporting fabric/ (removed in 0.6.0)
+└── stopwords.py    # Centralized stopword list
 ```
 
 ## Integrations

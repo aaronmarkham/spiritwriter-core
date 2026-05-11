@@ -43,7 +43,6 @@ spiritwriter/
   fabric/      — Shards, store, emitter, crypto, entitlements, jobs, network resolver
     backends/  — Network backends (IPFS/Kubo)
   audit/       — Traced Android APK security audits (provenance, registry, verify)
-  trace/       — Deprecated shim re-exporting fabric/ (removed in 0.6.0)
   stopwords.py — Centralized stopword list
 ```
 
