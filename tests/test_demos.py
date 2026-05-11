@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -22,10 +23,18 @@ DEMO_DIR = Path(__file__).parent.parent / "examples"
 
 
 def _load_demo(subdir: str):
-    """Import a demo module whose directory name starts with a digit."""
+    """Import a demo module whose directory name starts with a digit.
+
+    Registers the module in ``sys.modules`` before executing it. Without
+    this, dataclasses defined inside the demo can't resolve their own
+    module at decoration time (``sys.modules.get(cls.__module__)``
+    returns None) — see CPython dataclasses.py for the relevant lookup.
+    """
     run_path = DEMO_DIR / subdir / "run.py"
-    spec = importlib.util.spec_from_file_location(f"demo_{subdir}", run_path)
+    mod_name = f"demo_{subdir}"
+    spec = importlib.util.spec_from_file_location(mod_name, run_path)
     mod = importlib.util.module_from_spec(spec)
+    sys.modules[mod_name] = mod
     spec.loader.exec_module(mod)
     return mod
 
@@ -268,6 +277,107 @@ class TestDemo04GovernanceDivergence:
     def test_mermaid_diagrams_generated(self):
         assert (self._traces / "run_a_workflow.mmd").exists()
         assert (self._traces / "run_b_workflow.mmd").exists()
+
+
+# ── Demo 5: Delegation with Trace ─────────────────────────────────
+
+
+class TestDemo05DelegationWithTrace:
+    """End-to-end: cap chains compose with trace events.
+
+    The demo proves the integration story PR #48 set up — that signed
+    shards, chained caps, and cap-context-aware trace events all hang
+    together as one system. If this test breaks, something in the
+    delegation-or-trace integration regressed.
+    """
+
+    @pytest.fixture(autouse=True, scope="class")
+    def run_demo(self, tmp_path_factory):
+        traces = tmp_path_factory.mktemp("demo05")
+        demo = _load_demo("05_delegation_with_trace")
+        rc = demo.main(output_dir=traces)
+        TestDemo05DelegationWithTrace._dir = traces
+        TestDemo05DelegationWithTrace._rc = rc
+
+    def test_main_exits_zero(self):
+        assert self._rc == 0
+
+    def test_per_worker_traces_created(self):
+        for role in ("builder", "inspector", "critic"):
+            path = self._dir / f"{role}.jsonl"
+            assert path.exists(), f"{role}.jsonl missing"
+            events = _load_events(path)
+            assert len(events) == 4, f"{role} should have 4 events, got {len(events)}"
+
+    def test_all_per_worker_chains_verify(self):
+        from spiritwriter.fabric.emitter import verify_chain
+        for role in ("builder", "inspector", "critic"):
+            events = _load_events(self._dir / f"{role}.jsonl")
+            assert verify_chain(events), f"{role} chain failed verification"
+
+    def test_every_event_carries_cap_context(self):
+        """All emitted events should have cap_id / cap_chain / role /
+        subject_thumbprint set — the integration's whole point."""
+        for role in ("builder", "inspector", "critic"):
+            events = _load_events(self._dir / f"{role}.jsonl")
+            for e in events:
+                assert e.get("cap_id"), f"{role} event missing cap_id"
+                assert e.get("cap_chain"), f"{role} event missing cap_chain"
+                assert e.get("role") == role, f"{role} event role mismatch"
+                assert e.get("subject_thumbprint"), f"{role} event missing subject_thumbprint"
+
+    def test_produced_shards_link_back_to_trace(self):
+        """The trace_ref on each produced shard must encode an event hash
+        that actually appears in that worker's trace log — otherwise the
+        'which event produced this shard?' question silently goes
+        unanswerable. This is the property the integration exists to
+        provide; verify it explicitly by loading the shard and
+        cross-checking the hash."""
+        from spiritwriter.fabric.store import ShardStore
+
+        store = ShardStore(self._dir / "shards")
+        for role in ("builder", "inspector", "critic"):
+            events = _load_events(self._dir / f"{role}.jsonl")
+            shard_event = next(e for e in events if e["type"] == "shard_produced")
+            shard = store.get(shard_event["shard_id"])
+            assert shard is not None, f"{role} shard {shard_event['shard_id'][:12]} not in store"
+
+            # trace_ref format: "chain:<run_id>#<event_hash>"
+            assert shard.trace_ref is not None, f"{role} shard missing trace_ref"
+            run_id = shard_event["run_id"]
+            assert shard.trace_ref.startswith(f"chain:{run_id}#"), (
+                f"{role} trace_ref has unexpected format: {shard.trace_ref!r}"
+            )
+            ref_hash = shard.trace_ref.split("#", 1)[1]
+
+            event_hashes = {e["hash"] for e in events}
+            assert ref_hash in event_hashes, (
+                f"{role} trace_ref points at hash {ref_hash[:16]}... "
+                f"which is NOT in this worker's trace log — the link is broken"
+            )
+
+    def test_provenance_queries_isolate_role(self):
+        from spiritwriter.fabric.emitter import events_by_role
+        merged = []
+        for role in ("builder", "inspector", "critic"):
+            merged.extend(_load_events(self._dir / f"{role}.jsonl"))
+        for role in ("builder", "inspector", "critic"):
+            filtered = events_by_role(merged, role)
+            assert len(filtered) == 4, f"{role} should isolate to 4 events"
+            assert all(e["role"] == role for e in filtered)
+
+    def test_events_under_chain_catches_all_workers(self):
+        """Querying by an ancestor cap should surface every descendant
+        worker's events — the 'show me everything under user X' pattern."""
+        from spiritwriter.fabric.emitter import events_under_chain
+        merged = []
+        for role in ("builder", "inspector", "critic"):
+            merged.extend(_load_events(self._dir / f"{role}.jsonl"))
+        # The orchestrator's cap_id appears in every worker's cap_chain
+        # at index 1. Grab it from any event.
+        orch_cap_id = merged[0]["cap_chain"][1]
+        under_orch = events_under_chain(merged, orch_cap_id)
+        assert len(under_orch) == 12  # 3 workers × 4 events each
 
 
 # ── Flavor doc worked examples ────────────────────────────────────────

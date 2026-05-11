@@ -26,6 +26,10 @@ from spiritwriter.fabric.emitter import (
     TraceEmitter,
     verify_chain,
     verify_chain as verify_trace_chain,
+    events_by_cap,
+    events_by_signer,
+    events_by_role,
+    events_under_chain,
 )
 from spiritwriter.fabric.crypto import (
     EncryptedShard, DecryptionError,
@@ -127,5 +131,9 @@ __all__ = [
     "fuzzy_score",
     "verify_chain",
     "verify_trace_chain",
+    "events_by_cap",
+    "events_by_signer",
+    "events_by_role",
+    "events_under_chain",
     "render_trace",
 ]
