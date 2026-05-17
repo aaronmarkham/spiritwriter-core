@@ -1,0 +1,258 @@
+[
+  {
+    "term": "Entity Sense Signature",
+    "category": "primitive",
+    "definition": "Content-addressed identity anchor — SHA-256 over a sorted list of (field, normalized_value) pairs from a schema's ess_fields. Two records with the same ESS digest are the same entity by construction (T1 match).",
+    "abbreviation": "ESS",
+    "defined_in": "spiritwriter/fabric/canonicalize.py",
+    "aliases": [
+      "Entity Semantic Scoring",
+      "Entity Semantic Signature",
+      "Entity Sense Score"
+    ]
+  },
+  {
+    "term": "CanonicalRegistry",
+    "category": "module",
+    "definition": "SQLite-backed runtime engine for definition-based entity resolution. Domain-agnostic — supply a CanonicalSchema describing how your entities are identified.",
+    "defined_in": "spiritwriter/fabric/canonicalize.py",
+    "aliases": [
+      "canonical registry",
+      "Canonical Registry"
+    ]
+  },
+  {
+    "term": "Phalanx",
+    "category": "system",
+    "definition": "spiritwriter-core's definition-based entity resolution system. Renamed from 'shingles' (overlapping shields metaphor > overlapping roof tiles, avoids medical connotation). Encompasses CanonicalRegistry + overlapping-window extraction.",
+    "defined_in": "docs/entity-resolution.md",
+    "aliases": [
+      "shingles",
+      "Shingles"
+    ]
+  },
+  {
+    "term": "CMC-Lite",
+    "category": "system",
+    "definition": "Pragmatic implementation of Consensus Memory Canonicalization using ESS + tiered resolution + overlapping-window extraction. Zero new dependencies (no vec0, no LLM clustering).",
+    "defined_in": "docs/specs/cmc-lite-v0.1.md",
+    "aliases": [
+      "CMC Lite",
+      "cmc-lite",
+      "CMC-lite"
+    ]
+  },
+  {
+    "term": "Consensus Memory Canonicalization",
+    "category": "system",
+    "definition": "Full canonicalization pipeline drawing on academic prior art (EDC/EMNLP 2024, Graphiti/Zep, SimpleMem). Four stages: Normalize & Embed, Cluster & Block, Consensus & Merge, Reify & Store. Targets ≥85% recall on semantic duplicates with ≤5% false-merge rate.",
+    "abbreviation": "CMC",
+    "defined_in": "docs/specs/cmc-spec-v0.1.md",
+    "aliases": []
+  },
+  {
+    "term": "MemoryShard",
+    "category": "primitive",
+    "definition": "Content-addressed bundle of knowledge atoms. shard_id = SHA-256 of canonical JSON of {atoms, scope, origin}.",
+    "defined_in": "spiritwriter/fabric/shard.py",
+    "aliases": [
+      "memory shard",
+      "Memory Shard"
+    ]
+  },
+  {
+    "term": "ShardAtom",
+    "category": "primitive",
+    "definition": "Single knowledge unit inside a MemoryShard. Has text, kind (fact|decision|convention|preference|entity|context|checkpoint|instruction), optional entity/key/value/confidence/source_ref.",
+    "defined_in": "spiritwriter/fabric/shard.py",
+    "aliases": []
+  },
+  {
+    "term": "TraceEmitter",
+    "category": "module",
+    "definition": "Writes hash-chained JSONL event logs — tamper-evident audit trail. Each event SHA-256s its own payload and links to the previous event's hash. Mutate any event after the fact, verify_chain() returns False.",
+    "defined_in": "spiritwriter/fabric/emitter.py",
+    "aliases": [
+      "trace emitter",
+      "Trace Emitter"
+    ]
+  },
+  {
+    "term": "verify_chain",
+    "category": "function",
+    "definition": "Pure function on a list of event dicts. Checks event hash, prev_event_hash linkage, first-event invariant. Cannot detect tail-truncation.",
+    "defined_in": "spiritwriter/fabric/emitter.py",
+    "aliases": []
+  },
+  {
+    "term": "capability",
+    "category": "primitive",
+    "definition": "Typed, signed token authorizing the holder to act within a defined attenuation. Capabilities form chains via parent_cap_id; leaf authority is the intersection of every caveat in the chain. A capability is NOT a shard — distinct primitive.",
+    "defined_in": "docs/substrate-flavor.md",
+    "aliases": [
+      "cap"
+    ]
+  },
+  {
+    "term": "cap_chain",
+    "category": "primitive",
+    "definition": "Ordered list of capability IDs from root to leaf. Used in TraceEmitter event context and provenance queries (events_under_chain).",
+    "defined_in": "spiritwriter/fabric/emitter.py",
+    "aliases": []
+  },
+  {
+    "term": "caveat",
+    "category": "primitive",
+    "definition": "Restriction on a capability. Closed set of three types: expires_at, scope_limit, max_delegation_depth. Verifiers MUST fail closed on unknown types.",
+    "defined_in": "docs/substrate-flavor.md",
+    "aliases": []
+  },
+  {
+    "term": "decay_class",
+    "category": "field",
+    "definition": "Memory shard field with five values: permanent | stable | active | session | checkpoint. Influences retention behavior.",
+    "defined_in": "docs/substrate-flavor.md",
+    "aliases": []
+  },
+  {
+    "term": "EncryptedShard",
+    "category": "primitive",
+    "definition": "AES-256-GCM symmetric encryption envelope for a MemoryShard. Operator and key-holder cooperate. Fields: shard_id, scope, encrypted_payload, nonce, atom_count, created_at, origin_agent, content_hash.",
+    "defined_in": "spiritwriter/fabric/crypto.py",
+    "aliases": []
+  },
+  {
+    "term": "SealedShard",
+    "category": "primitive",
+    "definition": "NaCl sealed-box (Curve25519 + XSalsa20-Poly1305) envelope for a MemoryShard. Operator never sees plaintext. Fields: shard_id, scope, sealed_payload, owner_pubkey, atom_count, created_at, origin_agent, content_hash.",
+    "defined_in": "spiritwriter/fabric/sealed.py",
+    "aliases": []
+  },
+  {
+    "term": "entitlement token",
+    "category": "primitive",
+    "definition": "Bearer credential packaging decryption keys + scopes + capabilities + budget for sub-agent delegation. Sub-agents present the token; the store validates and decrypts only what's entitled.",
+    "defined_in": "spiritwriter/fabric/entitlement.py",
+    "aliases": [
+      "entitlement",
+      "Entitlement Token"
+    ]
+  },
+  {
+    "term": "ResolutionTier",
+    "category": "primitive",
+    "definition": "Confidence tier for entity resolution. T1_EXACT (0.95) | T2_STRONG (0.85) | T3_FUZZY (0.70) | T4_WEAK (0.50) | NO_MATCH (0.0). T1+T2 auto-merge; T3+T4 flag-only.",
+    "defined_in": "spiritwriter/fabric/canonicalize.py",
+    "aliases": []
+  },
+  {
+    "term": "audit witness",
+    "category": "primitive",
+    "definition": "Self-hashing JSON document binding APK SHA-256 + every extracted file's hash + every finding's derivation event + final report hash. witness_sha256 is computed over the document with that field nulled.",
+    "defined_in": "spiritwriter/audit/provenance.py",
+    "aliases": [
+      "witness",
+      "Witness"
+    ]
+  },
+  {
+    "term": "rz-bin",
+    "category": "tool",
+    "definition": "Binary extractor from the Rizin reverse-engineering framework. Used by spiritwriter.audit to extract strings, imports, exports from DEX and .so files. Tested with rz-bin 0.8.2.",
+    "defined_in": "skills/audit/SKILL.md",
+    "aliases": [
+      "rizin",
+      "Rizin"
+    ]
+  },
+  {
+    "term": "Spiritwriter Substrate",
+    "category": "system",
+    "definition": "The content-addressed memory + capability wire format. Documented in docs/substrate-flavor.md. Library-free agents can produce/verify shards with just sha256 + Ed25519 + canonical JSON.",
+    "defined_in": "docs/substrate-flavor.md",
+    "aliases": [
+      "substrate"
+    ]
+  },
+  {
+    "term": "DEFERRED: revocation sets",
+    "category": "deferred",
+    "definition": "Capability revocation lists. Explicitly listed as future work in docs/substrate-flavor.md — NOT currently implemented. Do not claim this exists.",
+    "defined_in": "docs/substrate-flavor.md",
+    "aliases": [
+      "revocation",
+      "revocation list"
+    ]
+  },
+  {
+    "term": "DEFERRED: trust epochs",
+    "category": "deferred",
+    "definition": "Time-bounded trust periods. Explicitly listed as future work in docs/substrate-flavor.md — NOT currently implemented. Do not claim this exists.",
+    "defined_in": "docs/substrate-flavor.md",
+    "aliases": [
+      "trust epoch",
+      "trust epochs"
+    ]
+  },
+  {
+    "term": "DEFERRED: shards.spiritwriter.ai protocol",
+    "category": "deferred",
+    "definition": "HTTP protocol for shard distribution. Explicitly listed as future work in docs/substrate-flavor.md — NOT currently implemented. Do not claim this exists.",
+    "defined_in": "docs/substrate-flavor.md",
+    "aliases": [
+      "shards.spiritwriter.ai"
+    ]
+  },
+  {
+    "term": "INVENTED: SW-CAP",
+    "category": "invented",
+    "definition": "Acronym hallucinated by Claude Chat for what is actually documented as 'Spiritwriter Substrate' in docs/substrate-flavor.md. No SW-CAP spec exists. Use 'Spiritwriter Substrate' or 'capability' instead.",
+    "defined_in": "(does not exist)",
+    "aliases": [
+      "SW-CAP",
+      "SW-CAP v0.1",
+      "sw-cap",
+      "SW CAP"
+    ]
+  },
+  {
+    "term": "INVENTED: capability shard",
+    "category": "invented",
+    "definition": "Phrase hallucinated by Claude Chat. Capabilities and shards are DISTINCT primitives — a shard cites cap_id but the cap exists independently. Use 'capability' or 'cap' for the cap, 'MemoryShard' for the shard.",
+    "defined_in": "(does not exist)",
+    "aliases": [
+      "capability shards",
+      "cap shard"
+    ]
+  },
+  {
+    "term": "INVENTED: bootstrap shard",
+    "category": "invented",
+    "definition": "Phrase hallucinated by Claude Chat. 'Bootstrap' refers to giving an agent (this doc + trust roots + delegation bundle) — not a shard. See docs/substrate-flavor.md §5.",
+    "defined_in": "(does not exist)",
+    "aliases": [
+      "bootstrap shards"
+    ]
+  },
+  {
+    "term": "INVENTED: dual-key sealed-box",
+    "category": "invented",
+    "definition": "Phrase hallucinated by Claude Chat. The mechanism is plain NaCl sealed-box (Curve25519 + XSalsa20-Poly1305) — one ephemeral sender key + one owner keypair. Don't relabel it 'dual-key'.",
+    "defined_in": "(does not exist)",
+    "aliases": [
+      "dual-key sealed-box",
+      "dual-key sealed box",
+      "dual key sealed-box"
+    ]
+  },
+  {
+    "term": "INVENTED: OpenTelemetry span attributes for provenance",
+    "category": "invented",
+    "definition": "Hallucinated integration. spiritwriter trace does NOT use OpenTelemetry. Provenance queries are events_by_cap / events_by_role / events_by_signer / events_under_chain over JSONL.",
+    "defined_in": "(does not exist)",
+    "aliases": [
+      "OpenTelemetry span attributes",
+      "otel provenance"
+    ]
+  }
+]
