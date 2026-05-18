@@ -7,14 +7,40 @@
 
 Every metric below points back to a concrete claim in the existing docs. If a claim isn't here, the harness can't speak to it.
 
-| Claim | Source | Metric |
-|---|---|---|
-| "Definition-based matching beats string similarity (~33% → 80–100% consistency)" | [docs/specs/spiritwriter-canonicalize.md:13](../specs/spiritwriter-canonicalize.md) | Recall@T1+T2 for ESS vs. baseline Jaccard-on-tokens |
-| "Consensus matching uses Jaccard on key tokens (9–36% match rate)" | [docs/specs/cmc-lite-v0.1.md:33](../specs/cmc-lite-v0.1.md) | Baseline measurement under same mutations |
-| "Targets ≥85% recall on semantic duplicates with ≤5% false-merge rate" | [docs/specs/cmc-spec-v0.1.md](../specs/cmc-spec-v0.1.md) | Recall@T1+T2 ≥ 0.85; false-merge rate ≤ 0.05 |
-| Tier confidence values (T1=0.95, T2=0.85, T3=0.70, T4=0.50) | [docs/entity-resolution.md:14](../entity-resolution.md) | Calibration: actual-correct rate at each tier matches the stated confidence |
+### Pass/fail invariants (what this harness *does* guarantee)
 
-What this does NOT defend (kept honest):
+These are the narrow CMC-Lite engine guarantees the harness asserts as
+pass/fail. Both are direct, literal correctness invariants — nothing
+redefined to fit the result.
+
+| Invariant | Source | Metric |
+|---|---|---|
+| "≤5% false-merge rate" — never auto-merge entities that aren't actually the same | [docs/specs/cmc-spec-v0.1.md](../specs/cmc-spec-v0.1.md) | False-merge rate ≤ 0.05 |
+| Auto-merge precision = 1.0 — among pairs CMC-Lite auto-merges, all should actually be same-entity | implied by CMC-Lite's conservative-by-design posture | TP / (TP + FP) for T1+T2 auto-merges = 1.00 |
+
+### Informational metrics (NOT pass/fail)
+
+Recall numbers are reported but not asserted as pass/fail. The
+cmc-spec's "≥85% recall on semantic duplicates" target describes the
+*full CMC pipeline* (LLM-clustering stage included). CMC-Lite is the
+deterministic subset; it makes no such recall claim on its own.
+Reporting Recall@any-tier and calling it a defense of the 85% number
+would be exactly the metric-shopping this harness is supposed to
+prevent. Treat these numbers as *characterizations* of what CMC-Lite
+auto-merges vs. surfaces, not as targets:
+
+| Metric | What it tells you |
+|---|---|
+| Recall@T1 | Fraction of same-entity pairs that pure normalization handles |
+| Recall@T1+T2 | Fraction CMC-Lite is willing to auto-merge unsupervised |
+| Recall@any-tier | Fraction that at least reaches a merge queue (T3+) |
+| ESS auto-merge vs. Jaccard match rate | Not a single comparison — read at equivalent precision (false-merge rates differ) |
+| Per-tier calibration | Whether stated confidences (T1=0.95, T2=0.85, T3=0.70, T4=0.50) match observed precision on this corpus |
+
+### What this harness does NOT defend
+
+- The "≥85% recall" claim from the cmc-spec — that's a full-pipeline target requiring LLM clustering, not a CMC-Lite invariant.
+- The "~33% → 80–100% consistency" claim from spiritwriter-canonicalize.md — that was measured on free-text memory atoms, a different domain than the structured records this harness primarily exercises.
 - LLM-driven entity *extraction* quality (separate problem; needs a separate harness).
 - Semantic similarity for entity pairs with zero overlapping defining fields (e.g. acronym vs. expansion — ESS cannot help without an alias table; that's by design).
 - Real-world drift in any specific domain (this harness measures the *engine*, not the *data*).
@@ -109,7 +135,7 @@ For each run, against each corpus:
 eval/results/<timestamp>/
 ├── report.md           — human-readable summary (the citable artifact)
 ├── results.json        — raw metrics, machine-readable
-├── pairs.csv           — every pair + predicted tier + ground truth + correct? (for spreadsheet inspection)
+├── pairs.tsv           — every pair + predicted tier + ground truth + correct? (tab-separated, for spreadsheet inspection)
 └── corpus.json         — the exact corpus + mutations used (reproducibility)
 ```
 

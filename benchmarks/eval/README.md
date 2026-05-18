@@ -30,7 +30,7 @@ Each run writes a timestamped directory under
 ```
 report.md       — human-readable summary (the citable artifact)
 results.json    — machine-readable summary (CI / trend tracking)
-pairs.csv       — per-pair detail (spreadsheet inspection)
+pairs.tsv       — per-pair detail, tab-separated (spreadsheet inspection)
 ```
 
 ## Bring-your-own-corpus (ess_accuracy)
@@ -54,6 +54,12 @@ pairs.csv       — per-pair detail (spreadsheet inspection)
    domain-specific drift modes. Universal families (case, whitespace,
    typo, unicode, negative control) are always applied — your file
    adds on top.
+
+   **Security note.** `mutations.py` is imported and executed. For
+   shipped corpora under `benchmarks/eval/ess_accuracy/data/` this is
+   automatic. For corpora outside that tree, you must pass
+   `--allow-untrusted-mutations` to opt in. Only enable for corpora
+   you trust (your own, or content you've reviewed).
 
 4. Run:
    ```bash

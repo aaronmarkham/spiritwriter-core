@@ -258,19 +258,34 @@ def _entity_key(entity: dict, ess_fields: list[str]) -> str:
 
 
 def render_markdown(report: AccuracyReport) -> str:
-    """Human-readable summary suitable for the citable artifact."""
-    # Targets:
-    # - Recall@any-tier ≥ 0.85: every same-entity drift mode must at least
-    #   surface for review. This is what defends "≥85% recall" — at the
-    #   surfacing level, not auto-merge.
-    # - False-merge rate ≤ 0.05: directly defends "≤5% false-merge" from CMC.
-    # - ESS − Jaccard > 0: defends "definition-based beats string similarity".
-    target_recall_any = 0.85
-    target_false_merge = 0.05
+    """Human-readable summary suitable for the citable artifact.
 
-    recall_any_pass = "PASS" if report.recall_any_tier >= target_recall_any else "FAIL"
+    Pass/fail targets in the headline are deliberately narrow — only the
+    invariants CMC-Lite is supposed to guarantee. Bulk recall numbers are
+    informational, not pass/fail, because choosing the recall metric to
+    declare "PASS" against the spec's 85% number would be exactly the
+    metric-shopping this harness exists to prevent.
+    """
+    # CMC-Lite's actual invariants (what we can defend as pass/fail):
+    #   1. No false auto-merges (≤5% — directly from cmc-spec false-merge target)
+    #   2. ESS auto-merge precision = 1.0 (no incorrect T1/T2 verdicts)
+    #
+    # The cmc-spec's "≥85% recall on semantic duplicates" target describes
+    # the *full CMC pipeline* (LLM-clustering stage included). CMC-Lite is
+    # the deterministic subset; it does not claim 85% recall on its own.
+    # Recall numbers below are reported as informational; do not interpret
+    # them as defending the cmc-spec recall target.
+    target_false_merge = 0.05
+    target_auto_merge_precision = 1.00
+
+    # ESS auto-merge precision: among pairs we DID auto-merge, what
+    # fraction were actually same-entity?
+    n_ess_tp = sum(1 for p in report.pairs if p.same_entity and p.ess_tier in _AUTO_MERGE)
+    n_ess_fp = sum(1 for p in report.pairs if not p.same_entity and p.ess_tier in _AUTO_MERGE)
+    ess_auto_precision = n_ess_tp / (n_ess_tp + n_ess_fp) if (n_ess_tp + n_ess_fp) else 1.0
+
     fm_pass = "PASS" if report.false_merge_rate <= target_false_merge else "FAIL"
-    ess_beats_jaccard = "PASS" if report.ess_minus_jaccard > 0 else "FAIL"
+    prec_pass = "PASS" if ess_auto_precision >= target_auto_merge_precision else "FAIL"
 
     lines: list[str] = []
     lines.append(f"# ESS Accuracy Report — {report.generated_at}")
@@ -283,36 +298,43 @@ def render_markdown(report: AccuracyReport) -> str:
     if report.jaccard_fields:
         lines.append(f"baseline tokenization fields: `{report.jaccard_fields}`")
     lines.append("")
-    lines.append("## Headline")
+    lines.append("## Pass/fail invariants — CMC-Lite engine guarantees")
     lines.append("")
-    lines.append(f"| metric | value | target | result |")
+    lines.append("These are the narrow correctness guarantees CMC-Lite makes. "
+                 "The cmc-spec's `≥85% recall` target is for the *full* CMC "
+                 "pipeline (including LLM clustering); CMC-Lite is the "
+                 "deterministic subset and does not claim that number. "
+                 "Recall metrics below are reported as informational only.")
+    lines.append("")
+    lines.append(f"| invariant | value | target | result |")
     lines.append(f"|---|---:|---:|:---:|")
-    lines.append(f"| Recall@any-tier (surfaced for review) | {report.recall_any_tier:.3f} | ≥{target_recall_any:.2f} | {recall_any_pass} |")
     lines.append(f"| False-merge rate (auto-merge of different entities) | {report.false_merge_rate:.3f} | ≤{target_false_merge:.2f} | {fm_pass} |")
-    lines.append(f"| ESS auto-merge − Jaccard match rate | {report.ess_minus_jaccard:+.3f} | positive | {ess_beats_jaccard} |")
-    lines.append(f"| Recall@T1+T2 (auto-merge only) | {report.recall_t1_t2:.3f} | (info) | |")
-    lines.append(f"| Recall@T1 (exact only) | {report.recall_t1:.3f} | (info) | |")
-    lines.append(f"| Jaccard same-entity match rate | {report.jaccard_match_rate:.3f} | (info) | |")
-    lines.append(f"| Jaccard false-merge rate | {report.jaccard_false_merge_rate:.3f} | (info) | |")
+    lines.append(f"| ESS auto-merge precision (TP / (TP + FP)) | {ess_auto_precision:.3f} | ={target_auto_merge_precision:.2f} | {prec_pass} |")
     lines.append("")
-    lines.append("**Reading the headline:**")
+    lines.append("## Recall — informational")
     lines.append("")
-    lines.append("- *Recall@any-tier* is the right primary metric for CMC-Lite: it asks "
-                 "*\"of pairs we should have considered the same, what fraction did we at "
-                 "least flag for review?\"* CMC-Lite is intentionally conservative — T1+T2 "
-                 "auto-merge, T3+T4 surface to a merge queue for human or higher-confidence "
-                 "review. A drift mode that lands at T3 isn't a miss; it's by design.")
-    lines.append("- *Recall@T1+T2* is reported separately as the *auto-merge* fraction. "
-                 "Lower numbers here mean the engine is being conservative, not wrong. "
-                 "The target depends on operational tolerance for unsupervised merges.")
-    lines.append("- *ESS vs Jaccard at equivalent precision*: comparing raw recall is "
-                 "misleading. Read the table below — Jaccard's higher same-entity match "
-                 "rate is bought with a non-trivial false-merge rate; ESS holds false-merge "
-                 "to zero and surfaces the rest for review.")
-    lines.append("- *Jaccard tokenization* deliberately excludes strong-anchor fields (e.g. "
-                 "DOB tokenized as numeric tokens) when configured per-corpus. With strong "
-                 "anchors preserved, Jaccard trivially matches almost any name drift; the "
-                 "comparison is honest only when both sides compete on the same surface forms.")
+    lines.append(f"| metric | value | meaning |")
+    lines.append(f"|---|---:|---|")
+    lines.append(f"| Recall@T1 (exact only) | {report.recall_t1:.3f} | Pure normalization handles this fraction |")
+    lines.append(f"| Recall@T1+T2 (auto-merge) | {report.recall_t1_t2:.3f} | Auto-mergeable without human review |")
+    lines.append(f"| Recall@any-tier (surfaced) | {report.recall_any_tier:.3f} | Reaches at least T3 for human or higher-confidence review |")
+    lines.append(f"| Jaccard same-entity match rate | {report.jaccard_match_rate:.3f} | Baseline at threshold 0.80 |")
+    lines.append(f"| Jaccard false-merge rate | {report.jaccard_false_merge_rate:.3f} | Cost of baseline's recall |")
+    lines.append("")
+    lines.append("**Honest reading of these numbers:**")
+    lines.append("")
+    lines.append("- Recall@T1+T2 is the auto-merge fraction. Lower numbers here "
+                 "mean the engine is being conservative, not wrong. The "
+                 "operational target depends on how much human review you tolerate.")
+    lines.append("- Recall@any-tier is what reaches a merge queue. CMC-Lite "
+                 "surfaces drift modes it doesn't auto-merge — they're not "
+                 "missed, they're flagged. But \"surfaced for review\" is not "
+                 "the same thing as the cmc-spec's full-pipeline recall claim.")
+    lines.append("- Jaccard tokenization deliberately excludes strong-anchor "
+                 "fields (e.g. DOB tokenized as numeric tokens) when configured "
+                 "per-corpus. With anchors preserved, Jaccard trivially matches "
+                 "almost any name drift; the comparison is honest only when "
+                 "both sides compete on the same surface forms.")
     lines.append("")
     lines.append("## ESS vs Jaccard at equivalent precision")
     lines.append("")
@@ -371,6 +393,9 @@ def render_markdown(report: AccuracyReport) -> str:
     lines.append("")
     lines.append("`negative_control` is the false-merge canary — recall columns")
     lines.append("aren't meaningful (no same-entity pairs); false-merge MUST be 0.")
+    lines.append("These mutations garble one ESS field at a time and leave the")
+    lines.append("others intact, so each negative pair shares N-1 of N anchors with")
+    lines.append("its canonical — a harder false-merge test than fully-disjoint records.")
     lines.append("")
 
     lines.append("## Honest limitations")
@@ -393,7 +418,7 @@ def render_markdown(report: AccuracyReport) -> str:
 
 
 def write_outputs(report: AccuracyReport, out_dir: Path) -> None:
-    """Write report.md + results.json + pairs.csv to out_dir."""
+    """Write report.md + results.json + pairs.tsv to out_dir."""
     out_dir.mkdir(parents=True, exist_ok=True)
 
     (out_dir / "report.md").write_text(render_markdown(report), encoding="utf-8")
@@ -401,16 +426,16 @@ def write_outputs(report: AccuracyReport, out_dir: Path) -> None:
         json.dumps(_strip_pairs(report.to_json()), indent=2),
         encoding="utf-8",
     )
-    _write_pairs_csv(report, out_dir / "pairs.csv")
+    _write_pairs_tsv(report, out_dir / "pairs.tsv")
 
 
 def _strip_pairs(report_dict: dict[str, Any]) -> dict[str, Any]:
-    """For results.json keep summary; pairs.csv carries the per-pair detail."""
+    """For results.json keep summary; pairs.tsv carries the per-pair detail."""
     out = {k: v for k, v in report_dict.items() if k != "pairs"}
     return out
 
 
-def _write_pairs_csv(report: AccuracyReport, path: Path) -> None:
+def _write_pairs_tsv(report: AccuracyReport, path: Path) -> None:
     """Tab-separated to avoid quoting headaches with names containing commas."""
     lines = [
         "\t".join([

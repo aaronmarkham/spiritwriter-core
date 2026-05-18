@@ -38,6 +38,8 @@ from typing import Any
 from spiritwriter.fabric.canonicalize import (
     CanonicalRegistry,
     CanonicalSchema,
+    EntitySenseSig,
+    ResolutionResult,
     ResolutionTier,
 )
 
@@ -111,6 +113,9 @@ class CspKbTrialReport:
     n_entities_in_index: int
     n_entities_scanned: int
     n_entities_with_variation: int
+    n_ess_collisions: int          # LLM-entities collapsed at seed time
+                                   # because they share an ESS digest
+    n_distinct_canonicals: int     # entities scanned minus collisions
     n_pairs_intra: int
     n_pairs_cross_source: int
 
@@ -124,6 +129,7 @@ class CspKbTrialReport:
 
     per_tier_intra: dict[str, int] = field(default_factory=dict)
     per_tier_cross: dict[str, int] = field(default_factory=dict)
+    collision_groups: list[list[str]] = field(default_factory=list)
     rows: list[ResolutionRow] = field(default_factory=list)
     generated_at: str = field(
         default_factory=lambda: datetime.now(timezone.utc).strftime(
@@ -157,23 +163,64 @@ def run_trial(kg_path: Path) -> CspKbTrialReport:
 
     rows: list[ResolutionRow] = []
 
+    # Force each LLM-extracted entity to become its own canonical at seed
+    # time. If we let resolve() decide tier, fuzzily-similar entities (e.g.
+    # "PEFT" already in the registry → "Peft" gets T1, "Pet" gets T3) would
+    # collapse into one canonical and inflate later resolution recall as an
+    # artifact of seeding order. The measurement we care about is on variant
+    # forms found in atom text, not on canonical-vs-canonical similarity.
+    #
+    # Hard ESS collisions (e.g. two LLM-extracted entities that normalize to
+    # the same string) are detected up front and recorded — they're a real
+    # finding ("the LLM treated these as distinct, but by ESS they're the
+    # same entity") rather than something to mask.
+    _force_no_match = ResolutionResult(
+        tier=ResolutionTier.NO_MATCH,
+        confidence=0.0,
+        canonical_id=None,
+        field_matches={},
+        notes="forced seed: each LLM-extracted entity gets its own canonical",
+    )
+
+    # Pre-compute each entity's canonical surface form and ESS digest.
+    entity_canonical_form: dict[str, str] = {}
+    digest_to_entities: dict[str, list[str]] = defaultdict(list)
+    for entity, source_map in forms_by_entity.items():
+        all_forms: Counter = Counter()
+        for source_id, forms in source_map.items():
+            all_forms.update(forms)
+        if not all_forms:
+            continue
+        canonical_form = all_forms.most_common(1)[0][0]
+        entity_canonical_form[entity] = canonical_form
+        ess = EntitySenseSig.compute(term=canonical_form)
+        digest_to_entities[ess.digest].append(entity)
+
+    collision_groups = [
+        sorted(ents) for ents in digest_to_entities.values() if len(ents) > 1
+    ]
+    n_ess_collisions = sum(len(g) - 1 for g in collision_groups)
+
     with tempfile.TemporaryDirectory(
         prefix="csp_kb_eval_", ignore_cleanup_errors=True
     ) as tmp:
         with CanonicalRegistry(Path(tmp) / "reg.db", schema) as registry:
-            # For each entity, pick its most-frequent surface form as canonical
-            # and seed the registry with it.
+            # Seed: one upsert per *distinct* ESS digest. Within a collision
+            # group, pick the first entity (sorted) as the representative.
             seeded_canonicals: dict[str, str] = {}
-            for entity, source_map in forms_by_entity.items():
-                all_forms: Counter = Counter()
-                for source_id, forms in source_map.items():
-                    all_forms.update(forms)
-                if not all_forms:
+            seeded_digests: set[str] = set()
+            for entity, canonical_form in entity_canonical_form.items():
+                ess = EntitySenseSig.compute(term=canonical_form)
+                if ess.digest in seeded_digests:
+                    # Same ESS as a previously-seeded entity. Record this
+                    # entity as resolving to the existing canonical for the
+                    # variant-pass step; don't try to re-upsert.
+                    seeded_canonicals[entity] = canonical_form
                     continue
-                canonical_form = all_forms.most_common(1)[0][0]
                 cand = {"term": canonical_form}
-                result = registry.resolve(cand)
-                registry.upsert(cand, result, "csp_kb_eval", f"seed:{entity}")
+                registry.upsert(cand, _force_no_match, "csp_kb_eval", f"seed:{entity}")
+                seeded_digests.add(ess.digest)
+                seeded_canonicals[entity] = canonical_form
                 seeded_canonicals[entity] = canonical_form
 
             # For each entity, test resolution of every other distinct
@@ -207,7 +254,11 @@ def run_trial(kg_path: Path) -> CspKbTrialReport:
                             ess_confidence=result.confidence,
                         ))
 
-    return _summarize(kg_path, kg, forms_by_entity, rows)
+    return _summarize(
+        kg_path, kg, forms_by_entity, rows,
+        n_ess_collisions=n_ess_collisions,
+        collision_groups=collision_groups,
+    )
 
 
 def _summarize(
@@ -215,6 +266,9 @@ def _summarize(
     kg: dict,
     forms_by_entity: dict,
     rows: list[ResolutionRow],
+    *,
+    n_ess_collisions: int,
+    collision_groups: list[list[str]],
 ) -> CspKbTrialReport:
     intra = [r for r in rows if r.same_source]
     cross = [r for r in rows if not r.same_source]
@@ -244,6 +298,9 @@ def _summarize(
         n_entities_in_index=len(kg["entity_index"]),
         n_entities_scanned=len(forms_by_entity),
         n_entities_with_variation=n_with_var,
+        n_ess_collisions=n_ess_collisions,
+        n_distinct_canonicals=len(forms_by_entity) - n_ess_collisions,
+        collision_groups=collision_groups,
         n_pairs_intra=len(intra),
         n_pairs_cross_source=len(cross),
         intra_recall_t1=intra_t1,
@@ -270,6 +327,9 @@ def render_markdown(report: CspKbTrialReport) -> str:
         "",
         f"- Entities in `entity_index`: {report.n_entities_in_index}",
         f"- Entities scanned (after short/common filter): {report.n_entities_scanned}",
+        f"- Distinct ESS canonicals after seeding: {report.n_distinct_canonicals}",
+        f"- ESS collisions at seed time: {report.n_ess_collisions} "
+        f"(LLM-extracted entities that normalize to the same ESS digest)",
         f"- Entities with multiple surface forms: {report.n_entities_with_variation}",
         f"- Intra-source variant pairs tested: {report.n_pairs_intra}",
         f"- Cross-source variant pairs tested: {report.n_pairs_cross_source}",

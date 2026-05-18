@@ -12,6 +12,7 @@ in each corpus's ``mutations.py``.
 
 from __future__ import annotations
 
+import hashlib
 import random
 import unicodedata
 from dataclasses import dataclass, field
@@ -185,8 +186,15 @@ def _gen_negative_control(
 ) -> list[Mutation]:
     """Replace each ESS field with a clearly-different value.
 
-    This is the false-merge canary — these MUST resolve to NO_MATCH or
-    T4_WEAK, never T1/T2/T3.
+    This is the false-merge canary — these MUST NOT resolve to T1/T2.
+
+    Note on scope: mutations garble one ESS field at a time, leaving
+    the others intact. With a 3-field schema this produces records that
+    share 2 of 3 anchors with the canonical — a *harder* false-merge
+    test than fully-disjoint records, because the engine has to refuse
+    to merge despite partial agreement. Worth keeping in mind when
+    comparing the negative_control row to a Jaccard-on-disjoint-records
+    baseline.
     """
     out: list[Mutation] = []
     fields = _string_fields(record, ess_fields)
@@ -228,11 +236,19 @@ UNIVERSAL_FAMILIES: list[MutationFamily] = [
 
 
 def _seed(record: dict[str, Any], salt: str) -> int:
-    """Deterministic per-record seed so the same canonical produces the same mutation."""
+    """Deterministic per-record seed so the same canonical produces the same
+    mutation — *across processes*, not just within one.
+
+    Python's built-in ``hash()`` is randomized per-process via
+    ``PYTHONHASHSEED``, which means typo positions chosen by a Random()
+    instance seeded with hash() would differ between runs. Use
+    blake2b so trend-tracking and reproducibility actually hold.
+    """
     key = salt + "|" + "|".join(
         f"{k}={v}" for k, v in sorted(record.items()) if v is not None
     )
-    return hash(key) & 0xFFFFFFFF
+    digest = hashlib.blake2b(key.encode("utf-8"), digest_size=4).digest()
+    return int.from_bytes(digest, "big")
 
 
 _ALPHA = "abcdefghijklmnopqrstuvwxyz"

@@ -8,7 +8,7 @@ Usage::
 
 Produces an output directory under ``benchmarks/eval/ess_accuracy/results/``
 containing report.md (citable summary), results.json (machine-readable
-summary), pairs.csv (per-pair detail for spreadsheet inspection).
+summary), pairs.tsv (per-pair detail for spreadsheet inspection).
 """
 
 from __future__ import annotations
@@ -40,9 +40,15 @@ def _spiritwriter_version() -> str:
         return "unknown"
 
 
-def run(corpus_arg: str, out_dir: Path | None = None, *, print_report: bool = True) -> Path:
+def run(
+    corpus_arg: str,
+    out_dir: Path | None = None,
+    *,
+    print_report: bool = True,
+    allow_untrusted_mutations: bool = False,
+) -> Path:
     """Run the harness against one corpus, write artifacts, return out_dir."""
-    corpus = load_corpus(corpus_arg)
+    corpus = load_corpus(corpus_arg, allow_untrusted_mutations=allow_untrusted_mutations)
 
     # Always use a fresh temp registry — we don't want state from prior runs
     # bleeding into accuracy numbers. ignore_cleanup_errors is set because
@@ -88,8 +94,17 @@ def main() -> None:
         "--quiet", action="store_true",
         help="Suppress markdown report on stdout; only write artifacts.",
     )
+    parser.add_argument(
+        "--allow-untrusted-mutations", action="store_true",
+        help="Opt in to loading mutations.py from corpora outside the "
+             "shipped data/ tree. mutations.py executes arbitrary Python; "
+             "only enable for corpora you trust.",
+    )
     args = parser.parse_args()
-    run(args.corpus, args.out, print_report=not args.quiet)
+    run(
+        args.corpus, args.out, print_report=not args.quiet,
+        allow_untrusted_mutations=args.allow_untrusted_mutations,
+    )
 
 
 if __name__ == "__main__":
