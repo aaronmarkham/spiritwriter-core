@@ -192,6 +192,40 @@ decrypted = unseal_shard(sealed, keypair.private_key)
 
 Note that `owner_pubkey` is stored alongside the sealed payload. That's deliberate: it lets the operator address subsequent results back to the same owner without holding any per-owner state.
 
+### Per-Seal Uniqueness for Low-Entropy Plaintext
+
+`SealedShard.shard_id` is the content address of the *plaintext* shard — it's how content-addressing works throughout the system. That has a consequence the caller needs to be aware of: if the plaintext shard's content has low entropy (e.g., a short name in a known schema), an operator who can read the shard metadata can dictionary-attack the `shard_id` to confirm specific content. They reconstruct the canonical atoms+scope+origin for a candidate plaintext, hash it, and compare.
+
+For most uses this is fine — knowledge shards, traces, jobs are high-entropy enough that brute-forcing the content address isn't a realistic attack. But callers whose threat model includes "the operator must not be able to confirm whether plaintext X was sealed" (e.g. searching for a specific person by name) need to add high-entropy content into the shard itself.
+
+The standard pattern is a **nonce atom**:
+
+```python
+import secrets
+from spiritwriter.fabric.shard import ShardAtom, AtomKind, MemoryShard
+
+shard = MemoryShard(
+    atoms=[
+        ShardAtom(text=f"Search target: {name}", kind=AtomKind.ENTITY, ...),
+        # high-entropy atom — 128 bits, ASCII via secrets.token_urlsafe
+        ShardAtom(
+            text="[nonce]",
+            kind=AtomKind.CONTEXT,
+            entity="system",
+            key="nonce",
+            value=secrets.token_urlsafe(16),
+        ),
+    ],
+    scope="search:active",
+    origin="intake:web",
+)
+sealed = seal_shard(shard, keypair.public_key)
+```
+
+Two shards with the same name now produce different `shard_id`s, so the operator can't dictionary-attack the id. Content-addressing still works because the nonce is part of the content. Dedup of plaintext shards still works for *intentionally identical* shards (callers who omit the nonce by choice).
+
+Put the nonce in `atoms` rather than `meta` — `meta` doesn't participate in `shard_id` computation, so a `meta.nonce` would not affect the hash.
+
 ### Ed25519 Signing for Result Integrity
 
 Sealed-box keeps content private but doesn't prove who produced it. For "this came from service X, not someone impersonating service X," sign with Ed25519:

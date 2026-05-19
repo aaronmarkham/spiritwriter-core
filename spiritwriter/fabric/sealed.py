@@ -22,6 +22,17 @@ Key concepts:
 - seal_for_owner(): encrypt plaintext so only the owner's private key can decrypt
 - unseal_as_owner(): owner decrypts with their private key
 - SealedShard: encrypted shard with owner_pubkey for result delivery
+
+Note on shard_id and low-entropy plaintext:
+    SealedShard.shard_id is the content address of the PLAINTEXT shard,
+    which keeps content-addressing consistent across the system. For most
+    uses this is fine, but if your threat model includes "operator must
+    not be able to confirm whether plaintext X was sealed" and plaintext
+    space is small (e.g., names), the operator can dictionary-attack
+    shard_id by reconstructing candidate atoms+scope+origin and hashing.
+    The fix is at the *caller* layer: include a high-entropy nonce atom
+    in the shard before sealing. See docs/encryption.md, section
+    "Per-Seal Uniqueness for Low-Entropy Plaintext".
 """
 
 from __future__ import annotations
