@@ -178,6 +178,11 @@ def validate_candidate(
     # Fuzzy fallback — catches drift we haven't recorded as an alias yet.
     # If the fuzzy hit lands on an invented/deferred term, escalate to that
     # category rather than reporting it as generic fuzzy_drift.
+    #
+    # T4_WEAK is deliberately excluded: it fires on context-field overlap
+    # (and there are no context fields configured for this schema), and a
+    # T4 match on a single string field would mean the fuzzy score is too
+    # low to be meaningful — better to report as unknown_term.
     result = registry.resolve({"term": candidate_term})
     if result.tier in (ResolutionTier.T1_EXACT, ResolutionTier.T2_STRONG, ResolutionTier.T3_FUZZY):
         entity = registry.get_entity(result.canonical_id)
@@ -322,28 +327,52 @@ def validate_text(
     # in the text. These are the dangerous categories — if "SW-CAP" or
     # "trust epochs" appears anywhere in prose, we want it flagged.
     # Skip categories the doc has opted out of.
+    #
+    # Performance: build one union pattern per category (not one per
+    # alias). For ~50 aliases this is 2 compiles + 2 finditer passes
+    # instead of 50 compiles + 50 search calls per call.
     if include_alias_scan:
-        for alias, record in alias_index.items():
-            cat = record["category"]
-            if cat not in ("invented", "deferred"):
-                continue
+        for cat, issue_type in (("invented", "invented_term"),
+                                ("deferred", "deferred_term")):
             if cat in opt_outs:
                 continue
-            # Word-boundary substring match (avoid e.g. "cap" matching "capture")
-            pattern = re.compile(r"\b" + re.escape(alias) + r"\b", re.IGNORECASE)
-            if pattern.search(text):
-                issue_type = "invented_term" if cat == "invented" else "deferred_term"
-                key = (issue_type, alias)
+            scanner = _build_category_scanner(alias_index, cat)
+            if scanner is None:
+                continue
+            for m in scanner.finditer(text):
+                alias_lc = m.group(0).lower()
+                record = alias_index.get(alias_lc)
+                if record is None:
+                    continue
+                key = (issue_type, alias_lc)
                 if key not in seen_drift:
                     seen_drift.add(key)
                     issues.append({
-                        "term": alias,
+                        "term": alias_lc,
                         "issue": issue_type,
                         "canonical": record["canonical"],
                         "note": record["definition"],
                     })
 
     return issues
+
+
+def _build_category_scanner(
+    alias_index: dict[str, dict[str, Any]], category: str
+) -> re.Pattern | None:
+    """Compile a single union pattern matching any alias in ``category``.
+
+    Aliases are sorted longest-first so that a longer-form alias (e.g.
+    "capability shards") matches before a shorter overlapping one (e.g.
+    "cap"), which avoids spurious sub-matches eating the longer term.
+    Returns None if the category has no aliases.
+    """
+    aliases = [a for a, rec in alias_index.items() if rec["category"] == category]
+    if not aliases:
+        return None
+    aliases.sort(key=len, reverse=True)
+    pattern_str = r"\b(?:" + "|".join(re.escape(a) for a in aliases) + r")\b"
+    return re.compile(pattern_str, re.IGNORECASE)
 
 
 def validate_doc(

@@ -17,8 +17,7 @@
     "definition": "SQLite-backed runtime engine for definition-based entity resolution. Domain-agnostic — supply a CanonicalSchema describing how your entities are identified.",
     "defined_in": "spiritwriter/fabric/canonicalize.py",
     "aliases": [
-      "canonical registry",
-      "Canonical Registry"
+      "canonical registry"
     ]
   },
   {
@@ -27,8 +26,7 @@
     "definition": "spiritwriter-core's definition-based entity resolution system. Renamed from 'shingles' (overlapping shields metaphor > overlapping roof tiles, avoids medical connotation). Encompasses CanonicalRegistry + overlapping-window extraction.",
     "defined_in": "docs/entity-resolution.md",
     "aliases": [
-      "shingles",
-      "Shingles"
+      "shingles"
     ]
   },
   {
@@ -38,8 +36,7 @@
     "defined_in": "docs/specs/cmc-lite-v0.1.md",
     "aliases": [
       "CMC Lite",
-      "cmc-lite",
-      "CMC-lite"
+      "cmc-lite"
     ]
   },
   {
@@ -56,8 +53,7 @@
     "definition": "Content-addressed bundle of knowledge atoms. shard_id = SHA-256 of canonical JSON of {atoms, scope, origin}.",
     "defined_in": "spiritwriter/fabric/shard.py",
     "aliases": [
-      "memory shard",
-      "Memory Shard"
+      "memory shard"
     ]
   },
   {
@@ -73,8 +69,7 @@
     "definition": "Writes hash-chained JSONL event logs — tamper-evident audit trail. Each event SHA-256s its own payload and links to the previous event's hash. Mutate any event after the fact, verify_chain() returns False.",
     "defined_in": "spiritwriter/fabric/emitter.py",
     "aliases": [
-      "trace emitter",
-      "Trace Emitter"
+      "trace emitter"
     ]
   },
   {
@@ -135,7 +130,7 @@
     "defined_in": "spiritwriter/fabric/entitlement.py",
     "aliases": [
       "entitlement",
-      "Entitlement Token"
+      "entitlement token"
     ]
   },
   {
@@ -151,8 +146,7 @@
     "definition": "Self-hashing JSON document binding APK SHA-256 + every extracted file's hash + every finding's derivation event + final report hash. witness_sha256 is computed over the document with that field nulled.",
     "defined_in": "spiritwriter/audit/provenance.py",
     "aliases": [
-      "witness",
-      "Witness"
+      "witness"
     ]
   },
   {
@@ -161,8 +155,7 @@
     "definition": "Binary extractor from the Rizin reverse-engineering framework. Used by spiritwriter.audit to extract strings, imports, exports from DEX and .so files. Tested with rz-bin 0.8.2.",
     "defined_in": "skills/audit/SKILL.md",
     "aliases": [
-      "rizin",
-      "Rizin"
+      "rizin"
     ]
   },
   {
@@ -211,7 +204,6 @@
     "aliases": [
       "SW-CAP",
       "SW-CAP v0.1",
-      "sw-cap",
       "SW CAP"
     ]
   },

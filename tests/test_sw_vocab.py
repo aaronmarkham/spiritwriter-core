@@ -43,11 +43,93 @@ def test_seed_populates_registry(tmp_path):
 
 def test_seed_is_idempotent(tmp_path):
     db = tmp_path / "vocab.db"
-    r1 = seed(db_path=db)
-    count_first = len(list(r1.entities()))
-    r2 = seed(db_path=db)
-    count_second = len(list(r2.entities()))
+    with seed(db_path=db) as r1:
+        count_first = len(list(r1.entities()))
+    with seed(db_path=db) as r2:
+        count_second = len(list(r2.entities()))
     assert count_first == count_second
+
+
+def test_seed_raises_stale_metadata_when_aliases_change(tmp_path):
+    """The bug PR #54 review caught: editing aliases on an existing term
+    silently no-ops on plain re-seed (T1_EXACT skips). Now we detect it
+    and raise so the user knows to use --force."""
+    from spiritwriter.sw_vocab.seed import StaleMetadataError, seed as do_seed
+
+    db = tmp_path / "vocab.db"
+    with do_seed(db_path=db):
+        pass  # seed the baseline
+
+    extra_edited = [{
+        "term": "Entity Sense Signature",
+        "category": "primitive",
+        "definition": "Edited description",
+        "abbreviation": "ESS",
+        "defined_in": "spiritwriter/fabric/canonicalize.py",
+        "aliases": ["BRAND NEW ALIAS"],  # change from the bundled aliases
+    }]
+    with pytest.raises(StaleMetadataError) as exc_info:
+        do_seed(db_path=db, extra=extra_edited)
+    assert "force=True" in str(exc_info.value) or "--force" in str(exc_info.value)
+
+
+def test_seed_force_wipes_db_and_does_not_raise(tmp_path):
+    """force=True skips the stale-metadata check and rebuilds from scratch.
+
+    This proves the escape hatch works. The "edit aliases on an existing
+    bundled term and have them picked up" workflow is documented as
+    `--force` and is exercised by the bundled-edit flow at the JSON level
+    (test-wise, see how _wipe_db deletes the DB before rebuild).
+    """
+    from spiritwriter.sw_vocab.seed import seed as do_seed
+
+    db = tmp_path / "vocab.db"
+    with do_seed(db_path=db):
+        pass  # baseline seed
+
+    # Edit the *test-only* term via extra. With force, this rebuilds the
+    # DB cleanly without hitting the stale-metadata check.
+    extra = [{
+        "term": "Test New Canonical",
+        "category": "primitive",
+        "definition": "A test-only term to verify force flow.",
+        "aliases": ["test new", "tnc"],
+    }]
+    with do_seed(db_path=db, extra=extra, force=True) as r:
+        issue = validate_candidate("tnc", r)
+    assert issue is not None
+    assert issue["issue"] == "known_drift"
+    assert issue["canonical"] == "Test New Canonical"
+
+
+def test_seed_rejects_invented_term_without_prefix(tmp_path):
+    """Convention enforcement at seed time, not just in tests."""
+    from spiritwriter.sw_vocab.seed import seed as do_seed
+
+    db = tmp_path / "vocab.db"
+    extra_bad = [{
+        "term": "Something Invented",  # missing INVENTED: prefix
+        "category": "invented",
+        "definition": "An invented thing without the right prefix",
+        "aliases": [],
+    }]
+    with pytest.raises(ValueError, match="INVENTED:"):
+        do_seed(db_path=db, extra=extra_bad)
+
+
+def test_seed_rejects_deferred_term_without_prefix(tmp_path):
+    """Same convention check for deferred terms."""
+    from spiritwriter.sw_vocab.seed import seed as do_seed
+
+    db = tmp_path / "vocab.db"
+    extra_bad = [{
+        "term": "Something Deferred",
+        "category": "deferred",
+        "definition": "Deferred without prefix",
+        "aliases": [],
+    }]
+    with pytest.raises(ValueError, match="DEFERRED:"):
+        do_seed(db_path=db, extra=extra_bad)
 
 
 def test_canonical_term_list_groups_invented_first(seeded_registry):
@@ -315,6 +397,22 @@ def test_seed_data_all_have_required_fields():
         assert "term" in t, f"Missing term in: {t}"
         assert "category" in t, f"Missing category in: {t}"
         assert "definition" in t, f"Missing definition in: {t}"
+
+
+def test_no_case_redundant_aliases():
+    """Aliases differing only in case are redundant — lookup is
+    case-insensitive, so adding both bulks the JSON without affecting
+    behavior. Catch them at load time so the seed file stays tidy."""
+    terms = bundled_terms()
+    for t in terms:
+        seen: set[str] = set()
+        for alias in t.get("aliases", []):
+            lc = alias.lower()
+            assert lc not in seen, (
+                f"Term {t['term']!r} has case-redundant aliases including "
+                f"{alias!r} — lookup is case-insensitive, drop one."
+            )
+            seen.add(lc)
 
 
 def test_invented_entries_use_invented_prefix():

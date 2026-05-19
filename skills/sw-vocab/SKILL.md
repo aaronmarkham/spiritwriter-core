@@ -53,13 +53,32 @@ python -m spiritwriter.sw_vocab.seed      # one-time: populate canonical terms D
 
 ### Step 1 — Validate a doc
 
+From the CLI (the easy path):
+
+```bash
+# Single file
+python -m spiritwriter.sw_vocab validate docs/some-draft.md
+
+# Directory (recursive *.md walk)
+python -m spiritwriter.sw_vocab validate docs/
+
+# Custom failure policy (default: invented_term,deferred_term)
+python -m spiritwriter.sw_vocab validate docs/ --fail-on invented_term,deferred_term,known_drift
+```
+
+Exit code is 0 if no failing issues, 1 if any. Other issue types
+(`fuzzy_drift`, `unknown_term`) are reported with `--verbose` but
+don't cause a non-zero exit unless listed in `--fail-on`.
+
+From Python:
+
 ```python
 from spiritwriter.sw_vocab import load_registry, validate_doc
 
-registry = load_registry()
-issues = validate_doc("docs/some-draft.md", registry)
-for i in issues:
-    print(i)
+with load_registry() as registry:
+    issues = validate_doc("docs/some-draft.md", registry)
+    for i in issues:
+        print(i)
 ```
 
 Or, from a string:
@@ -67,7 +86,8 @@ Or, from a string:
 ```python
 from spiritwriter.sw_vocab import load_registry, validate_text
 
-issues = validate_text(open("draft.md").read(), load_registry())
+with load_registry() as registry:
+    issues = validate_text(open("draft.md").read(), registry)
 ```
 
 ### Step 2 — Validate a single candidate
@@ -77,14 +97,15 @@ When debugging or building a custom integration:
 ```python
 from spiritwriter.sw_vocab import load_registry, validate_candidate
 
-issue = validate_candidate("Entity Semantic Scoring", load_registry())
+with load_registry() as registry:
+    issue = validate_candidate("Entity Semantic Scoring", registry)
 # {'term': 'Entity Semantic Scoring', 'issue': 'known_drift',
 #  'canonical': 'Entity Sense Signature', 'note': '...'}
 ```
 
-### Step 3 — Seed a new canonical term
+### Step 3 — Seed a new canonical term, or update an existing one
 
-Edit `spiritwriter/sw_vocab/data/canonical_terms.json` and re-seed:
+Edit `spiritwriter/sw_vocab/data/canonical_terms.json`:
 
 ```json
 {
@@ -96,11 +117,24 @@ Edit `spiritwriter/sw_vocab/data/canonical_terms.json` and re-seed:
 }
 ```
 
-```bash
-python -m spiritwriter.sw_vocab.seed
-```
+Two cases:
 
-Idempotent — re-seeding doesn't duplicate existing terms.
+- **Adding a new canonical** — just re-seed:
+  ```bash
+  python -m spiritwriter.sw_vocab seed
+  ```
+
+- **Editing an existing term** (new alias, updated definition, fixed
+  defined_in, etc.) — re-seed with `--force`. A plain re-seed hits
+  T1_EXACT on the term name and skips the metadata update; the CLI
+  detects this and errors with a clear message pointing at `--force`,
+  which wipes and rebuilds the DB:
+  ```bash
+  python -m spiritwriter.sw_vocab seed --force
+  ```
+
+Adding a brand-new alias to an existing term is still an *edit* —
+re-seed with `--force`.
 
 ### Step 4 — Generate the prompt-ready term list
 
@@ -111,8 +145,14 @@ terminology from the start:
 ```python
 from spiritwriter.sw_vocab import load_registry, canonical_term_list
 
-print(canonical_term_list(load_registry()))
+with load_registry() as registry:
+    print(canonical_term_list(registry))
 ```
+
+`load_registry()` returns a `CanonicalRegistry`, which is a context
+manager. On Windows in particular, using `with` ensures SQLite's WAL
+and SHM sidecars get cleaned up so the parent directory can be deleted
+or moved cleanly afterwards.
 
 Invented and deferred terms appear first in the listing, so the agent
 sees what NOT to write before what TO write.
@@ -166,22 +206,8 @@ in your writing.
 # .github/workflows/docs-vocab.yml
 - name: Validate docs vocabulary
   run: |
-    python -m spiritwriter.sw_vocab.seed
-    python -c "
-    from spiritwriter.sw_vocab import load_registry, validate_doc
-    from pathlib import Path
-    reg = load_registry()
-    failed = False
-    for doc in Path('docs').rglob('*.md'):
-        issues = validate_doc(doc, reg)
-        invented = [i for i in issues if i['issue'] in ('invented_term', 'deferred_term')]
-        if invented:
-            print(f'{doc}: {len(invented)} invented/deferred term(s)')
-            for i in invented:
-                print(f'  {i}')
-            failed = True
-    exit(1 if failed else 0)
-    "
+    python -m spiritwriter.sw_vocab seed
+    python -m spiritwriter.sw_vocab validate docs/ --fail-on invented_term,deferred_term
 ```
 
 Failing on `invented_term` and `deferred_term` is the conservative
