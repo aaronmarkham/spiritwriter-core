@@ -152,7 +152,7 @@ class NetworkResolver(Protocol):
         """Fetch a plaintext shard from the network by shard_id."""
         ...
 
-    def resolve_sealed(self, shard_id: str) -> SealedShard | None:
+    def resolve_sealed(self, sealed_id: str) -> SealedShard | None:
         """Fetch a sealed shard from the network."""
         ...
 

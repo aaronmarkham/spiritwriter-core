@@ -77,7 +77,7 @@ from spiritwriter.fabric.sealed import generate_owner_keypair
 
 keypair = generate_owner_keypair()
 sealed = store.seal_and_store(shard, keypair.public_key)   # only owner's private key opens it
-decrypted = store.unseal_and_get(sealed.shard_id, keypair.private_key)
+decrypted = store.unseal_and_get(sealed.sealed_id, keypair.private_key)
 ```
 
 ## Entity Resolution (Phalanx)

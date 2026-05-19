@@ -249,10 +249,10 @@ class IPFSBackend:
 
     def publish_sealed(self, sealed: Any) -> ShardLocation:
         """Publish a sealed shard to IPFS. Network sees opaque bytes."""
-        shard_id = sealed.shard_id
-        existing_cid = self._cid_map.get(shard_id)
+        sealed_id = sealed.sealed_id
+        existing_cid = self._cid_map.get(f"sealed:{sealed_id}")
         if existing_cid:
-            return ShardLocation(shard_id=shard_id, cid=existing_cid, local=True, pinned=True)
+            return ShardLocation(shard_id=sealed_id, cid=existing_cid, local=True, pinned=True)
 
         payload = sealed.to_json().encode("utf-8")
         cid = self._add_bytes(payload)
@@ -261,11 +261,11 @@ class IPFSBackend:
             self.pin(cid)
 
         # Use a prefixed key so sealed and plaintext don't collide
-        map_key = f"sealed:{shard_id}"
+        map_key = f"sealed:{sealed_id}"
         self._cid_map[map_key] = cid
         self._save_cid_map()
 
-        return ShardLocation(shard_id=shard_id, cid=cid, local=True, pinned=self._config.pin_by_default)
+        return ShardLocation(shard_id=sealed_id, cid=cid, local=True, pinned=self._config.pin_by_default)
 
     def publish_encrypted(self, encrypted: EncryptedShard) -> ShardLocation:
         """Publish an encrypted shard to IPFS."""
@@ -334,9 +334,9 @@ class IPFSBackend:
             )
         return shard
 
-    def resolve_sealed(self, shard_id: str) -> Any:
+    def resolve_sealed(self, sealed_id: str) -> Any:
         """Fetch a sealed shard from IPFS."""
-        cid = self._cid_map.get(f"sealed:{shard_id}")
+        cid = self._cid_map.get(f"sealed:{sealed_id}")
         if not cid:
             return None
 
@@ -347,9 +347,9 @@ class IPFSBackend:
 
         from spiritwriter.fabric.sealed import SealedShard
         sealed = SealedShard.from_json(data.decode("utf-8"))
-        if sealed.shard_id != shard_id:
+        if sealed.sealed_id != sealed_id:
             raise IntegrityError(
-                f"Sealed shard ID mismatch: expected {shard_id}, got {sealed.shard_id}"
+                f"Sealed shard ID mismatch: expected {sealed_id}, got {sealed.sealed_id}"
             )
         return sealed
 

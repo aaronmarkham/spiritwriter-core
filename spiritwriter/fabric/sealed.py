@@ -21,7 +21,10 @@ Key concepts:
 - OwnerKeypair: generated client-side or in ephemeral intake process
 - seal_for_owner(): encrypt plaintext so only the owner's private key can decrypt
 - unseal_as_owner(): owner decrypts with their private key
-- SealedShard: encrypted shard with owner_pubkey for result delivery
+- SealedShard: encrypted shard with owner_pubkey for result delivery.
+  Its ``sealed_id`` is derived from the ciphertext (``sha256(sealed_payload)``)
+  rather than the plaintext, so identical plaintexts produce different ids
+  each time they are sealed — preserving zero-knowledge against operators.
 """
 
 from __future__ import annotations
@@ -142,44 +145,47 @@ def unseal_as_owner(ciphertext: bytes, owner_private_key: bytes) -> bytes:
 class SealedShard:
     """A shard encrypted with sealed-box (asymmetric) encryption.
 
-    The operator can see: shard_id, scope, owner_pubkey, atom_count,
-    created_at, origin_agent, content_hash.
+    The operator can see: sealed_id, scope, owner_pubkey, atom_count,
+    created_at, origin_agent.
 
     The operator CANNOT see: the shard content (atoms, meta, etc).
     Only the owner (holder of the matching private key) can decrypt.
+
+    ``sealed_id`` is ``sha256(sealed_payload)`` — derived from the
+    ciphertext, not the plaintext. Because sealed boxes use an ephemeral
+    sender keypair, identical plaintexts produce different ciphertexts
+    and therefore different ids — operators cannot dictionary-attack
+    low-entropy plaintext via the id.
     """
-    shard_id: str
+    sealed_id: str
     scope: str
     sealed_payload: bytes     # NaCl sealed box — only owner can open
     owner_pubkey: bytes       # 32-byte Curve25519 public key
     atom_count: int
     created_at: str
     origin_agent: str
-    content_hash: str         # SHA-256 of plaintext for integrity check
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "shard_id": self.shard_id,
+            "sealed_id": self.sealed_id,
             "scope": self.scope,
             "sealed_payload": base64.b64encode(self.sealed_payload).decode(),
             "owner_pubkey": base64.urlsafe_b64encode(self.owner_pubkey).decode(),
             "atom_count": self.atom_count,
             "created_at": self.created_at,
             "origin_agent": self.origin_agent,
-            "content_hash": self.content_hash,
         }
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> SealedShard:
         return cls(
-            shard_id=d["shard_id"],
+            sealed_id=d["sealed_id"],
             scope=d["scope"],
             sealed_payload=base64.b64decode(d["sealed_payload"]),
             owner_pubkey=base64.urlsafe_b64decode(d["owner_pubkey"]),
             atom_count=d["atom_count"],
             created_at=d["created_at"],
             origin_agent=d["origin_agent"],
-            content_hash=d["content_hash"],
         )
 
     def to_json(self) -> str:
@@ -241,20 +247,24 @@ def seal_shard(shard: MemoryShard, owner_pubkey: bytes) -> SealedShard:
 
     The service calls this when storing a shard on behalf of an owner.
     The plaintext exists only in memory during this call.
+
+    ``sealed_id`` is ``sha256(sealed_payload)`` — the ciphertext. Because
+    NaCl sealed boxes use an ephemeral sender keypair, re-sealing the same
+    plaintext produces a different ``sealed_id`` each time. This is the
+    desired privacy property: an operator cannot detect duplicate plaintext
+    by comparing ids.
     """
     _require_nacl()
     plaintext = shard.to_json().encode("utf-8")
-    content_hash = _sha256(plaintext)
-    sealed = seal_for_owner(plaintext, owner_pubkey)
+    sealed_payload = seal_for_owner(plaintext, owner_pubkey)
     return SealedShard(
-        shard_id=shard.shard_id,
+        sealed_id=_sha256(sealed_payload),
         scope=shard.scope,
-        sealed_payload=sealed,
+        sealed_payload=sealed_payload,
         owner_pubkey=owner_pubkey,
         atom_count=len(shard.atoms),
         created_at=shard.created_at,
         origin_agent=shard.origin,
-        content_hash=content_hash,
     )
 
 
@@ -262,13 +272,17 @@ def unseal_shard(sealed: SealedShard, owner_private_key: bytes) -> MemoryShard:
     """Unseal a shard using the owner's private key (capability key).
 
     The owner calls this to read their shard content.
+
+    Verifies ``sealed_id == sha256(sealed_payload)`` BEFORE attempting
+    decrypt — catches operator-side payload/id swaps cheaply, without
+    needing the private key. The sealed box's Poly1305 tag then
+    authenticates the ciphertext during decrypt.
     """
     _require_nacl()
+    if _sha256(sealed.sealed_payload) != sealed.sealed_id:
+        raise UnsealError("sealed_id does not match payload hash — record tampered")
     try:
         plaintext = unseal_as_owner(sealed.sealed_payload, owner_private_key)
     except Exception as e:
         raise UnsealError(f"Unseal failed: {e}") from e
-    actual_hash = _sha256(plaintext)
-    if actual_hash != sealed.content_hash:
-        raise UnsealError("Content hash mismatch — data may be corrupted or tampered")
     return MemoryShard.from_json(plaintext.decode("utf-8"))

@@ -165,30 +165,30 @@ assert decrypted == plaintext
 from spiritwriter.fabric.sealed import seal_shard, unseal_shard, UnsealError
 
 sealed = seal_shard(shard, keypair.public_key)
-sealed.shard_id        # same content address as plaintext shard
+sealed.sealed_id       # sha256(ciphertext) — new every seal, no plaintext linkage
 sealed.scope           # visible
 sealed.atom_count      # visible
-sealed.content_hash    # plaintext SHA-256 (integrity)
 sealed.owner_pubkey    # stored alongside — used for result delivery later
 # sealed.sealed_payload — opaque to operator
 
 decrypted = unseal_shard(sealed, keypair.private_key)
 ```
 
-`unseal_shard` raises `UnsealError` if the wrong private key is used or the payload is tampered.
+`unseal_shard` raises `UnsealError` if the wrong private key is used, the payload is tampered, or `sealed_id` does not match `sha256(sealed_payload)` (operator-side metadata tamper).
 
 ### SealedShard Fields
 
 | Field | Visible | Description |
 |-------|---------|-------------|
-| `shard_id` | Yes | Content address of the original shard |
+| `sealed_id` | Yes | `sha256(sealed_payload)` — derived from ciphertext, not plaintext. Unique per seal. |
 | `scope` | Yes | Entitlement boundary |
 | `sealed_payload` | No | NaCl sealed-box ciphertext — opaque to operator |
 | `owner_pubkey` | Yes | 32-byte Curve25519 public key (used for result delivery) |
 | `atom_count` | Yes | Number of atoms |
 | `created_at` | Yes | ISO timestamp |
 | `origin_agent` | Yes | Creating agent id |
-| `content_hash` | Yes | SHA-256 of plaintext — verified on unseal |
+
+Because sealed boxes use an ephemeral sender keypair per call, sealing the same plaintext twice produces different ciphertexts and therefore different `sealed_id`s. This non-idempotency is deliberate: it prevents an operator from confirming duplicate plaintext by comparing ids. The sealed box's Poly1305 tag authenticates the ciphertext on decrypt, and the `sealed_id == sha256(sealed_payload)` self-check on read catches ciphertext-swap attacks where the operator substitutes a different valid payload.
 
 Note that `owner_pubkey` is stored alongside the sealed payload. That's deliberate: it lets the operator address subsequent results back to the same owner without holding any per-owner state.
 
@@ -217,8 +217,8 @@ Pair sealing with signing for the full pattern: service seals result for owner, 
 
 ```python
 sealed = store.seal_and_store(shard, keypair.public_key)
-s = store.get_sealed(sealed.shard_id)                          # operator: metadata only
-decrypted = store.unseal_and_get(sealed.shard_id, keypair.private_key)
+s = store.get_sealed(sealed.sealed_id)                         # operator: metadata only
+decrypted = store.unseal_and_get(sealed.sealed_id, keypair.private_key)
 ```
 
 See [shard-store.md](shard-store.md#sealed-shards) for the lifecycle of sealed shards in storage.

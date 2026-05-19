@@ -111,9 +111,9 @@ class TestSealedShards:
         loc = backend.publish_sealed(sealed)
         assert loc.cid is not None
 
-        resolved = backend.resolve_sealed(shard.shard_id)
+        resolved = backend.resolve_sealed(sealed.sealed_id)
         assert resolved is not None
-        assert resolved.shard_id == shard.shard_id
+        assert resolved.sealed_id == sealed.sealed_id
 
 
 class TestPinning:

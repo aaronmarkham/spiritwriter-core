@@ -473,18 +473,18 @@ class ShardStore:
 
     # === Sealed Shard Operations (zero-knowledge / owner-encrypted) ===
 
-    def _sealed_path(self, shard_id: str) -> Path:
+    def _sealed_path(self, sealed_id: str) -> Path:
         """Path for sealed shard: same layout, .sealed.json suffix."""
-        return self.shards_dir / shard_id[:2] / f"{shard_id[2:]}.sealed.json"
+        return self.shards_dir / sealed_id[:2] / f"{sealed_id[2:]}.sealed.json"
 
     def put_sealed(self, sealed) -> str:
-        """Store a sealed shard. Returns shard_id.
+        """Store a sealed shard. Returns sealed_id.
 
         Accepts a SealedShard from spiritwriter.fabric.sealed.
         The sealed payload is opaque to the operator — only the
         owner (holder of the private key) can decrypt it.
         """
-        path = self._sealed_path(sealed.shard_id)
+        path = self._sealed_path(sealed.sealed_id)
         if not path.exists():
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(sealed.to_json(), encoding="utf-8")
@@ -492,34 +492,34 @@ class ShardStore:
             # Update index (scope visible even when sealed)
             index = self._load_index()
             scope_shards = index.setdefault(sealed.scope, [])
-            if sealed.shard_id not in scope_shards:
-                scope_shards.append(sealed.shard_id)
+            if sealed.sealed_id not in scope_shards:
+                scope_shards.append(sealed.sealed_id)
             self._save_index(index)
 
-        return sealed.shard_id
+        return sealed.sealed_id
 
-    def get_sealed(self, shard_id: str):
+    def get_sealed(self, sealed_id: str):
         """Retrieve a sealed shard by id. Returns SealedShard or None.
 
         Falls back to network if resolver configured.
         Requires PyNaCl to be installed (for deserialization).
         """
-        path = self._sealed_path(shard_id)
+        path = self._sealed_path(sealed_id)
         if path.exists():
             from spiritwriter.fabric.sealed import SealedShard
             return SealedShard.from_json(path.read_text(encoding="utf-8"))
 
         if self._resolver:
-            sealed = self._resolver.resolve_sealed(shard_id)
+            sealed = self._resolver.resolve_sealed(sealed_id)
             if sealed:
                 self.put_sealed(sealed)  # cache locally
                 return sealed
 
         return None
 
-    def has_sealed(self, shard_id: str) -> bool:
+    def has_sealed(self, sealed_id: str) -> bool:
         """Check if a sealed shard exists."""
-        return self._sealed_path(shard_id).exists()
+        return self._sealed_path(sealed_id).exists()
 
     def seal_and_store(self, shard: MemoryShard, owner_pubkey: bytes):
         """Seal a shard for an owner and store it. Returns SealedShard.
@@ -531,16 +531,16 @@ class ShardStore:
         self.put_sealed(sealed)
         return sealed
 
-    def unseal_and_get(self, shard_id: str, owner_private_key: bytes) -> MemoryShard:
+    def unseal_and_get(self, sealed_id: str, owner_private_key: bytes) -> MemoryShard:
         """Retrieve and unseal a shard. Raises UnsealError on failure.
 
         Only the owner (holder of the private key) can call this.
         Requires PyNaCl to be installed.
         """
         from spiritwriter.fabric.sealed import unseal_shard, UnsealError
-        sealed = self.get_sealed(shard_id)
+        sealed = self.get_sealed(sealed_id)
         if sealed is None:
-            raise KeyError(f"Sealed shard {shard_id} not found")
+            raise KeyError(f"Sealed shard {sealed_id} not found")
         return unseal_shard(sealed, owner_private_key)
 
     def stats(self) -> dict:

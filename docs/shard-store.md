@@ -178,10 +178,10 @@ keypair = generate_owner_keypair()
 sealed = store.seal_and_store(shard, keypair.public_key)
 
 # Operator — scope/atom_count visible, payload truly opaque
-s = store.get_sealed(sealed.shard_id)
+s = store.get_sealed(sealed.sealed_id)
 
 # Owner — needs the private key
-decrypted = store.unseal_and_get(sealed.shard_id, keypair.private_key)
+decrypted = store.unseal_and_get(sealed.sealed_id, keypair.private_key)
 ```
 
 | Mode | Operator can decrypt? | Use when |

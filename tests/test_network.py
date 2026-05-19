@@ -209,9 +209,9 @@ class TestShardStoreFallback:
             resolver.resolve_sealed.return_value = sealed
             store = ShardStore(td, resolver=resolver)
 
-            result = store.get_sealed(shard.shard_id)
+            result = store.get_sealed(sealed.sealed_id)
             assert result is not None
-            assert result.shard_id == shard.shard_id
+            assert result.sealed_id == sealed.sealed_id
             resolver.resolve_sealed.assert_called_once()
 
 

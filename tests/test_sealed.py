@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from spiritwriter.fabric.shard import MemoryShard, ShardAtom, AtomKind
+from spiritwriter.fabric.shard import MemoryShard, ShardAtom, AtomKind, _sha256
 from spiritwriter.fabric.sealed import (
     generate_owner_keypair,
     seal_for_owner,
@@ -112,7 +112,9 @@ class TestSealedShard:
         shard = _make_shard()
         sealed = seal_shard(shard, kp.public_key)
 
-        assert sealed.shard_id == shard.shard_id
+        # sealed_id is sha256 of the CIPHERTEXT (not the plaintext shard_id)
+        assert sealed.sealed_id == _sha256(sealed.sealed_payload)
+        assert sealed.sealed_id != shard.shard_id  # decoupled from plaintext
         assert sealed.scope == shard.scope
         assert sealed.atom_count == 2
         assert sealed.owner_pubkey == kp.public_key
@@ -131,22 +133,43 @@ class TestSealedShard:
             unseal_shard(sealed, kp2.private_key)
 
     def test_tampered_payload_fails(self):
+        """Tampered ciphertext fails the self-integrity check before decrypt."""
         kp = generate_owner_keypair()
         shard = _make_shard()
         sealed = seal_shard(shard, kp.public_key)
         sealed.sealed_payload = sealed.sealed_payload[:-1] + bytes(
             [sealed.sealed_payload[-1] ^ 0xFF]
         )
-        with pytest.raises(UnsealError):
+        with pytest.raises(UnsealError, match="does not match payload hash"):
             unseal_shard(sealed, kp.private_key)
 
-    def test_tampered_hash_fails(self):
+    def test_tampered_sealed_id_fails(self):
+        """Tampered sealed_id (operator-side metadata mutation) is detected."""
         kp = generate_owner_keypair()
         shard = _make_shard()
         sealed = seal_shard(shard, kp.public_key)
-        sealed.content_hash = "0" * 64
-        with pytest.raises(UnsealError, match="hash mismatch"):
+        sealed.sealed_id = "0" * 64
+        with pytest.raises(UnsealError, match="does not match payload hash"):
             unseal_shard(sealed, kp.private_key)
+
+    def test_reseal_produces_new_id(self):
+        """Re-sealing the same plaintext produces a DIFFERENT sealed_id.
+
+        Sealed boxes use an ephemeral sender keypair per call, so identical
+        plaintexts produce different ciphertexts. The new sealed_id is
+        sha256(ciphertext), so the ids differ too. This non-idempotency is
+        the desired privacy property: operators cannot observe duplicates
+        by comparing ids.
+        """
+        kp = generate_owner_keypair()
+        shard = _make_shard()
+        s1 = seal_shard(shard, kp.public_key)
+        s2 = seal_shard(shard, kp.public_key)
+        assert s1.sealed_id != s2.sealed_id
+        # But both still decrypt to the same plaintext
+        r1 = unseal_shard(s1, kp.private_key)
+        r2 = unseal_shard(s2, kp.private_key)
+        assert r1.shard_id == r2.shard_id == shard.shard_id
 
     def test_json_roundtrip(self):
         kp = generate_owner_keypair()
@@ -155,22 +178,23 @@ class TestSealedShard:
 
         raw = sealed.to_json()
         restored = SealedShard.from_json(raw)
-        assert restored.shard_id == sealed.shard_id
+        assert restored.sealed_id == sealed.sealed_id
         assert restored.owner_pubkey == sealed.owner_pubkey
-        assert restored.content_hash == sealed.content_hash
 
         # And it still decrypts
         result = unseal_shard(restored, kp.private_key)
         assert result.shard_id == shard.shard_id
 
     def test_operator_visible_metadata(self):
-        """Operator can see shard_id, scope, atom_count — but not content."""
+        """Operator can see sealed_id, scope, atom_count — but not content."""
         kp = generate_owner_keypair()
         shard = _make_shard()
         sealed = seal_shard(shard, kp.public_key)
 
         d = sealed.to_dict()
-        assert d["shard_id"] == shard.shard_id
+        assert d["sealed_id"] == sealed.sealed_id
+        # sealed_id is derived from ciphertext, NOT from plaintext shard_id
+        assert d["sealed_id"] != shard.shard_id
         assert d["scope"] == "search:active"
         assert d["atom_count"] == 2
         assert d["origin_agent"] == "intake:signal"
@@ -191,17 +215,17 @@ class TestStoreSealed:
         shard = _make_shard()
         sealed = store.seal_and_store(shard, kp.public_key)
 
-        assert store.has_sealed(shard.shard_id)
-        retrieved = store.get_sealed(shard.shard_id)
+        assert store.has_sealed(sealed.sealed_id)
+        retrieved = store.get_sealed(sealed.sealed_id)
         assert retrieved is not None
-        assert retrieved.shard_id == shard.shard_id
+        assert retrieved.sealed_id == sealed.sealed_id
 
     def test_unseal_and_get(self, store):
         kp = generate_owner_keypair()
         shard = _make_shard()
-        store.seal_and_store(shard, kp.public_key)
+        sealed = store.seal_and_store(shard, kp.public_key)
 
-        restored = store.unseal_and_get(shard.shard_id, kp.private_key)
+        restored = store.unseal_and_get(sealed.sealed_id, kp.private_key)
         assert restored.shard_id == shard.shard_id
         assert len(restored.atoms) == 2
 
@@ -209,10 +233,10 @@ class TestStoreSealed:
         kp1 = generate_owner_keypair()
         kp2 = generate_owner_keypair()
         shard = _make_shard()
-        store.seal_and_store(shard, kp1.public_key)
+        sealed = store.seal_and_store(shard, kp1.public_key)
 
         with pytest.raises(UnsealError):
-            store.unseal_and_get(shard.shard_id, kp2.private_key)
+            store.unseal_and_get(sealed.sealed_id, kp2.private_key)
 
     def test_unseal_not_found(self, store):
         kp = generate_owner_keypair()
@@ -228,24 +252,34 @@ class TestStoreSealed:
         assert "search:active" in scopes
 
     def test_sealed_separate_from_plaintext(self, store):
-        """Sealed and plaintext shards use different file paths."""
+        """Sealed and plaintext shards use different file paths and id spaces."""
         kp = generate_owner_keypair()
         shard = _make_shard()
 
         # Store both plaintext and sealed
         store.put(shard)
-        store.seal_and_store(shard, kp.public_key)
+        sealed = store.seal_and_store(shard, kp.public_key)
 
-        # Both exist independently
+        # Each lookup is keyed by its own id type
         assert store.has(shard.shard_id)
-        assert store.has_sealed(shard.shard_id)
+        assert store.has_sealed(sealed.sealed_id)
+        # And the ids are different (sealed_id is from ciphertext)
+        assert shard.shard_id != sealed.sealed_id
 
-    def test_idempotent_put(self, store):
+    def test_reseal_produces_new_store_entry(self, store):
+        """Re-sealing the same plaintext writes a DISTINCT sealed entry.
+
+        With ciphertext-derived ids, each seal is unique. Old assumption that
+        seal_and_store was idempotent no longer holds — and that's the desired
+        privacy property (no duplicate detection via id collisions).
+        """
         kp = generate_owner_keypair()
         shard = _make_shard()
-        id1 = store.seal_and_store(shard, kp.public_key).shard_id
-        id2 = store.seal_and_store(shard, kp.public_key).shard_id
-        assert id1 == id2
+        s1 = store.seal_and_store(shard, kp.public_key)
+        s2 = store.seal_and_store(shard, kp.public_key)
+        assert s1.sealed_id != s2.sealed_id
+        assert store.has_sealed(s1.sealed_id)
+        assert store.has_sealed(s2.sealed_id)
 
 
 # === Ed25519 Signing ===
@@ -334,10 +368,11 @@ class TestZeroKnowledge:
         sealed = seal_shard(shard, kp.public_key)
 
         # What the operator can see from the SealedShard:
-        assert sealed.shard_id  # ✅ content hash
-        assert sealed.scope == "search:active"  # ✅ scope
-        assert sealed.atom_count == 1  # ✅ count
-        assert sealed.origin_agent == "intake:signal"  # ✅ origin
+        assert sealed.sealed_id  # ciphertext hash, not plaintext-derived
+        assert sealed.sealed_id != shard.shard_id  # decoupled from plaintext
+        assert sealed.scope == "search:active"  # scope
+        assert sealed.atom_count == 1  # count
+        assert sealed.origin_agent == "intake:signal"  # origin
 
         # What the operator CANNOT see:
         raw = sealed.to_json()
