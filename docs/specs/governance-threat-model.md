@@ -1,3 +1,5 @@
+<!-- vocab: allow-deferred -->
+
 # Governance Threat Model: Spiritwriter vs. Transport-Layer Approaches
 
 **Context:** Industry proposals (e.g., ProofTrail / MCP tool rug-pull mitigations)

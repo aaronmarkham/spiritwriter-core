@@ -20,6 +20,7 @@ Read the relevant skill for your task:
 | **jobs** | Package and run sub-agent jobs with budget tracking | `skills/jobs/SKILL.md` |
 | **network** | Publish/resolve shards over IPFS, private swarm config | `skills/network/SKILL.md` |
 | **audit** | Traced security audit of Android apps — findings + hash-chain + witness | `skills/audit/SKILL.md` |
+| **sw-vocab** | Validate spiritwriter's own terminology in docs/AI-drafts — catches drift, invented terms, deferred-but-claimed terms | `skills/sw-vocab/SKILL.md` |
 
 ## Commands
 
@@ -43,6 +44,7 @@ spiritwriter/
   fabric/      — Shards, store, emitter, crypto, entitlements, jobs, network resolver
     backends/  — Network backends (IPFS/Kubo)
   audit/       — Traced Android APK security audits (provenance, registry, verify)
+  sw_vocab/    — Terminology canonicalization for spiritwriter's own docs (dogfoods CanonicalRegistry)
   stopwords.py — Centralized stopword list
 ```
 

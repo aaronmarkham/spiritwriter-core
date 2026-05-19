@@ -1,3 +1,5 @@
+<!-- vocab: allow-deferred -->
+
 # Spiritwriter Substrate — Flavor Document
 
 This document describes the wire format and verification rules of the
