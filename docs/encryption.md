@@ -207,13 +207,12 @@ from spiritwriter.fabric.shard import ShardAtom, AtomKind, MemoryShard
 shard = MemoryShard(
     atoms=[
         ShardAtom(text=f"Search target: {name}", kind=AtomKind.ENTITY, ...),
-        # high-entropy atom — 128 bits, ASCII via secrets.token_urlsafe
         ShardAtom(
-            text="[nonce]",
+            text="[nonce]",           # text content doesn't matter — the value field carries the entropy
             kind=AtomKind.CONTEXT,
             entity="system",
             key="nonce",
-            value=secrets.token_urlsafe(16),
+            value=secrets.token_urlsafe(16),  # 128 bits — intentional: resists offline brute force
         ),
     ],
     scope="search:active",
@@ -224,7 +223,15 @@ sealed = seal_shard(shard, keypair.public_key)
 
 Two shards with the same name now produce different `shard_id`s, so the operator can't dictionary-attack the id. Content-addressing still works because the nonce is part of the content. Dedup of plaintext shards still works for *intentionally identical* shards (callers who omit the nonce by choice).
 
+The nonce value itself is inside the sealed payload, so the operator cannot read it — only the per-shard `shard_id` change is observable.
+
 Put the nonce in `atoms` rather than `meta` — `meta` doesn't participate in `shard_id` computation, so a `meta.nonce` would not affect the hash.
+
+#### What this does and does not protect
+
+This pattern blocks `shard_id` dictionary attacks on content. It does NOT mitigate **traffic analysis** — the operator still sees the timing, scope, origin, `atom_count`, and `created_at` of each sealed shard. Defending against traffic analysis is a separate problem (batching, padding, mix networks) and out of scope here.
+
+It also matters whether you apply the pattern **consistently**. If you mix nonce-bearing and nonce-free shards in the same store, the presence of a nonce atom is itself observable via `atom_count` and effectively tags a shard as "this one is privacy-sensitive." For uniform privacy, either nonce everything or partition sensitive content into its own store.
 
 ### Ed25519 Signing for Result Integrity
 
@@ -325,6 +332,8 @@ What the layers protect against, and what they don't:
 | Network interception | **Yes** | **Yes** | Content-addressed, integrity-checked |
 | Tampered ciphertext | **Yes** (GCM) | **Yes** (Poly1305) | Auth tag detects modification |
 | Tampered ciphertext + metadata swap | **Yes** | **Yes** | `content_hash` catches whole-payload swaps |
+| Operator confirms plaintext via `shard_id` brute force | No (plaintext-derived) | Yes, with nonce atom | See [Per-Seal Uniqueness for Low-Entropy Plaintext](#per-seal-uniqueness-for-low-entropy-plaintext) — caller must opt in |
+| Traffic analysis (timing, scope, atom count) | No | No | Out of scope — needs batching, padding, or mix networks |
 | Key compromise → past shards | No | No | No forward secrecy at this layer |
 | Replay (storing the same shard twice) | n/a | n/a | Idempotent by content address — re-store is a no-op |
 | Impersonation of result producer | No | No | Use Ed25519 signing for that |
