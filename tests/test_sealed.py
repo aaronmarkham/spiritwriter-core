@@ -372,3 +372,41 @@ class TestZeroKnowledge:
         # Owner CAN unseal it
         restored = unseal_shard(sealed, owner_kp.private_key)
         assert "MARTINEZ, CARLOS" in restored.atoms[0].text
+
+
+# === Nonce-atom pattern (docs/encryption.md) ===
+
+
+class TestNonceAtomPattern:
+    """Regression invariants for the per-seal uniqueness pattern documented in
+    docs/encryption.md §"Per-Seal Uniqueness for Low-Entropy Plaintext".
+
+    External callers (e.g. frio) rely on these properties to defeat shard_id
+    dictionary attacks on low-entropy plaintext. If a future refactor changes
+    what shard_id hashes over, these tests fail loudly instead of silently
+    degrading the privacy of every downstream that uses the pattern.
+    """
+
+    def test_nonce_atom_changes_shard_id(self):
+        """Different nonce atom values yield different shard_ids when all
+        other fields (scope, origin, other atoms) are identical."""
+        base = [ShardAtom(text="Search target: Alice", kind=AtomKind.ENTITY)]
+        nonce_a = ShardAtom(
+            text="[nonce]", kind=AtomKind.CONTEXT,
+            entity="system", key="nonce", value="aaa",
+        )
+        nonce_b = ShardAtom(
+            text="[nonce]", kind=AtomKind.CONTEXT,
+            entity="system", key="nonce", value="bbb",
+        )
+        a = MemoryShard(atoms=base + [nonce_a], scope="search:active", origin="intake:web")
+        b = MemoryShard(atoms=base + [nonce_b], scope="search:active", origin="intake:web")
+        assert a.shard_id != b.shard_id
+
+    def test_meta_nonce_does_not_change_shard_id(self):
+        """meta does NOT participate in shard_id, so a meta.nonce would be a
+        footgun. Documented; this pins the documented behavior."""
+        atoms = [ShardAtom(text="Search target: Alice", kind=AtomKind.ENTITY)]
+        a = MemoryShard(atoms=atoms, scope="search:active", origin="intake:web", meta={"nonce": "aaa"})
+        b = MemoryShard(atoms=atoms, scope="search:active", origin="intake:web", meta={"nonce": "bbb"})
+        assert a.shard_id == b.shard_id  # meta is invisible to content addressing
