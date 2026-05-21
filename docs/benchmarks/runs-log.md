@@ -23,13 +23,13 @@ cmc-spec's full-pipeline target, not a CMC-Lite measurement.
 Five corpora, all with `False-merge rate = 0.000` and `Auto-merge
 precision = 1.000` (the CMC-Lite invariants), differing in shape:
 
-| Corpus | Schema | Entities | What it tests |
-|---|---|---:|---|
-| [`case_only`](#case_only--2026-05-19t182318z) | person (3 fields, DOB-anchored) | 20 | Clean entities + universal mutations only |
-| [`inmate_clean`](#inmate_clean--2026-05-19t182849z) | person (3 fields, DOB-anchored) | 24 | Realistic frio production drift |
-| [`people`](#people--2026-05-19t182323z) | person (3 fields, DOB-anchored) | 48 | Kitchen-sink stress test (PR #55 baseline) |
-| [`publications`](#publications--2026-05-19t182854z) | publication (3 fields, year-anchored) | 30 | Different schema shape — academic citations |
-| [`csp_kb_AI_Res`](#csp_kb_ai_res--2026-05-19t182328z) | paper_term (1 field) | 315 | Real LLM-extracted entities from csp KB |
+| Corpus | Schema | Entities | What it tests | Composition + provenance |
+|---|---|---:|---|---|
+| [`case_only`](#case_only--2026-05-19t182318z) | person (3 fields, DOB-anchored) | 20 | Clean entities + universal mutations only | [README](../../benchmarks/eval/ess_accuracy/data/case_only/README.md) · [entities.json](../../benchmarks/eval/ess_accuracy/data/case_only/entities.json) |
+| [`inmate_clean`](#inmate_clean--2026-05-19t182849z) | person (3 fields, DOB-anchored) | 24 | Realistic frio production drift | [README](../../benchmarks/eval/ess_accuracy/data/inmate_clean/README.md) · [entities.json](../../benchmarks/eval/ess_accuracy/data/inmate_clean/entities.json) · [mutations.py](../../benchmarks/eval/ess_accuracy/data/inmate_clean/mutations.py) |
+| [`people`](#people--2026-05-19t182323z) | person (3 fields, DOB-anchored) | 48 | Kitchen-sink stress test (PR #55 baseline) | [README](../../benchmarks/eval/ess_accuracy/data/people/README.md) · [entities.json](../../benchmarks/eval/ess_accuracy/data/people/entities.json) · [mutations.py](../../benchmarks/eval/ess_accuracy/data/people/mutations.py) |
+| [`publications`](#publications--2026-05-19t182854z) | publication (3 fields, year-anchored) | 30 | Different schema shape — academic citations | [README](../../benchmarks/eval/ess_accuracy/data/publications/README.md) · [entities.json](../../benchmarks/eval/ess_accuracy/data/publications/entities.json) · [mutations.py](../../benchmarks/eval/ess_accuracy/data/publications/mutations.py) |
+| [`csp_kb_AI_Res`](#csp_kb_ai_res--2026-05-19t182328z) | paper_term (1 field) | 315 | Real LLM-extracted entities from a csp knowledge graph | external — see csp_kb section below |
 
 ---
 
@@ -141,6 +141,34 @@ CMC-Lite is asked to handle.
 claim. Different fuzzy thresholds, different drift modes
 (`title_subtitle_drop`, `year_missing`, etc.), same engine.
 
+**Source data.** 30 hand-curated real papers in three subgroups —
+not synthetic. Full entity list at
+[data/publications/entities.json](../../benchmarks/eval/ess_accuracy/data/publications/entities.json);
+provenance and composition rationale at
+[data/publications/README.md](../../benchmarks/eval/ess_accuracy/data/publications/README.md).
+Summary of the 30:
+
+- **15 LLM / agent-memory papers**: BERT (Devlin 2018), GPT-3
+  (Brown 2020), Attention Is All You Need (Vaswani 2017), T5
+  (Raffel 2020), RoBERTa (Liu 2019), ELECTRA (Clark 2020), LoRA
+  (Hu 2021), Chain-of-Thought (Wei 2022), ReAct (Yao 2022),
+  Toolformer (Schick 2023), MemGPT (Packer 2023), Generative Agents
+  (Park 2023), Voyager (Wang 2023), Constitutional AI (Bai 2022),
+  HuggingGPT (Shen 2023).
+- **9 entity-resolution / capability / spiritwriter ancestor papers**:
+  Macaroons (Birgisson 2014), Zep (Rasmussen 2025), SimpleMem
+  (Liu 2026), EMem (Ren 2025), EDC (Zhang 2024), Probabilistic
+  Signatures (Zhang 2018), Fellegi-Sunter record linkage (1969),
+  McCallum canopy clustering (2000), Köpcke ER frameworks survey (2010).
+- **6 classic deep learning anchors**: ResNet (He 2016), AlexNet
+  (Krizhevsky 2012), LSTM (Hochreiter 1997), Word2Vec (Mikolov 2013),
+  AlphaGo (Silver 2016), AlphaFold (Jumper 2021).
+
+Deliberate inclusion choices: two papers with `first_author_last="Liu"`
+(RoBERTa 2019, SimpleMem 2026) and two with `first_author_last="Zhang"`
+(EDC 2024, Probabilistic Signatures 2018) so the engine has to
+disambiguate by year + title, not just surname.
+
 **Report:** [`results/publications-20260519T182854Z/report.md`](../../benchmarks/eval/ess_accuracy/results/publications-20260519T182854Z/report.md)
 
 | Invariant | Value | Target | Result |
@@ -181,11 +209,41 @@ when the alternative defining fields don't carry enough signal.
 
 ### `csp_kb_AI_Res` — 2026-05-19T18:23:28Z
 
-**What it tests.** Phase 2 — real LLM-extracted entities from csp's
-existing knowledge graph (`kb_cf30f8f4e225`, "AI Research" project, 2
-sources, 708 atoms, 371 distinct entities). No synthetic mutations:
-every variant pair is a surface form that actually appears in atom
-content from a real academic paper.
+**What it tests.** Phase 2 of the harness — real LLM-extracted entities
+from a real knowledge graph, not synthetic mutations on hand-curated
+seed data. Every variant pair tested is a surface form that *actually
+appears* in atom content from a real academic paper as extracted by
+LLM-driven ingestion.
+
+**Sources and definitions** (for anyone landing here cold):
+
+- **csp** = [`claude-studio-producer`](https://github.com/aaronmarkham/claude-studio-producer),
+  the multi-agent video-production project in the spiritwriter
+  ecosystem. csp uses spiritwriter-core for KB, ingestion, secrets, and
+  shards.
+- **`cs kb`** = the `claude-studio` (alias `cs`) CLI's knowledge-base
+  subcommand. `cs kb create / add / show / inspect / produce` builds
+  and queries multi-source knowledge projects: PDFs in, atoms +
+  topic/entity indices + a unified KnowledgeGraph out. The KB ingest
+  pipeline uses PyMuPDF for extraction and Claude for semantic analysis
+  (atoms, topics, entities). Storage layout under csp's
+  `artifacts/kb/kb_<id>/`.
+- **`kb_cf30f8f4e225`** = the specific KB project we used as the trial
+  corpus. csp's name for it is "AI Research" (set when it was created
+  via `cs kb create "AI Research"`). 2 source PDFs were ingested into
+  it (so cross-source resolution is testable); 708 atoms total; 371
+  distinct entities in its `entity_index`.
+- **`csp_kb_trial.py`** = our harness module that reads any csp
+  `knowledge_graph.json`, extracts surface-form variants per entity
+  from atom content (with the harness's whole-word case-insensitive
+  scan), and runs ESS resolution. Lives at
+  [`benchmarks/eval/ess_accuracy/csp_kb_trial.py`](../../benchmarks/eval/ess_accuracy/csp_kb_trial.py).
+
+The bridge: csp's `cs kb add` does the LLM-driven entity extraction;
+the spiritwriter-core harness then measures how well CMC-Lite resolves
+the resulting entities under their actual real-world surface variation.
+No synthetic mutations; just whatever the LLM produced and however the
+underlying PDFs phrased things.
 
 **Report:** [`results/csp-20260519T182328Z/report.md`](../../benchmarks/eval/ess_accuracy/results/csp-20260519T182328Z/report.md)
 

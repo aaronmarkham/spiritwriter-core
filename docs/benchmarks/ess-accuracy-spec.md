@@ -1,6 +1,25 @@
 # ESS Accuracy Validation Harness — Design
 
-**Status:** Draft for review. Not yet implemented.
+**Status:** Implemented and in use. The harness ships at
+[`benchmarks/eval/ess_accuracy/`](../../benchmarks/eval/ess_accuracy/);
+the multi-corpus measurement campaign that exercises it is captured in
+[`docs/benchmarks/runs-log.md`](runs-log.md).
+
+| Asset | Lives at |
+|---|---|
+| Harness code | [`benchmarks/eval/ess_accuracy/`](../../benchmarks/eval/ess_accuracy/) (corpus, mutations, baselines, metrics, runner, csp_kb_trial) |
+| Tests | [`tests/test_ess_accuracy.py`](../../tests/test_ess_accuracy.py) (23 tests as of campaign close) |
+| Per-corpus seed data | [`benchmarks/eval/ess_accuracy/data/`](../../benchmarks/eval/ess_accuracy/data/) (case_only, inmate_clean, people, publications) |
+| Pinned measurement runs | [`benchmarks/eval/ess_accuracy/results/`](../../benchmarks/eval/ess_accuracy/results/) (force-added past the gitignore) |
+| Campaign report | [`docs/benchmarks/runs-log.md`](runs-log.md) |
+| Citable cross-corpus claims | See `runs-log.md` § "What this means for marketing claims" |
+
+History: original design (PR #55) → review-driven framing fix (PR #55
+review — pass/fail invariants narrowed to false-merge ≤0.05 and
+auto-merge precision = 1.00; recall demoted to informational) →
+multi-corpus campaign (`claude/corpora-and-benchmarks` branch — 5 corpora
+measured, runs-log assembled).
+
 **Scope:** Defends the *correctness* claims about Entity Sense Signature (ESS) resolution. Distinct from `benchmarks/bench_entity_resolution.py`, which measures *speed*.
 
 ## Claims this harness defends
