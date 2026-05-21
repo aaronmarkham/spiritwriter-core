@@ -69,6 +69,12 @@ def _split_surnames(last_name: str) -> list[str]:
     return parts
 
 
+def _copy_with(record: dict[str, Any], **fields: Any) -> dict[str, Any]:
+    out = dict(record)
+    out.update(fields)
+    return out
+
+
 def _copy_with_last(record: dict[str, Any], new_last: str) -> dict[str, Any]:
     out = dict(record)
     out["last_name"] = new_last
@@ -287,6 +293,106 @@ def _gen_four_name_compress(
     )]
 
 
+# ── Falsification battery (added 2026-05-19) ───────────────────────
+# These families specifically test claims the campaign needs to defend
+# against peer review. dob_typo tests whether typo-shifted same-entity
+# records still resolve; realistic_collision tests whether different
+# entities sharing 2/3 fields stay separate.
+
+
+_DATE_ANCHOR = "dob"
+
+
+def _gen_dob_typo(record: dict[str, Any], ess_fields: list[str]) -> list[Mutation]:
+    """Shift DOB by 1 day — models off-by-one data-entry typos.
+
+    Same entity by intent (one person, fat-fingered date). Expected to
+    land at T3 (DOB digest differs, but last_name + first_name fuzzy
+    are both 1.000). If it lands at T1+T2, the engine is over-merging
+    a date that's genuinely different — interesting either way:
+    real-world rosters DO contain DOB typos.
+    """
+    import datetime
+    dob = record.get(_DATE_ANCHOR, "")
+    if not isinstance(dob, str) or len(dob) != 10:
+        return []
+    try:
+        d = datetime.date.fromisoformat(dob)
+        new_d = (d + datetime.timedelta(days=1)).isoformat()
+    except (ValueError, OverflowError):
+        return []
+    return [Mutation(
+        family="dob_typo",
+        mutated=_copy_with(record, **{_DATE_ANCHOR: new_d}),
+        canonical=record,
+        same_entity=True,
+        expected_tier_min="t3_fuzzy",
+        notes=f"{dob!r} -> {new_d!r} (off-by-one-day typo)",
+    )]
+
+
+# Hand-curated collision pairs: real-world plausible "different
+# entities that share 2 of 3 ESS fields." Keyed by canonical entity
+# fingerprint (last_name|first_name|dob).
+#
+# Selection criteria:
+# - Same name as a canonical in entities.json
+# - DOB shifted by months (not days — that's dob_typo territory)
+# - Gender same as the canonical (so context overlap still triggers
+#   T4 — the engine has every reason to confuse them except DOB)
+_PEOPLE_COLLISIONS: dict[str, dict[str, Any]] = {
+    "Smith|James|1982-04-14": {
+        "last_name": "Smith", "first_name": "James",
+        "dob": "1982-08-22", "gender": "M",
+    },
+    "Johnson|Mary|1976-09-23": {
+        "last_name": "Johnson", "first_name": "Mary",
+        "dob": "1976-11-30", "gender": "F",
+    },
+    "Garcia|Carlos|1985-03-12": {
+        "last_name": "Garcia", "first_name": "Carlos",
+        "dob": "1988-06-04", "gender": "M",
+    },
+    "Garcia|Maria|1990-06-04": {
+        "last_name": "Garcia", "first_name": "Maria",
+        "dob": "1990-11-15", "gender": "F",
+    },
+    "Tanaka|Hiroshi|1985-10-20": {
+        "last_name": "Tanaka", "first_name": "Hiroshi",
+        "dob": "1985-12-08", "gender": "M",
+    },
+}
+
+
+def _gen_realistic_collision(
+    record: dict[str, Any], ess_fields: list[str]
+) -> list[Mutation]:
+    """Generate a 'genuinely different entity, sharing 2/3 fields' mutation.
+
+    The killer false-merge test. Real-world plausible: two people with
+    the same name born in the same year (or close to it). Engine MUST
+    NOT auto-merge (T1+T2 = 0).
+    """
+    key = (
+        f"{record.get('last_name','')}|{record.get('first_name','')}"
+        f"|{record.get('dob','')}"
+    )
+    pair = _PEOPLE_COLLISIONS.get(key)
+    if pair is None:
+        return []
+    return [Mutation(
+        family="realistic_collision",
+        mutated=pair,
+        canonical=record,
+        same_entity=False,
+        expected_tier_min=None,
+        notes=(
+            f"different entity sharing 2/3 ess_fields: "
+            f"dob {record.get('dob')!r} vs {pair['dob']!r}"
+        ),
+    )]
+
+
 FAMILIES: list[MutationFamily] = [
     MutationFamily("middle_initial_add",       _gen_middle_initial_add,
                    "Insert trailing single-letter middle initial."),
@@ -306,4 +412,9 @@ FAMILIES: list[MutationFamily] = [
                    "Smith-Jones -> Smith Jones."),
     MutationFamily("four_name_compress",       _gen_four_name_compress,
                    "Jose Luis Garcia Lopez -> Jose Garcia."),
+    MutationFamily("dob_typo",                 _gen_dob_typo,
+                   "Off-by-one-day DOB typo (falsification battery)."),
+    MutationFamily("realistic_collision",      _gen_realistic_collision,
+                   "Hand-picked 'different person, same name, close DOB' pairs "
+                   "(falsification battery — MUST NOT auto-merge)."),
 ]

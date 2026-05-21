@@ -184,9 +184,10 @@ def _gen_unicode_normalization(
 def _gen_negative_control(
     record: dict[str, Any], ess_fields: list[str]
 ) -> list[Mutation]:
-    """Replace each ESS field with a clearly-different value.
+    """Replace each ESS field with a clearly-different value (one at a time).
 
-    This is the false-merge canary — these MUST NOT resolve to T1/T2.
+    This is the partial-overlap false-merge canary — these MUST NOT
+    resolve to T1/T2.
 
     Note on scope: mutations garble one ESS field at a time, leaving
     the others intact. With a 3-field schema this produces records that
@@ -194,7 +195,8 @@ def _gen_negative_control(
     test than fully-disjoint records, because the engine has to refuse
     to merge despite partial agreement. Worth keeping in mind when
     comparing the negative_control row to a Jaccard-on-disjoint-records
-    baseline.
+    baseline. Complemented by ``garbled_all_fields`` (below) which
+    tests the no-overlap path.
     """
     out: list[Mutation] = []
     fields = _string_fields(record, ess_fields)
@@ -213,6 +215,39 @@ def _gen_negative_control(
     return out
 
 
+def _gen_garbled_all_fields(
+    record: dict[str, Any], ess_fields: list[str]
+) -> list[Mutation]:
+    """Replace EVERY string ESS field with a garbled value at once.
+
+    The no-overlap false-merge canary. Tests the cleanest rejection
+    path: when nothing matches, the engine should land at NO_MATCH (or
+    very weakly at T4 via context fields like gender), never T1/T2/T3.
+
+    Complements ``negative_control`` which tests the partial-overlap
+    case (one field garbled, others intact — engine has to refuse to
+    auto-merge despite 2/3 fields matching). This family tests the
+    full-disjoint case: nothing matches, engine should cleanly reject.
+
+    Generates one mutation per record.
+    """
+    fields = _string_fields(record, ess_fields)
+    if not fields:
+        return []
+    new = dict(record)
+    for f in fields:
+        original = record[f]
+        new[f] = "ZZZ" + original[::-1] + "QQQ"
+    return [Mutation(
+        family="garbled_all_fields",
+        mutated=new,
+        canonical=record,
+        same_entity=False,
+        expected_tier_min=None,
+        notes="all ess_fields garbled (no-overlap negative test)",
+    )]
+
+
 # ── Family registry ─────────────────────────────────────────────────
 
 
@@ -228,7 +263,9 @@ UNIVERSAL_FAMILIES: list[MutationFamily] = [
     MutationFamily("unicode_normalization", _gen_unicode_normalization,
                    "Strip combining diacritics (María -> Maria)."),
     MutationFamily("negative_control", _gen_negative_control,
-                   "Garbled ESS — MUST NOT resolve to T1/T2/T3."),
+                   "Partial-overlap negative: 1 of N ESS fields garbled."),
+    MutationFamily("garbled_all_fields", _gen_garbled_all_fields,
+                   "No-overlap negative: ALL ESS fields garbled. MUST land at NO_MATCH or T4 (via context-only signal)."),
 ]
 
 

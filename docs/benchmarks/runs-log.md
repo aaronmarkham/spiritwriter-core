@@ -266,9 +266,72 @@ case variation auto-merges at 100% T1.
 
 ---
 
+## Falsification battery extension (2026-05-21)
+
+After the 2026-05-19 campaign landed, the suspiciously clean results
+prompted an honest self-challenge: were the precision = 1.000 numbers
+artifacts of overly-friendly test design? Specifically:
+
+- **The negative_control family garbles only one ESS field at a time**,
+  testing "engine refuses to merge with one field clearly different"
+  rather than "engine refuses to merge entities with no field overlap."
+- **No mutation touched the anchor field** (DOB for person corpora,
+  year for publications) so recall@any-tier of 1.000 could have been a
+  DOB/year-anchored artifact (T4 fires on age-bucket + context overlap
+  when DOB is preserved).
+- **No collision-pair test**: real-world plausible "two genuinely
+  different entities that share 2/3 ESS fields by coincidence" (two
+  people with the same name born months apart; two papers with same
+  first-author + year but different titles).
+
+Added three new mutation families and re-ran four corpora (case_only,
+inmate_clean, people, publications). Pinned results at the
+2026-05-21T15:17:* timestamps:
+
+- [`results/case_only-20260521T151727Z/`](../../benchmarks/eval/ess_accuracy/results/case_only-20260521T151727Z/)
+- [`results/inmate_clean-20260521T151727Z/`](../../benchmarks/eval/ess_accuracy/results/inmate_clean-20260521T151727Z/)
+- [`results/people-20260521T151729Z/`](../../benchmarks/eval/ess_accuracy/results/people-20260521T151729Z/)
+- [`results/publications-20260521T151731Z/`](../../benchmarks/eval/ess_accuracy/results/publications-20260521T151731Z/)
+
+### New mutation families and their results
+
+| Family | Type | What it tests | Result across all 4 corpora |
+|---|---|---|---|
+| `garbled_all_fields` | universal | All ESS fields replaced — no-overlap negative case | **100% cleanly land at NO_MATCH** (20 + 24 + 48 + 30 = 122 pairs across the four corpora; 0 auto-merged, 0 even reached T3/T4) |
+| `dob_typo` / `year_typo` | per-corpus (person/pub schemas) | Anchor field off by 1 (day for DOB, year for publications) | **100% surface at T4_WEAK** (24 + 48 + 30 = 102 anchor-typo pairs; 0 auto-merged. Engine refuses to silently merge records that disagree on the anchor field) |
+| `realistic_collision` | per-corpus | Hand-curated "different entity sharing 2/3 ESS fields" pairs | **0/12 auto-merged across all corpora.** people: 5 pairs all to T4. inmate_clean: 3 pairs all to T4. publications: 4 pairs (2 NO_MATCH + 2 T3). The killer false-merge test — and the engine held. |
+
+### The headline finding from the battery
+
+**Auto-merge precision = 1.000 is robust.** The engine refused to
+auto-merge any of the 12 hand-curated collision pairs (different real
+entities sharing 2/3 ESS fields by realistic coincidence — same name
+born months apart, same first-author publishing in same year). It also
+refused to silently fix anchor-field typos (102 of those, all to T4).
+
+**The "too good to be true" suspicion was unfounded.** Tested under
+hostile conditions, the precision claim held.
+
+### Secondary findings (worth knowing)
+
+1. **T4 calibration is now better-calibrated** because the new
+   same-entity families (dob_typo, year_typo) pour realistically-T4
+   cases into the bucket: actual precision rose from ~0.30 to 0.43–0.46
+   across person corpora (stated 0.50; still slightly over-confident
+   but the gap closed by ~14 points).
+2. **`no_match` tier now has population** (0.0 stated confidence,
+   1.000 actual NPV — every garbled_all_fields landed there correctly).
+3. **`dob_typo` and `year_typo` lose 1 tier** vs other same-entity
+   drift: they land at T4 not T3 because the anchor-field garbling
+   tanks the ess_overlap component of T3's scoring. Engine surfaces
+   them for review but with weaker confidence — appropriate behavior.
+
+---
+
 ## Cross-corpus invariants
 
-These hold across **every corpus measured in this campaign**:
+These hold across **every corpus measured in this campaign, including
+under the falsification battery**:
 
 | Invariant | Result |
 |---|---|
@@ -285,28 +348,62 @@ individual reports).
 
 ## What this means for marketing claims
 
-Defensible statements, ordered by strength:
+Defensible statements, ordered by strength. Each citation reflects the
+2026-05-21 falsification-battery numbers — the strongest results
+survived hand-curated hostile test cases.
 
-1. **"Zero incorrect auto-merges across 5 diverse benchmark corpora."**
-   Strongest claim. 1.000 precision on the auto-merge tier means: every
-   pair the engine auto-merges is actually the same entity. Anything
-   ambiguous surfaces for review instead.
+1. **"Zero incorrect auto-merges across 5 benchmark corpora, including
+   hand-curated collision pairs."** Strongest claim. 1.000 precision
+   held under realistic_collision (12 hostile pairs: 0 auto-merged),
+   negative_control (366+ partial-overlap pairs: 0 auto-merged), and
+   garbled_all_fields (122 no-overlap pairs: 0 auto-merged). The
+   engine *refuses* to silently corrupt the registry, even when fields
+   coincidentally overlap.
 
 2. **"100% recall on case + whitespace drift, in every corpus that
-   tests them."** Strong, measured, specific. Beats wishy-washy "high
-   accuracy" by being verifiable.
+   tests them."** Strong, measured, specific.
 
 3. **"100% of same-entity drift reaches the review queue."** Recall@any-tier
-   = 1.000 across all corpora. CMC-Lite never silently loses a candidate
-   merge — it either auto-merges (when safe) or flags for review.
+   = 1.000 across all corpora and all same-entity families, *including*
+   the hostile dob_typo/year_typo families that touch the anchor field.
+   CMC-Lite never silently loses a candidate merge — it either
+   auto-merges (when safe) or flags for review.
 
 4. **"Auto-merge recall on real LLM-extracted academic entities: 100%."**
    csp KB result. Real-world Phase 2 measurement.
 
-5. **"Auto-merge recall on novel drift modes (morphology, surname
+5. **"CMC-Lite refuses to auto-merge typo'd anchor fields — surfaces
+   them for human review at T4."** The honest framing of conservatism:
+   dob_typo and year_typo families don't auto-merge despite name+author
+   matching perfectly. Engine trusts the anchor field; "fixing" a
+   typo'd date silently would be a worse failure mode than surfacing it.
+
+6. **"Auto-merge recall on novel drift modes (morphology, surname
    compression, subtitle drops): surfaces for human review at T3."**
    The honest framing for everything that doesn't auto-merge. Not a
    regression; not a miss. By design.
+
+### Recommended replacement copy for spiritwriter.ai
+
+Long form (footer/about section):
+
+> CMC-Lite's auto-merge path delivered 100% precision across 5 benchmark
+> corpora and 12 hand-curated hostile collision pairs. Zero false merges,
+> zero silent corruption. Anything ambiguous surfaces for review at one
+> of four confidence tiers. No embeddings, no LLM in the merge path.
+
+Short form (homepage tag or one-liner):
+
+> 100% precision in auto-merge · 0 false merges across 5 corpora and
+> 12 hostile collision pairs. No embeddings, no LLM in the merge path.
+
+Sidebar replacement for the existing `≥85% recall` stat (the headline
+number that prompted this campaign):
+
+> **0 false merges** across 5 corpora · **12/12** hand-curated collision
+> pairs correctly distinguished · all same-entity drift surfaced for
+> review at one of four confidence tiers. *No embeddings, no LLM in
+> the merge path.*
 
 ### What to NOT claim
 

@@ -118,6 +118,70 @@ def _gen_surname_dehyphenate(record, ess_fields):
     )]
 
 
+# ── Falsification battery ─────────────────────────────────────────
+
+
+def _gen_dob_typo(record: dict[str, Any], ess_fields: list[str]) -> list[Mutation]:
+    """Shift DOB by 1 day — off-by-one data-entry typo."""
+    import datetime
+    dob = record.get("dob", "")
+    if not isinstance(dob, str) or len(dob) != 10:
+        return []
+    try:
+        d = datetime.date.fromisoformat(dob)
+        new_d = (d + datetime.timedelta(days=1)).isoformat()
+    except (ValueError, OverflowError):
+        return []
+    return [Mutation(
+        family="dob_typo",
+        mutated=_copy_with(record, dob=new_d),
+        canonical=record,
+        same_entity=True,
+        expected_tier_min="t3_fuzzy",
+        notes=f"{dob!r} -> {new_d!r} (off-by-one-day typo)",
+    )]
+
+
+_COLLISIONS: dict[str, dict[str, Any]] = {
+    "Smith|James|1982-04-14": {
+        "last_name": "Smith", "first_name": "James",
+        "dob": "1982-09-30", "gender": "M",
+    },
+    "Johnson|Mary|1976-09-23": {
+        "last_name": "Johnson", "first_name": "Mary",
+        "dob": "1976-12-15", "gender": "F",
+    },
+    "Tanaka|Hiroshi|1985-10-20": {
+        "last_name": "Tanaka", "first_name": "Hiroshi",
+        "dob": "1985-12-25", "gender": "M",
+    },
+}
+
+
+def _gen_realistic_collision(
+    record: dict[str, Any], ess_fields: list[str]
+) -> list[Mutation]:
+    """'Different inmate, same name, close DOB' — MUST NOT auto-merge."""
+    key = (
+        f"{record.get('last_name','')}|{record.get('first_name','')}"
+        f"|{record.get('dob','')}"
+    )
+    pair = _COLLISIONS.get(key)
+    if pair is None:
+        return []
+    return [Mutation(
+        family="realistic_collision",
+        mutated=pair,
+        canonical=record,
+        same_entity=False,
+        expected_tier_min=None,
+        notes=(
+            f"different inmate sharing 2/3 ess_fields: "
+            f"dob {record.get('dob')!r} vs {pair['dob']!r}"
+        ),
+    )]
+
+
 FAMILIES: list[MutationFamily] = [
     MutationFamily("middle_initial_add",    _gen_middle_initial_add,
                    "Insert trailing single-letter middle initial."),
@@ -129,4 +193,9 @@ FAMILIES: list[MutationFamily] = [
                    "Garcia Lopez -> Garcia-Lopez."),
     MutationFamily("surname_dehyphenate",   _gen_surname_dehyphenate,
                    "Smith-Jones -> Smith Jones."),
+    MutationFamily("dob_typo",              _gen_dob_typo,
+                   "Off-by-one-day DOB typo (falsification battery)."),
+    MutationFamily("realistic_collision",   _gen_realistic_collision,
+                   "Hand-picked 'different inmate, same name, close DOB' pairs "
+                   "(falsification battery — MUST NOT auto-merge)."),
 ]
