@@ -1,0 +1,272 @@
+# ESS Accuracy — Runs Log
+
+Per-run summary of every benchmark execution we want to preserve. Each
+entry cites the corresponding committed `report.md` so anyone can audit
+the numbers without re-running. Ephemeral runs (e.g. debugging) are
+gitignored under `benchmarks/eval/ess_accuracy/results/`; entries here
+correspond only to runs we deliberately `git add -f`'d.
+
+Format per entry: corpus identity, what the corpus tests, the headline
+invariants and per-family table, full-report link. Cross-corpus summary
+at the bottom.
+
+---
+
+## Campaign: 2026-05 — Multi-corpus benchmarks for marketing claims
+
+Goal: measure CMC-Lite resolution accuracy across structurally different
+corpora to characterize what numbers we can defensibly cite on the
+spiritwriter.ai homepage and in the cmc-spec. Driven by the discovery
+during PR #55 review that the homepage's `≥85% recall` claim was the
+cmc-spec's full-pipeline target, not a CMC-Lite measurement.
+
+Five corpora, all with `False-merge rate = 0.000` and `Auto-merge
+precision = 1.000` (the CMC-Lite invariants), differing in shape:
+
+| Corpus | Schema | Entities | What it tests |
+|---|---|---:|---|
+| [`case_only`](#case_only--2026-05-19t182318z) | person (3 fields, DOB-anchored) | 20 | Clean entities + universal mutations only |
+| [`inmate_clean`](#inmate_clean--2026-05-19t182849z) | person (3 fields, DOB-anchored) | 24 | Realistic frio production drift |
+| [`people`](#people--2026-05-19t182323z) | person (3 fields, DOB-anchored) | 48 | Kitchen-sink stress test (PR #55 baseline) |
+| [`publications`](#publications--2026-05-19t182854z) | publication (3 fields, year-anchored) | 30 | Different schema shape — academic citations |
+| [`csp_kb_AI_Res`](#csp_kb_ai_res--2026-05-19t182328z) | paper_term (1 field) | 315 | Real LLM-extracted entities from csp KB |
+
+---
+
+### `case_only` — 2026-05-19T18:23:18Z
+
+**What it tests.** Clean person entities, only the universal mutation
+families fire (no domain-specific drift). The cleanest path through the
+engine — what does CMC-Lite deliver when the data is what most systems
+actually have?
+
+**Report:** [`results/case_only-20260519T182318Z/report.md`](../../benchmarks/eval/ess_accuracy/results/case_only-20260519T182318Z/report.md)
+
+| Invariant | Value | Target | Result |
+|---|---:|---:|:---:|
+| False-merge rate | 0.000 | ≤0.05 | PASS |
+| Auto-merge precision (T1+T2) | 1.000 | =1.00 | PASS |
+
+| Recall metric | Value |
+|---|---:|
+| Recall@T1 (exact) | 0.733 |
+| Recall@T1+T2 (auto-merge) | 0.733 |
+| Recall@any-tier (surfaced) | 1.000 |
+
+**Per-family (marketing-relevant rows):**
+
+| Family | n | recall@T1+T2 | recall@any | notes |
+|---|---:|---:|---:|---|
+| `case` | 81 | **1.000** | 1.000 | All case drift auto-merges (T1) |
+| `whitespace` | 180 | **1.000** | 1.000 | All whitespace drift auto-merges (T1) |
+| `typo_substitution` | 37 | 0.000 | 1.000 | T3 by design |
+| `typo_insertion` | 58 | 0.000 | 1.000 | T3/T4 by design |
+| `negative_control` | 60 | n/a | n/a | False-merge = 0 (canary intact) |
+
+---
+
+### `inmate_clean` — 2026-05-19T18:28:49Z
+
+**What it tests.** Realistic frio jail-roster drift: middle initials,
+maternal-surname drops, hyphenation differences. Deliberately *excludes*
+the stress-test modes from `people` (surname duplication, four-name
+compression, diminutives) — those are rare adversarial drift, not the
+operating regime.
+
+**Report:** [`results/inmate_clean-20260519T182849Z/report.md`](../../benchmarks/eval/ess_accuracy/results/inmate_clean-20260519T182849Z/report.md)
+
+| Invariant | Value | Target | Result |
+|---|---:|---:|:---:|
+| False-merge rate | 0.000 | ≤0.05 | PASS |
+| Auto-merge precision (T1+T2) | 1.000 | =1.00 | PASS |
+
+| Recall metric | Value |
+|---|---:|
+| Recall@T1 (exact) | 0.671 |
+| Recall@T1+T2 (auto-merge) | 0.671 |
+| Recall@any-tier (surfaced) | 1.000 |
+
+**Per-family:**
+
+| Family | n | recall@T1+T2 | recall@any | notes |
+|---|---:|---:|---:|---|
+| `case` | 96 | **1.000** | 1.000 | T1 |
+| `whitespace` | 216 | **1.000** | 1.000 | T1 |
+| `middle_initial_add` | 23 | 0.000 | 1.000 | T3 by design |
+| `surname_drop_maternal` | 7 | 0.000 | 1.000 | T3 by design |
+| `surname_hyphenate` | 6 | 0.000 | 1.000 | T3 by design |
+| `surname_dehyphenate` | 1 | 0.000 | 1.000 | T3 by design |
+| `typo_substitution` | 45 | 0.000 | 1.000 | T3 by design |
+| `typo_insertion` | 71 | 0.000 | 1.000 | T3/T4 by design |
+| `negative_control` | 72 | n/a | n/a | False-merge = 0 |
+
+---
+
+### `people` — 2026-05-19T18:23:23Z
+
+**What it tests.** Kitchen-sink stress test. Same schema as
+`inmate_clean`, but mutations include the rare adversarial drift modes
+(`surname_duplication`, `surname_hyphenate_duplicate`, `four_name_compress`,
+`diminutive`) on top of the realistic ones. The upper bound on what
+CMC-Lite is asked to handle.
+
+**Report:** [`results/people-20260519T182323Z/report.md`](../../benchmarks/eval/ess_accuracy/results/people-20260519T182323Z/report.md)
+
+| Invariant | Value | Target | Result |
+|---|---:|---:|:---:|
+| False-merge rate | 0.000 | ≤0.05 | PASS |
+| Auto-merge precision (T1+T2) | 1.000 | =1.00 | PASS |
+
+| Recall metric | Value |
+|---|---:|
+| Recall@T1 (exact) | 0.599 |
+| Recall@T1+T2 (auto-merge) | 0.599 |
+| Recall@any-tier (surfaced) | 1.000 |
+
+**Per-family (abbreviated — full table in the report):**
+
+| Family | n | recall@T1+T2 | recall@any | notes |
+|---|---:|---:|---:|---|
+| `case` | 193 | **1.000** | 1.000 | T1 |
+| `whitespace` | 432 | **1.000** | 1.000 | T1 |
+| (12 other drift families) | various | 0.000 | 1.000 | All T3 by design |
+| `negative_control` | 144 | n/a | n/a | False-merge = 0 |
+
+---
+
+### `publications` — 2026-05-19T18:28:54Z
+
+**What it tests.** A structurally different schema —
+`(title, first_author_last, year)` — to validate the "domain-agnostic"
+claim. Different fuzzy thresholds, different drift modes
+(`title_subtitle_drop`, `year_missing`, etc.), same engine.
+
+**Report:** [`results/publications-20260519T182854Z/report.md`](../../benchmarks/eval/ess_accuracy/results/publications-20260519T182854Z/report.md)
+
+| Invariant | Value | Target | Result |
+|---|---:|---:|:---:|
+| False-merge rate | 0.000 | ≤0.05 | PASS |
+| Auto-merge precision (T1+T2) | 1.000 | =1.00 | PASS |
+
+| Recall metric | Value |
+|---|---:|
+| Recall@T1 (exact) | 0.666 |
+| Recall@T1+T2 (auto-merge) | 0.714 |
+| Recall@any-tier (surfaced) | 1.000 |
+
+**Per-family — first corpus where T2_STRONG fires:**
+
+| Family | n | recall@T1+T2 | recall@any | notes |
+|---|---:|---:|---:|---|
+| `case` | 149 | **1.000** | 1.000 | T1 |
+| `whitespace` | 270 | **1.000** | 1.000 | T1 |
+| `year_missing` | 30 | **1.000** | 1.000 | **T2_STRONG** (auto-merge — first T2 hits in the campaign) |
+| `title_subtitle_drop` | 16 | 0.000 | 1.000 | T3 by design |
+| `title_subtitle_add` | 5 | 0.000 | 1.000 | T3 by design |
+| `first_author_initial` | 30 | 0.000 | 1.000 | T3 by design |
+| `typo_substitution` | 47 | 0.000 | 1.000 | T3 by design |
+| `typo_insertion` | 82 | 0.000 | 1.000 | T3/T4 by design |
+| `negative_control` | 90 | n/a | n/a | False-merge = 0 |
+
+**Finding worth noting:** when `year_missing` mutations land (year
+dropped from candidate, title + first_author_last remain), they
+**auto-merge at T2_STRONG** with 100% precision. The fuzzy match on
+title+author is strong enough that the missing-year case clears the
+T2 threshold. First time in the campaign that a non-universal drift
+family auto-merges — confirms the engine's tier logic isn't
+case-pathologically conservative; it's just *correctly* conservative
+when the alternative defining fields don't carry enough signal.
+
+---
+
+### `csp_kb_AI_Res` — 2026-05-19T18:23:28Z
+
+**What it tests.** Phase 2 — real LLM-extracted entities from csp's
+existing knowledge graph (`kb_cf30f8f4e225`, "AI Research" project, 2
+sources, 708 atoms, 371 distinct entities). No synthetic mutations:
+every variant pair is a surface form that actually appears in atom
+content from a real academic paper.
+
+**Report:** [`results/csp-20260519T182328Z/report.md`](../../benchmarks/eval/ess_accuracy/results/csp-20260519T182328Z/report.md)
+
+| Metric | Intra-source | Cross-source |
+|---|---:|---:|
+| Recall@T1 (exact) | **1.000** | **1.000** |
+| Recall@T1+T2 (auto-merge) | **1.000** | **1.000** |
+| Recall@any-tier (surfaced) | **1.000** | **1.000** |
+
+- 52 intra-source variant pairs tested → all 100% T1_EXACT
+- 1 cross-source variant pair tested → 100% T1_EXACT
+- 1 ESS collision detected at seed time (two LLM-extracted entities
+  normalize to the same digest — surfaced honestly, not artifact-hidden)
+
+Sample resolutions: `DNN` ↔ `dnn`, `diffusion models` ↔ `Diffusion Models`,
+`PEFT` ↔ `Peft` ↔ `peft`, `Large Language Models` ↔ `large language models`.
+
+The cleanest result in the campaign. Real-world LLM-extracted entity
+case variation auto-merges at 100% T1.
+
+---
+
+## Cross-corpus invariants
+
+These hold across **every corpus measured in this campaign**:
+
+| Invariant | Result |
+|---|---|
+| **Auto-merge precision (T1+T2)** | **1.000 on all 5 corpora** — engine never auto-merges entities that shouldn't merge |
+| **False-merge rate** | **0.000 on all 5 corpora** — same statement from the other side |
+| **Recall@any-tier (surfaced for review)** | **1.000 on all 5 corpora** — every same-entity drift mode reaches at least T3 |
+| **Recall on `case` drift** | **1.000 on every corpus** that includes case mutations |
+| **Recall on `whitespace` drift** | **1.000 on every corpus** that includes whitespace mutations |
+
+**Volume across the campaign:** 437 entities (315 of them real
+LLM-extracted), 2,927 test pairs in total (1,857 same-entity + 466
+negative-control + 53 real-corpus variants + ... — exact counts in
+individual reports).
+
+## What this means for marketing claims
+
+Defensible statements, ordered by strength:
+
+1. **"Zero incorrect auto-merges across 5 diverse benchmark corpora."**
+   Strongest claim. 1.000 precision on the auto-merge tier means: every
+   pair the engine auto-merges is actually the same entity. Anything
+   ambiguous surfaces for review instead.
+
+2. **"100% recall on case + whitespace drift, in every corpus that
+   tests them."** Strong, measured, specific. Beats wishy-washy "high
+   accuracy" by being verifiable.
+
+3. **"100% of same-entity drift reaches the review queue."** Recall@any-tier
+   = 1.000 across all corpora. CMC-Lite never silently loses a candidate
+   merge — it either auto-merges (when safe) or flags for review.
+
+4. **"Auto-merge recall on real LLM-extracted academic entities: 100%."**
+   csp KB result. Real-world Phase 2 measurement.
+
+5. **"Auto-merge recall on novel drift modes (morphology, surname
+   compression, subtitle drops): surfaces for human review at T3."**
+   The honest framing for everything that doesn't auto-merge. Not a
+   regression; not a miss. By design.
+
+### What to NOT claim
+
+- **A single whole-corpus Recall@T1+T2 number as "the" recall.** The
+  range is 0.60–1.00 depending on which drift modes the corpus includes.
+  Cherry-picking one number is the metric-shopping this whole campaign
+  was meant to prevent.
+- **The cmc-spec's ≥85% target as a current measurement.** It's a target
+  for the full CMC pipeline (LLM clustering included). CMC-Lite is the
+  deterministic subset.
+
+## Open follow-ups
+
+- T4 calibration runs 0.27–0.32 actual precision vs stated 0.50 across
+  every person corpus (confirmed in `case_only`, `inmate_clean`, `people`,
+  `publications`). Engine ticket for later — T4 is flag-only, doesn't
+  touch any auto-merge guarantee. Logged in [`cleanup/cmc-phalanx-canonicalize.md`](../cleanup/cmc-phalanx-canonicalize.md).
+- A free-text-atom corpus (separate from `csp_kb_AI_Res`'s entity-index
+  scan) could reproduce the original "80–100% vs Jaccard 9–36%" claim
+  from cmc-lite-v0.1.md — that claim was about free-text memory atoms,
+  not structured records. Future Phase 3 work.

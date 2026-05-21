@@ -1,0 +1,54 @@
+canonical	variant	tier	confidence	same_source
+DNN	dnn	t1_exact	0.950	True
+diffusion models	Diffusion Models	t1_exact	0.950	True
+Large Language Models	large language models	t1_exact	0.950	True
+PEFT	Peft	t1_exact	0.950	True
+PEFT	peft	t1_exact	0.950	True
+constant matrix	Constant Matrix	t1_exact	0.950	True
+Embedded Passport	embedded passport	t1_exact	0.950	True
+ownership verification	Ownership Verification	t1_exact	0.950	True
+See Appendix	see Appendix	t1_exact	0.950	True
+Commonsense Reasoning Task	commonsense reasoning task	t1_exact	0.950	True
+PIQA	Piqa	t1_exact	0.950	True
+CLIP	clip	t1_exact	0.950	True
+Textual Instruction Tuning	textual instruction tuning	t1_exact	0.950	True
+visual instruction tuning	Visual Instruction Tuning	t1_exact	0.950	True
+Stable Diffusion	stable diffusion	t1_exact	0.950	True
+in Table	In Table	t1_exact	0.950	True
+ambiguity attacks	Ambiguity Attacks	t1_exact	0.950	True
+commonsense reasoning	Commonsense Reasoning	t1_exact	0.950	True
+commonsense reasoning	Commonsense reasoning	t1_exact	0.950	True
+Asia	ASIA	t1_exact	0.950	True
+Communications Security	communications security	t1_exact	0.950	True
+pattern recognition	Pattern Recognition	t1_exact	0.950	True
+LLM	llm	t1_exact	0.950	True
+emnlp	EMNLP	t1_exact	0.950	True
+training process	Training Process	t1_exact	0.950	True
+forward path	Forward Path	t1_exact	0.950	True
+backward path	Backward Path	t1_exact	0.950	True
+singular values	Singular Values	t1_exact	0.950	True
+Single Factorization	single factorization	t1_exact	0.950	True
+two passports	Two Passports	t1_exact	0.950	True
+second passport	Second Passport	t1_exact	0.950	True
+two distinct passports	Two Distinct Passports	t1_exact	0.950	True
+commonsense reasoning tasks	Commonsense Reasoning tasks	t1_exact	0.950	True
+commonsense reasoning tasks	Commonsense Reasoning Tasks	t1_exact	0.950	True
+instruction tuning	Instruction Tuning	t1_exact	0.950	True
+GQA	Gqa	t1_exact	0.950	True
+live subjects	Live Subjects	t1_exact	0.950	True
+multiple passports	Multiple Passports	t1_exact	0.950	True
+meta-analysis	Meta-Analysis	t1_exact	0.950	True
+deep neural networks	Deep Neural Networks	t1_exact	0.950	True
+Pooled Effect Size	pooled effect size	t1_exact	0.950	True
+Informed Machine Learning	informed machine learning	t1_exact	0.950	True
+agnostic DNN	Agnostic DNN	t1_exact	0.950	True
+odd-ratios	Odd-ratios	t1_exact	0.950	True
+mercury	Mercury	t1_exact	0.950	True
+evaluation	Evaluation	t1_exact	0.950	True
+Experiment 1	experiment 1	t1_exact	0.950	True
+experiment 2	Experiment 2	t1_exact	0.950	True
+external knowledge	External knowledge	t1_exact	0.950	True
+Experiment 3	experiment 3	t1_exact	0.950	True
+discussion	Discussion	t1_exact	0.950	False
+PGNN	pgnn	t1_exact	0.950	True
+Shap	SHAP	t1_exact	0.950	True

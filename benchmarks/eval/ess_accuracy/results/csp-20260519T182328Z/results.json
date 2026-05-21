@@ -1,0 +1,29 @@
+{
+  "kg_path": "C:\\Users\\aaron\\Documents\\GitHub\\claude-studio-producer\\artifacts\\kb\\kb_cf30f8f4e225\\knowledge_graph.json",
+  "n_entities_in_index": 371,
+  "n_entities_scanned": 315,
+  "n_entities_with_variation": 50,
+  "n_ess_collisions": 1,
+  "n_distinct_canonicals": 314,
+  "n_pairs_intra": 52,
+  "n_pairs_cross_source": 1,
+  "intra_recall_t1": 1.0,
+  "intra_recall_t1_t2": 1.0,
+  "intra_recall_any_tier": 1.0,
+  "cross_source_recall_t1": 1.0,
+  "cross_source_recall_t1_t2": 1.0,
+  "cross_source_recall_any_tier": 1.0,
+  "per_tier_intra": {
+    "t1_exact": 52
+  },
+  "per_tier_cross": {
+    "t1_exact": 1
+  },
+  "collision_groups": [
+    [
+      "Standardized regression coefficients",
+      "standardized regression coefficients"
+    ]
+  ],
+  "generated_at": "2026-05-19T18:23:28Z"
+}

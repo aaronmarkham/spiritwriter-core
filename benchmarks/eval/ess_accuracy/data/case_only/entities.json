@@ -1,0 +1,25 @@
+[
+  {"first_name": "James",     "last_name": "Smith",      "dob": "1982-04-14", "gender": "M"},
+  {"first_name": "Mary",      "last_name": "Johnson",    "dob": "1976-09-23", "gender": "F"},
+  {"first_name": "Robert",    "last_name": "Williams",   "dob": "1988-12-01", "gender": "M"},
+  {"first_name": "Patricia",  "last_name": "Brown",      "dob": "1991-03-17", "gender": "F"},
+  {"first_name": "Michael",   "last_name": "Davis",      "dob": "1980-07-29", "gender": "M"},
+  {"first_name": "Jennifer",  "last_name": "Miller",     "dob": "1985-11-08", "gender": "F"},
+  {"first_name": "David",     "last_name": "Wilson",     "dob": "1979-02-19", "gender": "M"},
+  {"first_name": "Linda",     "last_name": "Moore",      "dob": "1986-06-12", "gender": "F"},
+
+  {"first_name": "Carlos",    "last_name": "Rodriguez",  "dob": "1985-03-12", "gender": "M"},
+  {"first_name": "Maria",     "last_name": "Gonzalez",   "dob": "1990-06-04", "gender": "F"},
+  {"first_name": "Jose",      "last_name": "Hernandez",  "dob": "1988-11-22", "gender": "M"},
+  {"first_name": "Ana",       "last_name": "Lopez",      "dob": "1992-08-30", "gender": "F"},
+  {"first_name": "Luis",      "last_name": "Perez",      "dob": "1984-01-15", "gender": "M"},
+
+  {"first_name": "Sean",      "last_name": "O'Connor",   "dob": "1981-08-30", "gender": "M"},
+  {"first_name": "Patrick",   "last_name": "MacDonald",  "dob": "1977-04-07", "gender": "M"},
+  {"first_name": "Anne",      "last_name": "Smith-Jones","dob": "1990-11-15", "gender": "F"},
+
+  {"first_name": "Wei",       "last_name": "Chen",       "dob": "1992-03-08", "gender": "M"},
+  {"first_name": "Hiroshi",   "last_name": "Tanaka",     "dob": "1985-10-20", "gender": "M"},
+  {"first_name": "Priya",     "last_name": "Patel",      "dob": "1988-07-11", "gender": "F"},
+  {"first_name": "Olufemi",   "last_name": "Adebayo",    "dob": "1980-09-14", "gender": "M"}
+]

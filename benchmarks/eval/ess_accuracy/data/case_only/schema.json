@@ -1,0 +1,13 @@
+{
+  "name": "person_case_only",
+  "ess_fields": ["last_name", "first_name", "dob"],
+  "fuzzy_fields": {
+    "last_name": 0.85,
+    "first_name": 0.80
+  },
+  "context_fields": ["gender"],
+  "metadata_fields": [],
+  "age_bucket_size": 2,
+  "temporal_window_days": 7,
+  "jaccard_fields": ["last_name", "first_name"]
+}
