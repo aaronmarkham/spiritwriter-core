@@ -8,11 +8,24 @@ The audience is different too: perf benches inform "can this handle the
 load?" decisions; eval suites produce artifacts that defend correctness
 claims to peer reviewers.
 
+## Where the docs are
+
+| If you're asking... | Read |
+|---|---|
+| What numbers do we cite (per-corpus measurements, marketing claims) | [`docs/benchmarks/runs-log.md`](../../docs/benchmarks/runs-log.md) — the campaign report |
+| How does the harness work? What invariants does it assert? | [`docs/benchmarks/ess-accuracy-spec.md`](../../docs/benchmarks/ess-accuracy-spec.md) — the design doc |
+| How do I orient between everything in /docs/benchmarks/? | [`docs/benchmarks/README.md`](../../docs/benchmarks/README.md) |
+| How do I add a new corpus? | continue reading this file |
+
+This README covers *how to invoke* the suites and *how to add a corpus*.
+The docs in `/docs/benchmarks/` cover *why the harness exists* and
+*what we measured*.
+
 ## Suites
 
-| Suite | Validates | Doc |
-|---|---|---|
-| `ess_accuracy/` | Entity Sense Signature resolution accuracy on a per-corpus basis | [docs/benchmarks/ess-accuracy-spec.md](../../docs/benchmarks/ess-accuracy-spec.md) |
+| Suite | Validates | Code | Design | Campaign report |
+|---|---|---|---|---|
+| `ess_accuracy/` | Entity Sense Signature resolution accuracy on a per-corpus basis | [ess_accuracy/](ess_accuracy/) | [docs/benchmarks/ess-accuracy-spec.md](../../docs/benchmarks/ess-accuracy-spec.md) | [docs/benchmarks/runs-log.md](../../docs/benchmarks/runs-log.md) |
 
 ## Running an eval suite
 

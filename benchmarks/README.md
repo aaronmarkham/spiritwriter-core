@@ -1,8 +1,20 @@
 # spiritwriter-core Benchmarks
 
-Performance benchmarks for memory shard storage, recall, encryption, and entity resolution.
+This directory has **two kinds of benchmarks**:
 
-## Quick Start
+| | What it measures | Where it lives | Docs |
+|---|---|---|---|
+| **Perf benches** (`bench_*.py`) | ops/sec, latency, scale — "can it handle the load?" | this directory | continue reading this README |
+| **Eval suites** ([`eval/`](eval/)) | precision, recall, false-merge rate, per-tier calibration — "is it correct?" | [`eval/`](eval/) | [`eval/README.md`](eval/README.md) and [`docs/benchmarks/`](../docs/benchmarks/) |
+
+Newcomers looking for "what numbers do we cite in marketing or peer
+review?" should start at [`docs/benchmarks/runs-log.md`](../docs/benchmarks/runs-log.md)
+— that's the campaign report with citable per-corpus numbers, pinned
+artifacts, and recommended marketing copy.
+
+The rest of this README covers the perf benches only.
+
+## Perf bench quick start
 
 ```bash
 # Install with dev + sealed extras
@@ -54,7 +66,7 @@ The `-s` flag is important — it shows the benchmark output (ops/sec, latency p
 - **Ed25519 signing** — keypair gen, sign, verify
 - **Encrypted store ops** — encrypt_and_store, decrypt_and_get
 
-### bench_entity_resolution.py — CMC-Lite
+### bench_entity_resolution.py — CMC-Lite (speed only)
 
 - **ESS computation** — entity sense signature creation, overlap, equality
 - **Normalization** — name, date, fuzzy score, age bucketing
@@ -62,6 +74,11 @@ The `-s` flag is important — it shows the benchmark output (ops/sec, latency p
 - **upsert()** — new entities, existing entities (T1 add-sighting)
 - **Batch canonicalization** — 100 and 1000 records
 - **Registry queries** — get_entity, find_fuzzy, stats
+
+> **Note:** this file measures *speed* only. For *correctness*
+> (precision, recall, false-merge rate, per-tier calibration), see the
+> [`eval/ess_accuracy/`](eval/ess_accuracy/) suite and
+> [`docs/benchmarks/runs-log.md`](../docs/benchmarks/runs-log.md).
 
 ### bench_memory_recall.py — End-to-End Patterns
 
