@@ -187,6 +187,8 @@ def _gen_realistic_collision(
     pair = _PUBLICATION_COLLISIONS.get(key)
     if pair is None:
         return []
+    canonical_title = str(record.get("title") or "")
+    pair_title = str(pair.get("title") or "")
     return [Mutation(
         family="realistic_collision",
         mutated=pair,
@@ -195,7 +197,7 @@ def _gen_realistic_collision(
         expected_tier_min=None,
         notes=(
             f"different paper sharing first_author_last + year: "
-            f"title {record.get('title')[:40]!r}... vs {pair['title'][:40]!r}..."
+            f"title {canonical_title[:40]!r}... vs {pair_title[:40]!r}..."
         ),
     )]
 

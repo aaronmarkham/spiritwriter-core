@@ -120,6 +120,34 @@ def score(corpus: Corpus, registry: CanonicalRegistry) -> AccuracyReport:
         for family in corpus.families:
             mutations.extend(family.generate(entity, ess_fields))
 
+    # Silent-degradation guard: a registered *per-corpus* family that
+    # produces ZERO mutations across all entities is almost always a
+    # bug — typically a hand-curated collision-pair dict whose keys no
+    # longer match entities.json after an edit. Universal families
+    # (case, whitespace, unicode_normalization, etc.) can legitimately
+    # no-op on a corpus that doesn't exercise their drift mode
+    # (e.g. unicode_normalization on a corpus with no diacritics), so
+    # we only warn for non-universal families.
+    from benchmarks.eval.ess_accuracy.mutations import UNIVERSAL_FAMILIES
+    _UNIVERSAL_NAMES = {f.name for f in UNIVERSAL_FAMILIES}
+    family_counts: dict[str, int] = {f.name: 0 for f in corpus.families}
+    for m in mutations:
+        family_counts[m.family] = family_counts.get(m.family, 0) + 1
+    empty_per_corpus_families = [
+        name for name, n in family_counts.items()
+        if n == 0 and name not in _UNIVERSAL_NAMES
+    ]
+    if empty_per_corpus_families:
+        import warnings
+        warnings.warn(
+            f"Corpus {corpus.name!r}: per-corpus families produced ZERO "
+            f"mutations across all entities — likely a stale "
+            f"hand-curated dict (collision pairs, diminutives, etc.) "
+            f"whose keys no longer match entities.json. "
+            f"Affected families: {empty_per_corpus_families}",
+            stacklevel=2,
+        )
+
     pair_results: list[PairResult] = []
     for m in mutations:
         ess_result = registry.resolve(m.mutated)

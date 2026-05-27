@@ -23,24 +23,34 @@ cmc-spec's full-pipeline target, not a CMC-Lite measurement.
 Five corpora, all with `False-merge rate = 0.000` and `Auto-merge
 precision = 1.000` (the CMC-Lite invariants), differing in shape:
 
+> **Note on pair counts.** The per-family `n=` cells in the per-corpus
+> sections below reflect the corpus state at first measurement. After
+> the falsification battery and PR #58 review fixes, entity sets were
+> minorly extended (inmate_clean 24→26, people 48→50) to exercise the
+> `middle_initial_drop` family — so the most recent pinned `report.md`
+> files have slightly higher pair counts than shown here. The
+> *invariants* (precision = 1.000, false-merge = 0.000, per-family
+> recall percentages) are unchanged. The pinned `report.md` linked at
+> the top of each section is the authoritative count.
+
 | Corpus | Schema | Entities | What it tests | Composition + provenance |
 |---|---|---:|---|---|
 | [`case_only`](#case_only--2026-05-19t182318z) | person (3 fields, DOB-anchored) | 20 | Clean entities + universal mutations only | [README](../../benchmarks/eval/ess_accuracy/data/case_only/README.md) · [entities.json](../../benchmarks/eval/ess_accuracy/data/case_only/entities.json) |
-| [`inmate_clean`](#inmate_clean--2026-05-19t182849z) | person (3 fields, DOB-anchored) | 24 | Realistic frio production drift | [README](../../benchmarks/eval/ess_accuracy/data/inmate_clean/README.md) · [entities.json](../../benchmarks/eval/ess_accuracy/data/inmate_clean/entities.json) · [mutations.py](../../benchmarks/eval/ess_accuracy/data/inmate_clean/mutations.py) |
-| [`people`](#people--2026-05-19t182323z) | person (3 fields, DOB-anchored) | 48 | Kitchen-sink stress test (PR #55 baseline) | [README](../../benchmarks/eval/ess_accuracy/data/people/README.md) · [entities.json](../../benchmarks/eval/ess_accuracy/data/people/entities.json) · [mutations.py](../../benchmarks/eval/ess_accuracy/data/people/mutations.py) |
+| [`inmate_clean`](#inmate_clean--2026-05-27t014644z) | person (3 fields, DOB-anchored) | 26 | Realistic frio production drift | [README](../../benchmarks/eval/ess_accuracy/data/inmate_clean/README.md) · [entities.json](../../benchmarks/eval/ess_accuracy/data/inmate_clean/entities.json) · [mutations.py](../../benchmarks/eval/ess_accuracy/data/inmate_clean/mutations.py) |
+| [`people`](#people--2026-05-27t014645z) | person (3 fields, DOB-anchored) | 50 | Kitchen-sink stress test (PR #55 baseline) | [README](../../benchmarks/eval/ess_accuracy/data/people/README.md) · [entities.json](../../benchmarks/eval/ess_accuracy/data/people/entities.json) · [mutations.py](../../benchmarks/eval/ess_accuracy/data/people/mutations.py) |
 | [`publications`](#publications--2026-05-19t182854z) | publication (3 fields, year-anchored) | 30 | Different schema shape — academic citations | [README](../../benchmarks/eval/ess_accuracy/data/publications/README.md) · [entities.json](../../benchmarks/eval/ess_accuracy/data/publications/entities.json) · [mutations.py](../../benchmarks/eval/ess_accuracy/data/publications/mutations.py) |
 | [`csp_kb_AI_Res`](#csp_kb_ai_res--2026-05-19t182328z) | paper_term (1 field) | 315 | Real LLM-extracted entities from a csp knowledge graph | external — see csp_kb section below |
 
 ---
 
-### `case_only` — 2026-05-19T18:23:18Z
+### `case_only` — 2026-05-27T01:46:43Z
 
 **What it tests.** Clean person entities, only the universal mutation
 families fire (no domain-specific drift). The cleanest path through the
 engine — what does CMC-Lite deliver when the data is what most systems
 actually have?
 
-**Report:** [`results/case_only-20260519T182318Z/report.md`](../../benchmarks/eval/ess_accuracy/results/case_only-20260519T182318Z/report.md)
+**Report:** [`results/case_only-20260527T014643Z/report.md`](../../benchmarks/eval/ess_accuracy/results/case_only-20260527T014643Z/report.md)
 
 | Invariant | Value | Target | Result |
 |---|---:|---:|:---:|
@@ -65,7 +75,7 @@ actually have?
 
 ---
 
-### `inmate_clean` — 2026-05-19T18:28:49Z
+### `inmate_clean` — 2026-05-27T01:46:44Z
 
 **What it tests.** Realistic frio jail-roster drift: middle initials,
 maternal-surname drops, hyphenation differences. Deliberately *excludes*
@@ -73,7 +83,7 @@ the stress-test modes from `people` (surname duplication, four-name
 compression, diminutives) — those are rare adversarial drift, not the
 operating regime.
 
-**Report:** [`results/inmate_clean-20260519T182849Z/report.md`](../../benchmarks/eval/ess_accuracy/results/inmate_clean-20260519T182849Z/report.md)
+**Report:** [`results/inmate_clean-20260527T014644Z/report.md`](../../benchmarks/eval/ess_accuracy/results/inmate_clean-20260527T014644Z/report.md)
 
 | Invariant | Value | Target | Result |
 |---|---:|---:|:---:|
@@ -102,7 +112,7 @@ operating regime.
 
 ---
 
-### `people` — 2026-05-19T18:23:23Z
+### `people` — 2026-05-27T01:46:45Z
 
 **What it tests.** Kitchen-sink stress test. Same schema as
 `inmate_clean`, but mutations include the rare adversarial drift modes
@@ -110,7 +120,7 @@ operating regime.
 `diminutive`) on top of the realistic ones. The upper bound on what
 CMC-Lite is asked to handle.
 
-**Report:** [`results/people-20260519T182323Z/report.md`](../../benchmarks/eval/ess_accuracy/results/people-20260519T182323Z/report.md)
+**Report:** [`results/people-20260527T014645Z/report.md`](../../benchmarks/eval/ess_accuracy/results/people-20260527T014645Z/report.md)
 
 | Invariant | Value | Target | Result |
 |---|---:|---:|:---:|
@@ -134,7 +144,7 @@ CMC-Lite is asked to handle.
 
 ---
 
-### `publications` — 2026-05-19T18:28:54Z
+### `publications` — 2026-05-27T01:46:47Z
 
 **What it tests.** A structurally different schema —
 `(title, first_author_last, year)` — to validate the "domain-agnostic"
@@ -169,7 +179,7 @@ Deliberate inclusion choices: two papers with `first_author_last="Liu"`
 (EDC 2024, Probabilistic Signatures 2018) so the engine has to
 disambiguate by year + title, not just surname.
 
-**Report:** [`results/publications-20260519T182854Z/report.md`](../../benchmarks/eval/ess_accuracy/results/publications-20260519T182854Z/report.md)
+**Report:** [`results/publications-20260527T014647Z/report.md`](../../benchmarks/eval/ess_accuracy/results/publications-20260527T014647Z/report.md)
 
 | Invariant | Value | Target | Result |
 |---|---:|---:|:---:|
@@ -286,19 +296,19 @@ artifacts of overly-friendly test design? Specifically:
 
 Added three new mutation families and re-ran four corpora (case_only,
 inmate_clean, people, publications). Pinned results at the
-2026-05-21T15:17:* timestamps:
+2026-05-27T01:46:* timestamps:
 
-- [`results/case_only-20260521T151727Z/`](../../benchmarks/eval/ess_accuracy/results/case_only-20260521T151727Z/)
-- [`results/inmate_clean-20260521T151727Z/`](../../benchmarks/eval/ess_accuracy/results/inmate_clean-20260521T151727Z/)
-- [`results/people-20260521T151729Z/`](../../benchmarks/eval/ess_accuracy/results/people-20260521T151729Z/)
-- [`results/publications-20260521T151731Z/`](../../benchmarks/eval/ess_accuracy/results/publications-20260521T151731Z/)
+- [`results/case_only-20260527T014643Z/`](../../benchmarks/eval/ess_accuracy/results/case_only-20260527T014643Z/)
+- [`results/inmate_clean-20260527T014644Z/`](../../benchmarks/eval/ess_accuracy/results/inmate_clean-20260527T014644Z/)
+- [`results/people-20260527T014645Z/`](../../benchmarks/eval/ess_accuracy/results/people-20260527T014645Z/)
+- [`results/publications-20260527T014647Z/`](../../benchmarks/eval/ess_accuracy/results/publications-20260527T014647Z/)
 
 ### New mutation families and their results
 
 | Family | Type | What it tests | Result across all 4 corpora |
 |---|---|---|---|
-| `garbled_all_fields` | universal | All ESS fields replaced — no-overlap negative case | **100% cleanly land at NO_MATCH** (20 + 24 + 48 + 30 = 122 pairs across the four corpora; 0 auto-merged, 0 even reached T3/T4) |
-| `dob_typo` / `year_typo` | per-corpus (person/pub schemas) | Anchor field off by 1 (day for DOB, year for publications) | **100% surface at T4_WEAK** (24 + 48 + 30 = 102 anchor-typo pairs; 0 auto-merged. Engine refuses to silently merge records that disagree on the anchor field) |
+| `garbled_all_fields` | universal | All ESS fields replaced — no-overlap negative case | **100% cleanly land at NO_MATCH** (20 + 26 + 50 + 30 = 126 pairs across the four corpora; 0 auto-merged, 0 even reached T3/T4) |
+| `dob_typo` / `year_typo` | per-corpus (person/pub schemas) | Anchor field off by 1 (day for DOB, year for publications) | **100% surface at T4_WEAK** (26 + 50 + 30 = 106 anchor-typo pairs; 0 auto-merged. Engine refuses to silently merge records that disagree on the anchor field) |
 | `realistic_collision` | per-corpus | Hand-curated "different entity sharing 2/3 ESS fields" pairs | **0/12 auto-merged across all corpora.** people: 5 pairs all to T4. inmate_clean: 3 pairs all to T4. publications: 4 pairs (2 NO_MATCH + 2 T3). The killer false-merge test — and the engine held. |
 
 ### The headline finding from the battery
@@ -372,11 +382,15 @@ survived hand-curated hostile test cases.
 4. **"Auto-merge recall on real LLM-extracted academic entities: 100%."**
    csp KB result. Real-world Phase 2 measurement.
 
-5. **"CMC-Lite refuses to auto-merge typo'd anchor fields — surfaces
-   them for human review at T4."** The honest framing of conservatism:
-   dob_typo and year_typo families don't auto-merge despite name+author
-   matching perfectly. Engine trusts the anchor field; "fixing" a
-   typo'd date silently would be a worse failure mode than surfacing it.
+5. **"Anchor-field typos surface at T4 for review rather than silently
+   merging."** The honest framing of conservatism: dob_typo and year_typo
+   families (which ARE the same entity, just with a typo) don't
+   auto-merge despite name+author matching perfectly. Engine treats the
+   anchor field as load-bearing; silently merging records that disagree
+   on the anchor would be a worse failure mode than surfacing them at
+   T4. *Note*: this is conservative, not corrective — the engine does
+   not "fix" the typo; it flags the pair for human review with weakened
+   confidence.
 
 6. **"Auto-merge recall on novel drift modes (morphology, surname
    compression, subtitle drops): surfaces for human review at T3."**

@@ -2,15 +2,15 @@
   "corpus_name": "case_only",
   "schema_name": "person_case_only",
   "n_entities": 20,
-  "n_pairs": 416,
+  "n_pairs": 436,
   "n_same": 356,
-  "n_different": 60,
+  "n_different": 80,
   "recall_t1": 0.7331460674157303,
   "recall_t1_t2": 0.7331460674157303,
   "recall_any_tier": 1.0,
   "false_merge_rate": 0.0,
   "jaccard_match_rate": 0.7921348314606742,
-  "jaccard_false_merge_rate": 0.3333333333333333,
+  "jaccard_false_merge_rate": 0.25,
   "ess_minus_jaccard": -0.05898876404494391,
   "jaccard_fields": [
     "last_name",
@@ -31,6 +31,11 @@
       "n": 72,
       "stated_confidence": 0.5,
       "actual_precision": 0.2777777777777778
+    },
+    "no_match": {
+      "n": 20,
+      "stated_confidence": 0.0,
+      "actual_precision": 1.0
     }
   },
   "per_family": {
@@ -43,6 +48,17 @@
       "false_merge_rate": 0.0,
       "tier_distribution": {
         "t1_exact": 81
+      }
+    },
+    "garbled_all_fields": {
+      "n": 20,
+      "n_same": 0,
+      "n_different": 20,
+      "recall_t1_t2": 0.0,
+      "recall_any_tier": 0.0,
+      "false_merge_rate": 0.0,
+      "tier_distribution": {
+        "no_match": 20
       }
     },
     "negative_control": {
@@ -92,6 +108,6 @@
       }
     }
   },
-  "generated_at": "2026-05-19T18:23:18Z",
+  "generated_at": "2026-05-27T01:46:43Z",
   "spiritwriter_version": "0.5.1"
 }

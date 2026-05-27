@@ -13,6 +13,7 @@ the realistic-operating-regime numbers vs the upper-bound stress test.
 
 from __future__ import annotations
 
+import datetime
 from typing import Any
 
 from benchmarks.eval.ess_accuracy.mutations import Mutation, MutationFamily
@@ -123,7 +124,6 @@ def _gen_surname_dehyphenate(record, ess_fields):
 
 def _gen_dob_typo(record: dict[str, Any], ess_fields: list[str]) -> list[Mutation]:
     """Shift DOB by 1 day — off-by-one data-entry typo."""
-    import datetime
     dob = record.get("dob", "")
     if not isinstance(dob, str) or len(dob) != 10:
         return []

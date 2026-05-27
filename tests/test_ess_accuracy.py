@@ -208,57 +208,69 @@ def test_score_produces_report_with_expected_fields(tmp_path):
     assert report.false_merge_rate == 0.0
 
 
-def test_false_merge_rate_meets_target(tmp_path):
+# The cross-corpus marketing claim is "5 corpora" — make CI defend it
+# by parametrizing the precision/false-merge tests over every shipped
+# corpus, not just `people`. Add a new corpus to data/<name>/ and CI
+# will defend the invariants on it automatically.
+SHIPPED_CORPORA = ["people", "case_only", "inmate_clean", "publications"]
+
+
+@pytest.mark.parametrize("corpus_name", SHIPPED_CORPORA)
+def test_false_merge_rate_meets_target(tmp_path, corpus_name):
     """≤ 5% false-merge target from CMC spec — hard CMC-Lite invariant."""
-    corpus = load_corpus("people")
-    with CanonicalRegistry(tmp_path / "reg.db", corpus.schema) as registry:
+    corpus = load_corpus(corpus_name)
+    with CanonicalRegistry(tmp_path / f"{corpus_name}.db", corpus.schema) as registry:
         report = score(corpus, registry)
     assert report.false_merge_rate <= 0.05, (
-        f"False-merge rate {report.false_merge_rate:.3f} exceeded target 0.05"
+        f"[{corpus_name}] False-merge rate {report.false_merge_rate:.3f} "
+        f"exceeded target 0.05"
     )
 
 
-def test_auto_merge_precision_is_perfect(tmp_path):
+@pytest.mark.parametrize("corpus_name", SHIPPED_CORPORA)
+def test_auto_merge_precision_is_perfect(tmp_path, corpus_name):
     """Among T1+T2 auto-merges, every pair must actually be same-entity.
 
-    This is the meaningful CMC-Lite correctness invariant: the engine is
-    allowed to be conservative (refuse to auto-merge), but it must NEVER
-    auto-merge two entities that aren't actually the same.
+    The meaningful CMC-Lite correctness invariant: the engine is allowed
+    to be conservative (refuse to auto-merge), but it must NEVER auto-merge
+    two entities that aren't actually the same. Parametrized so CI defends
+    the cross-corpus claim, not just the `people` baseline.
     """
-    from spiritwriter.fabric.canonicalize import ResolutionTier
     auto_merge = {ResolutionTier.T1_EXACT.value, ResolutionTier.T2_STRONG.value}
-
-    corpus = load_corpus("people")
-    with CanonicalRegistry(tmp_path / "reg.db", corpus.schema) as registry:
+    corpus = load_corpus(corpus_name)
+    with CanonicalRegistry(tmp_path / f"{corpus_name}.db", corpus.schema) as registry:
         report = score(corpus, registry)
     tp = sum(1 for p in report.pairs if p.same_entity and p.ess_tier in auto_merge)
     fp = sum(1 for p in report.pairs if not p.same_entity and p.ess_tier in auto_merge)
     precision = tp / (tp + fp) if (tp + fp) else 1.0
     assert precision >= 1.0, (
-        f"Auto-merge precision dropped to {precision:.3f} (TP={tp}, FP={fp}); "
-        f"any FP means CMC-Lite incorrectly merged entities that should "
-        f"have stayed separate."
+        f"[{corpus_name}] Auto-merge precision dropped to {precision:.3f} "
+        f"(TP={tp}, FP={fp}); any FP means CMC-Lite incorrectly merged "
+        f"entities that should have stayed separate."
     )
 
 
-def test_case_mutations_resolve_to_t1(tmp_path):
-    """Concrete invariant: case variation MUST resolve at T1_EXACT."""
-    corpus = load_corpus("people")
-    with CanonicalRegistry(tmp_path / "reg.db", corpus.schema) as registry:
+@pytest.mark.parametrize("corpus_name", SHIPPED_CORPORA)
+def test_case_mutations_resolve_to_t1(tmp_path, corpus_name):
+    """Concrete invariant: case variation MUST resolve at T1_EXACT
+    on every corpus that exercises it."""
+    corpus = load_corpus(corpus_name)
+    with CanonicalRegistry(tmp_path / f"{corpus_name}.db", corpus.schema) as registry:
         report = score(corpus, registry)
     case_pairs = [p for p in report.pairs if p.family == "case"]
-    assert case_pairs
+    assert case_pairs, f"[{corpus_name}] no case mutations generated"
     for p in case_pairs:
         assert p.ess_tier == ResolutionTier.T1_EXACT.value, (
-            f"Case mutation landed at {p.ess_tier}, expected t1_exact: "
-            f"{p.canonical} -> {p.mutated}"
+            f"[{corpus_name}] Case mutation landed at {p.ess_tier}, "
+            f"expected t1_exact: {p.canonical} -> {p.mutated}"
         )
 
 
-def test_negative_control_never_auto_merges(tmp_path):
+@pytest.mark.parametrize("corpus_name", SHIPPED_CORPORA)
+def test_negative_control_never_auto_merges(tmp_path, corpus_name):
     """False-merge canary: garbled ESS fields MUST NOT auto-merge."""
-    corpus = load_corpus("people")
-    with CanonicalRegistry(tmp_path / "reg.db", corpus.schema) as registry:
+    corpus = load_corpus(corpus_name)
+    with CanonicalRegistry(tmp_path / f"{corpus_name}.db", corpus.schema) as registry:
         report = score(corpus, registry)
     negs = [p for p in report.pairs if p.family == "negative_control"]
     assert negs
@@ -267,6 +279,176 @@ def test_negative_control_never_auto_merges(tmp_path):
         assert p.ess_tier not in auto_merge, (
             f"Negative control auto-merged at {p.ess_tier}: {p.canonical} -> {p.mutated}"
         )
+
+
+# ── Falsification battery families ─────────────────────────────────
+
+
+def test_garbled_all_fields_marks_different_entity():
+    """Universal `garbled_all_fields` family — every mutation is a
+    no-overlap negative case; same_entity must be False."""
+    family = next(f for f in UNIVERSAL_FAMILIES if f.name == "garbled_all_fields")
+    record = {"name": "Martinez", "first": "Carlos"}
+    muts = family.generate(record, ess_fields=["name", "first"])
+    assert muts, "garbled_all_fields produced no mutations on a record with string ESS fields"
+    for m in muts:
+        assert m.same_entity is False
+        assert m.expected_tier_min is None
+
+
+@pytest.mark.parametrize("corpus_name", SHIPPED_CORPORA)
+def test_garbled_all_fields_never_auto_merges(tmp_path, corpus_name):
+    """No-overlap negative canary: when ALL ESS fields are garbled,
+    the engine must land at NO_MATCH (or at worst T4 via context-field
+    overlap). Auto-merge is a hard failure."""
+    corpus = load_corpus(corpus_name)
+    with CanonicalRegistry(tmp_path / f"{corpus_name}.db", corpus.schema) as registry:
+        report = score(corpus, registry)
+    garbled = [p for p in report.pairs if p.family == "garbled_all_fields"]
+    assert garbled, f"[{corpus_name}] no garbled_all_fields mutations generated"
+    auto_merge = {"t1_exact", "t2_strong"}
+    for p in garbled:
+        assert p.ess_tier not in auto_merge, (
+            f"[{corpus_name}] garbled_all_fields auto-merged at {p.ess_tier}: "
+            f"{p.canonical} -> {p.mutated}"
+        )
+
+
+def test_dob_typo_produces_valid_date():
+    """Date arithmetic in `dob_typo` (people corpus) handles a normal
+    ISO date and produces a parseable +1-day result."""
+    import importlib.util
+    from pathlib import Path
+    import datetime
+
+    repo = Path(__file__).resolve().parent.parent
+    spec = importlib.util.spec_from_file_location(
+        "people_mutations_for_test",
+        repo / "benchmarks/eval/ess_accuracy/data/people/mutations.py",
+    )
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    record = {"first_name": "James", "last_name": "Smith",
+              "dob": "1982-04-14", "gender": "M"}
+    muts = mod._gen_dob_typo(record, ess_fields=["last_name", "first_name", "dob"])
+    assert len(muts) == 1
+    new_dob = muts[0].mutated["dob"]
+    # Should parse + be exactly 1 day later
+    assert datetime.date.fromisoformat(new_dob) == \
+        datetime.date.fromisoformat("1982-04-14") + datetime.timedelta(days=1)
+    assert muts[0].same_entity is True
+    # Other fields untouched
+    assert muts[0].mutated["last_name"] == "Smith"
+    assert muts[0].mutated["first_name"] == "James"
+
+
+def test_dob_typo_skips_malformed_date():
+    """Date arithmetic in `dob_typo` rejects malformed input cleanly
+    rather than crashing."""
+    import importlib.util
+    from pathlib import Path
+
+    repo = Path(__file__).resolve().parent.parent
+    spec = importlib.util.spec_from_file_location(
+        "people_mutations_for_test_bad_date",
+        repo / "benchmarks/eval/ess_accuracy/data/people/mutations.py",
+    )
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    for bad in ["", "not-a-date", "1982-13-01", "1982/04/14"]:
+        record = {"first_name": "X", "last_name": "Y", "dob": bad}
+        muts = mod._gen_dob_typo(record, ess_fields=["last_name", "first_name", "dob"])
+        assert muts == [], f"dob_typo should skip malformed {bad!r}"
+
+
+def test_realistic_collision_family_produces_pairs_per_shipped_corpus(tmp_path):
+    """Silent-degradation guard: each shipped corpus that ships a
+    `realistic_collision` family must produce at least one mutation.
+
+    If someone edits entities.json and the collision-pair dict keys go
+    stale, this catches it at test time rather than letting the
+    campaign quietly report 'zero false merges' on fewer hostile
+    pairs than the marketing copy implies.
+    """
+    for corpus_name in ["people", "inmate_clean", "publications"]:
+        corpus = load_corpus(corpus_name)
+        # Only count if the corpus has registered this family at all
+        family_names = {f.name for f in corpus.families}
+        if "realistic_collision" not in family_names:
+            continue
+        with CanonicalRegistry(
+            tmp_path / f"{corpus_name}.db", corpus.schema
+        ) as registry:
+            report = score(corpus, registry)
+        collision_pairs = [p for p in report.pairs if p.family == "realistic_collision"]
+        assert collision_pairs, (
+            f"[{corpus_name}] realistic_collision family registered but "
+            f"produced ZERO mutations across all entities. The "
+            f"hand-curated collision-pair dict has gone stale — likely "
+            f"an entity was edited in entities.json without updating "
+            f"the collision keys in mutations.py."
+        )
+        # All collision pairs must be labeled different-entity
+        for p in collision_pairs:
+            assert p.same_entity is False, (
+                f"[{corpus_name}] realistic_collision generated a "
+                f"same_entity=True pair — wrong label"
+            )
+
+
+@pytest.mark.parametrize("corpus_name", ["people", "inmate_clean", "publications"])
+def test_realistic_collision_never_auto_merges(tmp_path, corpus_name):
+    """The killer false-merge test. Hand-picked different-entity pairs
+    sharing 2/3 ESS fields MUST NOT auto-merge. If this ever fails, the
+    `precision = 1.000` headline marketing claim is broken."""
+    corpus = load_corpus(corpus_name)
+    family_names = {f.name for f in corpus.families}
+    if "realistic_collision" not in family_names:
+        pytest.skip(f"{corpus_name} doesn't ship a realistic_collision family")
+    with CanonicalRegistry(tmp_path / f"{corpus_name}.db", corpus.schema) as registry:
+        report = score(corpus, registry)
+    collisions = [p for p in report.pairs if p.family == "realistic_collision"]
+    auto_merge = {"t1_exact", "t2_strong"}
+    for p in collisions:
+        assert p.ess_tier not in auto_merge, (
+            f"[{corpus_name}] realistic_collision auto-merged at "
+            f"{p.ess_tier}: {p.canonical} -> {p.mutated}. "
+            f"Precision claim broken."
+        )
+
+
+def test_silent_degradation_warning_fires_on_empty_family(tmp_path):
+    """The score() guard should warn when a registered family produces
+    zero mutations across all entities (catches stale collision-dict
+    keys after entities.json edits)."""
+    import warnings
+
+    # Build a minimal corpus with an extra family that never matches
+    (tmp_path / "schema.json").write_text(json.dumps({
+        "name": "mini",
+        "ess_fields": ["label"],
+        "fuzzy_fields": {"label": 0.85},
+    }), encoding="utf-8")
+    (tmp_path / "entities.json").write_text(json.dumps([
+        {"label": "Alpha"}, {"label": "Beta"},
+    ]), encoding="utf-8")
+    (tmp_path / "mutations.py").write_text(
+        "from benchmarks.eval.ess_accuracy.mutations import MutationFamily\n"
+        "def _gen_never(record, ess_fields):\n"
+        "    return []  # never produces anything\n"
+        "FAMILIES = [MutationFamily('always_empty', _gen_never, '')]\n",
+        encoding="utf-8",
+    )
+    corpus = load_corpus(str(tmp_path), allow_untrusted_mutations=True)
+    with CanonicalRegistry(tmp_path / "reg.db", corpus.schema) as registry:
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            score(corpus, registry)
+    assert any("always_empty" in str(w.message) for w in caught), (
+        "score() should warn when a registered family produces 0 mutations"
+    )
 
 
 def test_report_markdown_renders():

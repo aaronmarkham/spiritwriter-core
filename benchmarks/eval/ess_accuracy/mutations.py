@@ -21,12 +21,24 @@ from typing import Any, Callable
 
 @dataclass
 class Mutation:
-    """A single derived record + ground-truth match expectation."""
+    """A single derived record + ground-truth match expectation.
+
+    ``expected_tier_min`` is a *documentation hint* recording what tier
+    the mutation's author expected the engine to land at. It is NOT
+    enforced — the harness's pass/fail invariants are ``same_entity``
+    + auto-merge precision + false-merge rate (in ``metrics.py``).
+    The hint round-trips into ``results.json`` for downstream analysis
+    (e.g. "we expected T3 but the engine landed at T4 — is that a
+    finding?"). When measured behavior diverges from the hint, the
+    finding goes in the runs-log, not into a pass/fail signal —
+    conservative behavior (engine landing in a tier BELOW the hint)
+    is usually appropriate, not a bug.
+    """
     family: str                       # e.g. "case", "typo_insertion"
     mutated: dict[str, Any]           # the variant record
     canonical: dict[str, Any]         # the original record this mutates
     same_entity: bool                 # ground truth — should resolve to canonical?
-    expected_tier_min: str | None     # "t1_exact", "t2_strong", "t3_fuzzy", or None for negatives
+    expected_tier_min: str | None     # documentation hint (see class docstring)
     notes: str = ""                   # human-readable description
 
 

@@ -1,7 +1,7 @@
-# ESS Accuracy Report — 2026-05-21T15:17:29Z
-corpus: **people** · schema: `person` · entities: 48 · pairs: 1288 (1091 same, 197 different)
+# ESS Accuracy Report — 2026-05-27T01:46:47Z
+corpus: **publications** · schema: `publication` · entities: 30 · pairs: 783 (659 same, 124 different)
 spiritwriter-core 0.5.1
-baseline tokenization fields: `['last_name', 'first_name']`
+baseline tokenization fields: `['title', 'first_author_last']`
 
 ## Pass/fail invariants — CMC-Lite engine guarantees
 
@@ -16,11 +16,11 @@ These are the narrow correctness guarantees CMC-Lite makes. The cmc-spec's `≥8
 
 | metric | value | meaning |
 |---|---:|---|
-| Recall@T1 (exact only) | 0.573 | Pure normalization handles this fraction |
-| Recall@T1+T2 (auto-merge) | 0.573 | Auto-mergeable without human review |
+| Recall@T1 (exact only) | 0.636 | Pure normalization handles this fraction |
+| Recall@T1+T2 (auto-merge) | 0.681 | Auto-mergeable without human review |
 | Recall@any-tier (surfaced) | 1.000 | Reaches at least T3 for human or higher-confidence review |
-| Jaccard same-entity match rate | 0.740 | Baseline at threshold 0.80 |
-| Jaccard false-merge rate | 0.269 | Cost of baseline's recall |
+| Jaccard same-entity match rate | 0.907 | Baseline at threshold 0.80 |
+| Jaccard false-merge rate | 0.379 | Cost of baseline's recall |
 
 **Honest reading of these numbers:**
 
@@ -32,19 +32,20 @@ These are the narrow correctness guarantees CMC-Lite makes. The cmc-spec's `≥8
 
 | comparator | same-entity recall | false-merge rate | precision-of-merges |
 |---|---:|---:|---:|
-| ESS auto-merge (T1+T2) | 0.573 | 0.000 | 1.000 |
-| Jaccard @ 0.80 threshold | 0.740 | 0.269 | 0.938 |
+| ESS auto-merge (T1+T2) | 0.681 | 0.000 | 1.000 |
+| Jaccard @ 0.80 threshold | 0.907 | 0.379 | 0.927 |
 
-The honest comparison: ESS chooses high precision (no incorrect auto-merges) and surfaces the rest at T3/T4. Jaccard at this threshold accepts a 27% false-merge rate to claim higher raw recall — which would cascade into real data corruption in any production merge pipeline.
+The honest comparison: ESS chooses high precision (no incorrect auto-merges) and surfaces the rest at T3/T4. Jaccard at this threshold accepts a 38% false-merge rate to claim higher raw recall — which would cascade into real data corruption in any production merge pipeline.
 
 ## Per-tier calibration
 
 | tier | n | stated confidence | actual precision |
 |---|---:|---:|---:|
-| `t1_exact` | 625 | 0.95 | 1.000 |
-| `t3_fuzzy` | 391 | 0.70 | 0.931 |
-| `t4_weak` | 224 | 0.50 | 0.455 |
-| `no_match` | 48 | 0.00 | 1.000 |
+| `t1_exact` | 419 | 0.95 | 1.000 |
+| `t2_strong` | 30 | 0.85 | 1.000 |
+| `t3_fuzzy` | 162 | 0.70 | 0.926 |
+| `t4_weak` | 140 | 0.50 | 0.429 |
+| `no_match` | 32 | 0.00 | 1.000 |
 
 Reading this: for each tier the registry assigned, what fraction of pairs were actually same-entity? Stated confidences should approximate actual precision. (`no_match` reports negative predictive value — what fraction were correctly identified as different.)
 
@@ -52,22 +53,18 @@ Reading this: for each tier the registry assigned, what fraction of pairs were a
 
 | family | n | recall@T1+T2 | recall any | false-merge | tier distribution |
 |---|---:|---:|---:|---:|---|
-| `case` | 193 | 1.000 | 1.000 | 0.000 | t1_exact=193 |
-| `diminutive` | 40 | 0.000 | 1.000 | 0.000 | t3_fuzzy=37, t4_weak=3 |
-| `dob_typo` | 48 | 0.000 | 1.000 | 0.000 | t4_weak=48 |
-| `four_name_compress` | 1 | 0.000 | 1.000 | 0.000 | t4_weak=1 |
-| `garbled_all_fields` | 48 | 0.000 | 0.000 | 0.000 | no_match=48 |
-| `middle_initial_add` | 47 | 0.000 | 1.000 | 0.000 | t3_fuzzy=47 |
-| `negative_control` | 144 | 0.000 | 0.000 | 0.000 | t3_fuzzy=27, t4_weak=117 |
-| `realistic_collision` | 5 | 0.000 | 0.000 | 0.000 | t4_weak=5 |
-| `surname_dehyphenate` | 2 | 0.000 | 1.000 | 0.000 | t3_fuzzy=2 |
-| `surname_drop_maternal` | 14 | 0.000 | 1.000 | 0.000 | t3_fuzzy=12, t4_weak=2 |
-| `surname_duplication` | 34 | 0.000 | 1.000 | 0.000 | t3_fuzzy=34 |
-| `surname_hyphenate` | 12 | 0.000 | 1.000 | 0.000 | t3_fuzzy=12 |
-| `surname_hyphenate_duplicate` | 34 | 0.000 | 1.000 | 0.000 | t3_fuzzy=34 |
-| `typo_insertion` | 142 | 0.000 | 1.000 | 0.000 | t3_fuzzy=94, t4_weak=48 |
-| `typo_substitution` | 92 | 0.000 | 1.000 | 0.000 | t3_fuzzy=92 |
-| `whitespace` | 432 | 1.000 | 1.000 | 0.000 | t1_exact=432 |
+| `case` | 149 | 1.000 | 1.000 | 0.000 | t1_exact=149 |
+| `first_author_initial` | 30 | 0.000 | 1.000 | 0.000 | t3_fuzzy=30 |
+| `garbled_all_fields` | 30 | 0.000 | 0.000 | 0.000 | no_match=30 |
+| `negative_control` | 90 | 0.000 | 0.000 | 0.000 | t3_fuzzy=10, t4_weak=80 |
+| `realistic_collision` | 4 | 0.000 | 0.000 | 0.000 | no_match=2, t3_fuzzy=2 |
+| `title_subtitle_add` | 5 | 0.000 | 1.000 | 0.000 | t3_fuzzy=5 |
+| `title_subtitle_drop` | 16 | 0.000 | 1.000 | 0.000 | t3_fuzzy=16 |
+| `typo_insertion` | 82 | 0.000 | 1.000 | 0.000 | t3_fuzzy=52, t4_weak=30 |
+| `typo_substitution` | 47 | 0.000 | 1.000 | 0.000 | t3_fuzzy=47 |
+| `whitespace` | 270 | 1.000 | 1.000 | 0.000 | t1_exact=270 |
+| `year_missing` | 30 | 1.000 | 1.000 | 0.000 | t2_strong=30 |
+| `year_typo` | 30 | 0.000 | 1.000 | 0.000 | t4_weak=30 |
 
 `negative_control` is the false-merge canary — recall columns
 aren't meaningful (no same-entity pairs); false-merge MUST be 0.

@@ -9,6 +9,7 @@ attributable in the report.
 
 from __future__ import annotations
 
+import datetime
 from typing import Any
 
 from benchmarks.eval.ess_accuracy.mutations import Mutation, MutationFamily
@@ -306,13 +307,12 @@ _DATE_ANCHOR = "dob"
 def _gen_dob_typo(record: dict[str, Any], ess_fields: list[str]) -> list[Mutation]:
     """Shift DOB by 1 day — models off-by-one data-entry typos.
 
-    Same entity by intent (one person, fat-fingered date). Expected to
-    land at T3 (DOB digest differs, but last_name + first_name fuzzy
-    are both 1.000). If it lands at T1+T2, the engine is over-merging
-    a date that's genuinely different — interesting either way:
-    real-world rosters DO contain DOB typos.
+    Same entity by intent (one person, fat-fingered date). Engine
+    *measured* behavior: lands at T4_WEAK because anchor garbling
+    tanks ESS overlap below T3's threshold despite name fuzzy matching
+    perfectly. That's appropriate conservatism — engine surfaces for
+    review rather than silently merging a date that genuinely differs.
     """
-    import datetime
     dob = record.get(_DATE_ANCHOR, "")
     if not isinstance(dob, str) or len(dob) != 10:
         return []

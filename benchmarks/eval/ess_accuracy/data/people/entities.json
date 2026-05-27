@@ -50,5 +50,8 @@
   {"first_name": "Maria",     "last_name": "Garcia",             "dob": "1990-06-04", "gender": "F"},
   {"first_name": "Jose",      "last_name": "Martinez",           "dob": "1988-11-22", "gender": "M"},
   {"first_name": "Maria",     "last_name": "Lopez",              "dob": "1985-03-12", "gender": "F"},
-  {"first_name": "Carlos",    "last_name": "Sanchez",            "dob": "1991-08-15", "gender": "M"}
+  {"first_name": "Carlos",    "last_name": "Sanchez",            "dob": "1991-08-15", "gender": "M"},
+
+  {"first_name": "Robert A",  "last_name": "Garcia",             "dob": "1979-11-15", "gender": "M"},
+  {"first_name": "Linda M",   "last_name": "Williams",           "dob": "1983-07-22", "gender": "F"}
 ]
