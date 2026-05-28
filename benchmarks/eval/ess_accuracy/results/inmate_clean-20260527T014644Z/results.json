@@ -1,0 +1,191 @@
+{
+  "corpus_name": "inmate_clean",
+  "schema_name": "person_inmate_clean",
+  "n_entities": 26,
+  "n_pairs": 636,
+  "n_same": 529,
+  "n_different": 107,
+  "recall_t1": 0.6389413988657845,
+  "recall_t1_t2": 0.6389413988657845,
+  "recall_any_tier": 1.0,
+  "false_merge_rate": 0.0,
+  "jaccard_match_rate": 0.7580340264650284,
+  "jaccard_false_merge_rate": 0.27102803738317754,
+  "ess_minus_jaccard": -0.11909262759924388,
+  "jaccard_fields": [
+    "last_name",
+    "first_name"
+  ],
+  "per_tier_calibration": {
+    "t1_exact": {
+      "n": 338,
+      "stated_confidence": 0.95,
+      "actual_precision": 1.0
+    },
+    "t3_fuzzy": {
+      "n": 155,
+      "stated_confidence": 0.7,
+      "actual_precision": 0.8903225806451613
+    },
+    "t4_weak": {
+      "n": 117,
+      "stated_confidence": 0.5,
+      "actual_precision": 0.452991452991453
+    },
+    "no_match": {
+      "n": 26,
+      "stated_confidence": 0.0,
+      "actual_precision": 1.0
+    }
+  },
+  "per_family": {
+    "case": {
+      "n": 104,
+      "n_same": 104,
+      "n_different": 0,
+      "recall_t1_t2": 1.0,
+      "recall_any_tier": 1.0,
+      "false_merge_rate": 0.0,
+      "tier_distribution": {
+        "t1_exact": 104
+      }
+    },
+    "dob_typo": {
+      "n": 26,
+      "n_same": 26,
+      "n_different": 0,
+      "recall_t1_t2": 0.0,
+      "recall_any_tier": 1.0,
+      "false_merge_rate": 0.0,
+      "tier_distribution": {
+        "t4_weak": 26
+      }
+    },
+    "garbled_all_fields": {
+      "n": 26,
+      "n_same": 0,
+      "n_different": 26,
+      "recall_t1_t2": 0.0,
+      "recall_any_tier": 0.0,
+      "false_merge_rate": 0.0,
+      "tier_distribution": {
+        "no_match": 26
+      }
+    },
+    "middle_initial_add": {
+      "n": 23,
+      "n_same": 23,
+      "n_different": 0,
+      "recall_t1_t2": 0.0,
+      "recall_any_tier": 1.0,
+      "false_merge_rate": 0.0,
+      "tier_distribution": {
+        "t3_fuzzy": 23
+      }
+    },
+    "middle_initial_drop": {
+      "n": 2,
+      "n_same": 2,
+      "n_different": 0,
+      "recall_t1_t2": 0.0,
+      "recall_any_tier": 1.0,
+      "false_merge_rate": 0.0,
+      "tier_distribution": {
+        "t3_fuzzy": 2
+      }
+    },
+    "negative_control": {
+      "n": 78,
+      "n_same": 0,
+      "n_different": 78,
+      "recall_t1_t2": 0.0,
+      "recall_any_tier": 0.0,
+      "false_merge_rate": 0.0,
+      "tier_distribution": {
+        "t4_weak": 61,
+        "t3_fuzzy": 17
+      }
+    },
+    "realistic_collision": {
+      "n": 3,
+      "n_same": 0,
+      "n_different": 3,
+      "recall_t1_t2": 0.0,
+      "recall_any_tier": 0.0,
+      "false_merge_rate": 0.0,
+      "tier_distribution": {
+        "t4_weak": 3
+      }
+    },
+    "surname_dehyphenate": {
+      "n": 1,
+      "n_same": 1,
+      "n_different": 0,
+      "recall_t1_t2": 0.0,
+      "recall_any_tier": 1.0,
+      "false_merge_rate": 0.0,
+      "tier_distribution": {
+        "t3_fuzzy": 1
+      }
+    },
+    "surname_drop_maternal": {
+      "n": 7,
+      "n_same": 7,
+      "n_different": 0,
+      "recall_t1_t2": 0.0,
+      "recall_any_tier": 1.0,
+      "false_merge_rate": 0.0,
+      "tier_distribution": {
+        "t3_fuzzy": 6,
+        "t4_weak": 1
+      }
+    },
+    "surname_hyphenate": {
+      "n": 6,
+      "n_same": 6,
+      "n_different": 0,
+      "recall_t1_t2": 0.0,
+      "recall_any_tier": 1.0,
+      "false_merge_rate": 0.0,
+      "tier_distribution": {
+        "t3_fuzzy": 6
+      }
+    },
+    "typo_insertion": {
+      "n": 77,
+      "n_same": 77,
+      "n_different": 0,
+      "recall_t1_t2": 0.0,
+      "recall_any_tier": 1.0,
+      "false_merge_rate": 0.0,
+      "tier_distribution": {
+        "t3_fuzzy": 51,
+        "t4_weak": 26
+      }
+    },
+    "typo_substitution": {
+      "n": 49,
+      "n_same": 49,
+      "n_different": 0,
+      "recall_t1_t2": 0.0,
+      "recall_any_tier": 1.0,
+      "false_merge_rate": 0.0,
+      "tier_distribution": {
+        "t3_fuzzy": 49
+      }
+    },
+    "whitespace": {
+      "n": 234,
+      "n_same": 234,
+      "n_different": 0,
+      "recall_t1_t2": 1.0,
+      "recall_any_tier": 1.0,
+      "false_merge_rate": 0.0,
+      "tier_distribution": {
+        "t1_exact": 234
+      }
+    }
+  },
+  "generated_at": "2026-05-27T01:46:43Z",
+  "spiritwriter_version": "0.5.1"
+}

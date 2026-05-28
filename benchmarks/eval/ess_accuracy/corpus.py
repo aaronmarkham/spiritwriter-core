@@ -167,8 +167,16 @@ def _load_domain_families(
             f"per-corpus extensions are gated."
         )
 
+    # Sanitize the synthetic module name — dots in the directory name
+    # would produce a malformed dotted-path that breaks if someone later
+    # switches to ``importlib.import_module``. Replace any non-identifier
+    # characters with underscores.
+    safe_name = "".join(
+        c if c.isalnum() or c == "_" else "_"
+        for c in corpus_dir.name
+    )
     spec = importlib.util.spec_from_file_location(
-        f"benchmarks.eval.ess_accuracy.data.{corpus_dir.name}.mutations",
+        f"benchmarks.eval.ess_accuracy.data.{safe_name}.mutations",
         mut_path,
     )
     if spec is None or spec.loader is None:

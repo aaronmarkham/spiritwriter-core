@@ -1,0 +1,236 @@
+{
+  "corpus_name": "people",
+  "schema_name": "person",
+  "n_entities": 50,
+  "n_pairs": 1343,
+  "n_same": 1138,
+  "n_different": 205,
+  "recall_t1": 0.5720562390158173,
+  "recall_t1_t2": 0.5720562390158173,
+  "recall_any_tier": 1.0,
+  "false_merge_rate": 0.0,
+  "jaccard_match_rate": 0.7390158172231986,
+  "jaccard_false_merge_rate": 0.2682926829268293,
+  "ess_minus_jaccard": -0.1669595782073814,
+  "jaccard_fields": [
+    "last_name",
+    "first_name"
+  ],
+  "per_tier_calibration": {
+    "t1_exact": {
+      "n": 651,
+      "stated_confidence": 0.95,
+      "actual_precision": 1.0
+    },
+    "t3_fuzzy": {
+      "n": 410,
+      "stated_confidence": 0.7,
+      "actual_precision": 0.9292682926829269
+    },
+    "t4_weak": {
+      "n": 232,
+      "stated_confidence": 0.5,
+      "actual_precision": 0.45689655172413796
+    },
+    "no_match": {
+      "n": 50,
+      "stated_confidence": 0.0,
+      "actual_precision": 1.0
+    }
+  },
+  "per_family": {
+    "case": {
+      "n": 201,
+      "n_same": 201,
+      "n_different": 0,
+      "recall_t1_t2": 1.0,
+      "recall_any_tier": 1.0,
+      "false_merge_rate": 0.0,
+      "tier_distribution": {
+        "t1_exact": 201
+      }
+    },
+    "diminutive": {
+      "n": 43,
+      "n_same": 43,
+      "n_different": 0,
+      "recall_t1_t2": 0.0,
+      "recall_any_tier": 1.0,
+      "false_merge_rate": 0.0,
+      "tier_distribution": {
+        "t3_fuzzy": 40,
+        "t4_weak": 3
+      }
+    },
+    "dob_typo": {
+      "n": 50,
+      "n_same": 50,
+      "n_different": 0,
+      "recall_t1_t2": 0.0,
+      "recall_any_tier": 1.0,
+      "false_merge_rate": 0.0,
+      "tier_distribution": {
+        "t4_weak": 50
+      }
+    },
+    "four_name_compress": {
+      "n": 1,
+      "n_same": 1,
+      "n_different": 0,
+      "recall_t1_t2": 0.0,
+      "recall_any_tier": 1.0,
+      "false_merge_rate": 0.0,
+      "tier_distribution": {
+        "t4_weak": 1
+      }
+    },
+    "garbled_all_fields": {
+      "n": 50,
+      "n_same": 0,
+      "n_different": 50,
+      "recall_t1_t2": 0.0,
+      "recall_any_tier": 0.0,
+      "false_merge_rate": 0.0,
+      "tier_distribution": {
+        "no_match": 50
+      }
+    },
+    "middle_initial_add": {
+      "n": 47,
+      "n_same": 47,
+      "n_different": 0,
+      "recall_t1_t2": 0.0,
+      "recall_any_tier": 1.0,
+      "false_merge_rate": 0.0,
+      "tier_distribution": {
+        "t3_fuzzy": 47
+      }
+    },
+    "middle_initial_drop": {
+      "n": 2,
+      "n_same": 2,
+      "n_different": 0,
+      "recall_t1_t2": 0.0,
+      "recall_any_tier": 1.0,
+      "false_merge_rate": 0.0,
+      "tier_distribution": {
+        "t3_fuzzy": 2
+      }
+    },
+    "negative_control": {
+      "n": 150,
+      "n_same": 0,
+      "n_different": 150,
+      "recall_t1_t2": 0.0,
+      "recall_any_tier": 0.0,
+      "false_merge_rate": 0.0,
+      "tier_distribution": {
+        "t4_weak": 121,
+        "t3_fuzzy": 29
+      }
+    },
+    "realistic_collision": {
+      "n": 5,
+      "n_same": 0,
+      "n_different": 5,
+      "recall_t1_t2": 0.0,
+      "recall_any_tier": 0.0,
+      "false_merge_rate": 0.0,
+      "tier_distribution": {
+        "t4_weak": 5
+      }
+    },
+    "surname_dehyphenate": {
+      "n": 2,
+      "n_same": 2,
+      "n_different": 0,
+      "recall_t1_t2": 0.0,
+      "recall_any_tier": 1.0,
+      "false_merge_rate": 0.0,
+      "tier_distribution": {
+        "t3_fuzzy": 2
+      }
+    },
+    "surname_drop_maternal": {
+      "n": 14,
+      "n_same": 14,
+      "n_different": 0,
+      "recall_t1_t2": 0.0,
+      "recall_any_tier": 1.0,
+      "false_merge_rate": 0.0,
+      "tier_distribution": {
+        "t3_fuzzy": 12,
+        "t4_weak": 2
+      }
+    },
+    "surname_duplication": {
+      "n": 36,
+      "n_same": 36,
+      "n_different": 0,
+      "recall_t1_t2": 0.0,
+      "recall_any_tier": 1.0,
+      "false_merge_rate": 0.0,
+      "tier_distribution": {
+        "t3_fuzzy": 36
+      }
+    },
+    "surname_hyphenate": {
+      "n": 12,
+      "n_same": 12,
+      "n_different": 0,
+      "recall_t1_t2": 0.0,
+      "recall_any_tier": 1.0,
+      "false_merge_rate": 0.0,
+      "tier_distribution": {
+        "t3_fuzzy": 12
+      }
+    },
+    "surname_hyphenate_duplicate": {
+      "n": 36,
+      "n_same": 36,
+      "n_different": 0,
+      "recall_t1_t2": 0.0,
+      "recall_any_tier": 1.0,
+      "false_merge_rate": 0.0,
+      "tier_distribution": {
+        "t3_fuzzy": 36
+      }
+    },
+    "typo_insertion": {
+      "n": 148,
+      "n_same": 148,
+      "n_different": 0,
+      "recall_t1_t2": 0.0,
+      "recall_any_tier": 1.0,
+      "false_merge_rate": 0.0,
+      "tier_distribution": {
+        "t3_fuzzy": 98,
+        "t4_weak": 50
+      }
+    },
+    "typo_substitution": {
+      "n": 96,
+      "n_same": 96,
+      "n_different": 0,
+      "recall_t1_t2": 0.0,
+      "recall_any_tier": 1.0,
+      "false_merge_rate": 0.0,
+      "tier_distribution": {
+        "t3_fuzzy": 96
+      }
+    },
+    "whitespace": {
+      "n": 450,
+      "n_same": 450,
+      "n_different": 0,
+      "recall_t1_t2": 1.0,
+      "recall_any_tier": 1.0,
+      "false_merge_rate": 0.0,
+      "tier_distribution": {
+        "t1_exact": 450
+      }
+    }
+  },
+  "generated_at": "2026-05-27T01:46:45Z",
+  "spiritwriter_version": "0.5.1"
+}
