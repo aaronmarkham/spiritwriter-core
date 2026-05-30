@@ -139,7 +139,7 @@ task_text = pkg.spawn_task_text()  # hand this to the sub-agent
 
 ### Entity Resolution
 
-Three rosters list "Martinez, Carlos", "MARTINEZ, CARLOS A", and "C. Martinez" — same DOB, same person? **Phalanx** is the entity resolution system; the **CanonicalRegistry** is its runtime engine. Domain-agnostic — supply a schema, get tiered confidence resolution backed by Entity Sense Signatures (content-addressed identity anchors) and fuzzy matching.
+Three rosters list "Martinez, Carlos", "MARTINEZ, CARLOS A", and "C. Martinez" — same DOB, same person? The **`CanonicalRegistry`** resolves them. Domain-agnostic — supply a schema, get tiered confidence resolution backed by Entity Sense Signatures (content-addressed identity anchors) and fuzzy matching. No embedding model, no LLM in the merge path.
 
 ```python
 from spiritwriter.fabric.canonicalize import (

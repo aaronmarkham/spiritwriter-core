@@ -14,7 +14,7 @@ Content-addressed agent memory for AI systems. Create, store, encrypt, share, an
 
 - **Delegated Jobs** — package encrypted content + task + entitlement into one unit of sub-agent work. The orchestrator hands the package over; the sub-agent hydrates, executes, returns a result shard. Every step traced.
 
-- **Entity Resolution (Phalanx)** — tell entities apart even when names collide ("Bear" the dog vs. "Bear" the brand) and merge them when surface forms diverge ("Carlos Martinez" vs. "MARTINEZ, CARLOS A"). Same primitive handles both. *(See [The Bear Problem](#the-bear-problem) below.)*
+- **Entity Resolution** — tell entities apart when names collide ("Bear" the dog vs. "Bear" the brand) and merge them when surface forms diverge ("Carlos Martinez" vs. "MARTINEZ, CARLOS A"). Same engine, both directions. No graph database, no embedding service — define your identifying fields, hand in records, get canonical IDs back. *(See [The Bear Problem](#the-bear-problem) below.)*
 
 - **Tracing** — replay exactly what an agent did, prove nothing's been edited, render the run as workflow / genealogy / multi-agent diagrams. Useful for debugging expensive failures, auditing before deploy, or proving a run's integrity to a third party. *(Hash-chained JSONL with optional Ed25519 signing.)*
 
@@ -80,7 +80,7 @@ sealed = store.seal_and_store(shard, keypair.public_key)   # only owner's privat
 decrypted = store.unseal_and_get(sealed.shard_id, keypair.private_key)
 ```
 
-## Entity Resolution (Phalanx)
+## Entity Resolution
 
 ```python
 from spiritwriter.fabric.canonicalize import CanonicalRegistry, CanonicalSchema
@@ -105,7 +105,7 @@ You're extracting facts about Aaron from a stack of documents. Document 1 surfac
 
 Each document gives partial defining-field coverage, and your extractor classifies Bear three different ways: a name in Document 1, a generic animal in Document 2, a specific dog in Document 3. Three identifiers for the same entity, and they don't align. A naive system keeps them separate (you have three Bears, no convergence as more documents arrive) or collapses by surface name alone (now Bear-the-dog merges with Bear-the-beer brand mentioned in Document 4). Embedding-based systems hallucinate the boundaries — they score "Bear" the dog close to "Bear" the bear close to "Bear" the brand, and the merge decisions become unauditable.
 
-Phalanx hashes the *defining fields* (name + entity type + owner + …) into an **Entity Sense Signature** — a deterministic identity hash. As more documents land, defining fields accumulate per entity. Document 1 gives `name=Bear, owner=Aaron`. Document 3 adds `entity_type=dog, breed=borador`. The growing field set produces a stable ESS the moment you have enough fields to disambiguate. Fields not yet known don't penalize the match — they're absent from the hash, and ESS overlap rewards the fields you *do* share.
+The resolver hashes the *defining fields* (name + entity type + owner + …) into an **Entity Sense Signature** — a deterministic identity hash. As more documents land, defining fields accumulate per entity. Document 1 gives `name=Bear, owner=Aaron`. Document 3 adds `entity_type=dog, breed=borador`. The growing field set produces a stable ESS the moment you have enough fields to disambiguate. Fields not yet known don't penalize the match — they're absent from the hash, and ESS overlap rewards the fields you *do* share.
 
 The same primitive handles the inverse: "Carlos Martinez", "MARTINEZ, CARLOS A", and "C. Martinez" across three rosters dedupe into one entity, because their defining fields normalize to the same hash regardless of surface spelling.
 
@@ -131,7 +131,7 @@ The registry holds *which canonical entity each sighting maps to*; the shards ho
 
 - **Local-first.** A `CanonicalRegistry` is one SQLite file (and the shards it points at are plain JSON-LD on disk). No service to run, no vector DB to host, no daemon to keep alive. The registry *is* the artifact — email it, version-control it, copy it between machines, restore it from a backup.
 
-- **Deterministic before fuzzy.** Auto-merge only at T1 and T2 (the upper rows of the table above). Anything weaker becomes a flagged merge event for human review. False merges are the worst failure mode in entity resolution, and silent ones are unauditable. Phalanx fails loud.
+- **Deterministic before fuzzy.** Auto-merge only at T1 and T2 (the upper rows of the table above). Anything weaker becomes a flagged merge event for human review. False merges are the worst failure mode in entity resolution, and silent ones are unauditable. The resolver fails loud.
 
 - **No LLM in the auto-merge path.** LLMs hallucinate, and for entity resolution that means silently combining records of two different people. Deterministic + fuzzy with explicit tiers is verifiable end-to-end; LLM judgment isn't. Use an LLM upstream to extract atoms from text if you want; keep it out of the merge decision.
 
@@ -141,9 +141,11 @@ The registry holds *which canonical entity each sighting maps to*; the shards ho
 
 ### The Numbers
 
-≥85% recall on semantic duplicates with ≤5% false-merge rate. No embeddings, no LLM calls — SQLite, normalization, and string matching. The full spec draws on academic prior art (EDC/EMNLP 2024, Graphiti/Zep, SimpleMem, EMem-G); Phalanx pulls the three highest-impact ideas — content-addressed identity, tiered escalation, overlapping-window extraction — and ships them with zero new infrastructure.
+**100% auto-merge precision: 0 incorrect merges across 5 benchmark corpora.** 100% of same-entity drift is surfaced for review (auto-merged at T1/T2 when safe, flagged at T3/T4 otherwise). No embeddings, no LLM calls — SQLite, normalization, and string matching. See [docs/benchmarks/runs-log.md](docs/benchmarks/runs-log.md) for the measurements.
 
-**Deeper:** [Entity Resolution guide](docs/entity-resolution.md), [CMC-Lite spec](docs/specs/cmc-spec-v0.1.md).
+The full spec ([docs/specs/cmc-spec-v0.1.md](docs/specs/cmc-spec-v0.1.md)) draws on academic prior art (EDC/EMNLP 2024, Graphiti/Zep, SimpleMem, EMem-G); the implementation here pulls the three highest-impact ideas — content-addressed identity, tiered escalation, overlapping-window extraction — and ships them with zero new infrastructure.
+
+**Deeper:** [Entity Resolution guide](docs/entity-resolution.md), [Shingled Extraction](docs/shingled-extraction.md), [CMC-Lite spec](docs/specs/cmc-spec-v0.1.md).
 
 ## Documentation
 
@@ -157,7 +159,8 @@ The registry holds *which canonical entity each sighting maps to*; the shards ho
 | [Substrate Flavor](docs/substrate-flavor.md) | wire format + verification rules — bootstrap contract for library-free implementers in any language |
 | [Jobs](docs/jobs.md) | packaging delegated sub-agent work; issuer / runner sides |
 | [Shard Postures](docs/shard-postures.md) | choosing the trust model — encryption, signing, scope, decay, distribution as one dial |
-| [Entity Resolution](docs/entity-resolution.md) | Phalanx (CMC-Lite): ESS, tiered matching, batch processing |
+| [Entity Resolution](docs/entity-resolution.md) | ESS digests, tiered matching, batch processing |
+| [Shingled Extraction](docs/shingled-extraction.md) | overlapping-window extraction with multi-pass consensus voting |
 | [Tracing](docs/tracing.md) | hash-chained provenance, chain verification, signed traces |
 | [Traced Workflows](docs/traced-workflows.md) | multi-stage pipelines with checkpoint/resume; CSP as worked example |
 | [Network Distribution](docs/network-distribution.md) | IPFS backend, manifests, private swarm, L1/L2 resolution |
@@ -198,7 +201,7 @@ spiritwriter/
 │   ├── crypto.py        # AES-256-GCM encryption
 │   ├── sealed.py        # NaCl sealed boxes, Ed25519 signing
 │   ├── entitlement.py   # Scoped access tokens
-│   ├── canonicalize.py  # CMC-Lite entity resolution
+│   ├── canonicalize.py  # Entity resolution (CanonicalRegistry, ESS, tiers)
 │   ├── emitter.py       # Hash-chained trace events
 │   ├── extract.py       # Atom extraction utilities
 │   ├── visualize.py     # Mermaid diagram rendering

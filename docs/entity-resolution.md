@@ -1,12 +1,14 @@
-# Entity Resolution — Phalanx
+# Entity Resolution
 
-The same person shows up in three rosters as "Martinez, Carlos", "MARTINEZ, CARLOS A", and "C. Martinez". Same DOB, same booking pattern. Are they the same entity?
+Entity resolution in spiritwriter works by defining fields, not surface forms. The same person shows up in three rosters as "Martinez, Carlos", "MARTINEZ, CARLOS A", and "C. Martinez" — same DOB, same booking pattern. Are they the same entity? That's the problem this module solves.
 
-That's the resolution problem this module solves. **Phalanx** is the system; the **CanonicalRegistry** is the runtime engine. Domain-agnostic — supply a schema describing how your entities are identified, and the registry handles deduplication across sources using deterministic-then-fuzzy matching.
+The **`CanonicalRegistry`** is the runtime engine; **Phalanx** is the name of the system it implements (one engine, swappable schema, tier-based confidence). Domain-agnostic — supply a schema describing how your entities are identified, and the registry handles deduplication across sources using deterministic-then-fuzzy matching.
 
 No embedding model, no LLM calls. SQLite, normalization, and tiered confidence scoring.
 
 The registry resolves over `ShardAtom`s — the (`entity`, `key`, `value`) triples on `FACT` and `ENTITY` atoms are what `ess_fields` references. If you haven't read about atoms yet, start at [`atoms.md`](atoms.md) (especially the `ENTITY` and `FACT` use cases and [`examples/atoms/10_entity.py`](../examples/atoms/10_entity.py)) before diving into how the resolver consumes them.
+
+For how atoms get *made* from long-form text in the first place — overlapping windows, multi-pass consensus voting, no fact lost at chunk boundaries — see [`shingled-extraction.md`](shingled-extraction.md). That's a separate primitive from the resolver, often used together.
 
 ## The Tier System
 
