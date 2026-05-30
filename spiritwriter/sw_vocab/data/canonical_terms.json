@@ -23,10 +23,20 @@
   {
     "term": "Phalanx",
     "category": "system",
-    "definition": "spiritwriter-core's definition-based entity resolution system. Renamed from 'shingles' (overlapping shields metaphor > overlapping roof tiles, avoids medical connotation). Encompasses CanonicalRegistry + overlapping-window extraction.",
+    "definition": "spiritwriter-core's definition-based entity resolution system — the resolver only. CanonicalRegistry is its runtime engine. Renamed from 'shingles' (overlapping shields metaphor > overlapping roof tiles; avoids medical connotation). Does NOT encompass shingled extraction; that's a separate primitive (see docs/shingled-extraction.md). Per decision C in docs/cleanup/cmc-phalanx-canonicalize.md, Phalanx is reserved for deep-dive technical docs; do not use in marketing surfaces.",
     "defined_in": "docs/entity-resolution.md",
     "aliases": [
       "shingles"
+    ]
+  },
+  {
+    "term": "shingled extraction",
+    "category": "primitive",
+    "definition": "Atom extraction primitive — turn long-form text into ShardAtoms via overlapping windows + multi-pass consensus voting; only atoms that appear across multiple passes survive. Separate from Phalanx (the resolver); together they form the extract → resolve loop. 'Shingled' is the process adjective (overlapping coverage like roofing shingles); the historical noun 'shingles' is retired.",
+    "defined_in": "docs/shingled-extraction.md",
+    "aliases": [
+      "overlapping-window extraction",
+      "shingle pattern"
     ]
   },
   {
