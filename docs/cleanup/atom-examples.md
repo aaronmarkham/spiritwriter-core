@@ -315,20 +315,11 @@ The example should also call out:
 
 ### `spiritwriter-core`
 
-- [ ] **Finalize `docs/atoms.md`** — your plane-notes draft is on the
-  `cleanup/cmc-canonicalize` branch. Move it forward: section per use
-  case from §2, the flexibility-frame table from §1, intro prose, link
-  to deep-dive docs.
-- [ ] **Add runnable examples under `examples/atoms/`** — short Python
-  modules (one per use case) that build the atom, store it in a temp
-  shard, and print the hydrated context. Each in <40 lines.
-- [ ] **Tests at `tests/test_atom_examples.py`** — verify each example
-  parses, hashes, and round-trips through the store. Regression
-  coverage so the docs don't drift from the runtime.
-- [ ] **Cross-link from `docs/memory-shards.md`** — that doc currently
-  doesn't link to the atoms explainer. Should.
-- [ ] **Cross-link from `docs/entity-resolution.md`** — points readers
-  who land at the resolver to the atom doc for the underlying primitive.
+- [x] **Finalize `docs/atoms.md`** — plane-notes prose preserved; flexibility-frame table added (§1); one subsection per use case (§2) linking to the runnable example file; "Related reading" footer pointing at sibling docs and the benchmark numbers.
+- [x] **Add runnable examples under `examples/atoms/`** — 13 short Python modules (one per use case, including the two "closing the loop" follow-ons for CHECKPOINT and INSTRUCTION). Each builds atoms, puts them in a temp `ShardStore`, prints what got stored and the hydrated context. README orientation table covers all 13.
+- [x] **Tests at `tests/test_atom_examples.py`** — parametrized regression coverage: builds_valid_shard, hashes_deterministically, round_trips_through_store across the 10 single-shard examples, plus dedicated tests for the trace-closing (07), delegation (09), and lineage-variants (13) examples. 33 tests, all green.
+- [x] **Cross-link from `docs/memory-shards.md`** — added a pointer in the "ShardAtom — the unit of knowledge" section sending readers to `atoms.md` for the "why" and to `examples/atoms/` for runnable cases.
+- [x] **Cross-link from `docs/entity-resolution.md`** — added a pointer at the top of the doc noting the registry resolves over `ShardAtom` triples and pointing newcomers to `atoms.md` and `examples/atoms/10_entity.py` before they dive into the resolver internals.
 
 ### `frio`
 
