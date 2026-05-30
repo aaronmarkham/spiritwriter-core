@@ -145,7 +145,7 @@ The registry holds *which canonical entity each sighting maps to*; the shards ho
 
 The full spec ([docs/specs/cmc-spec-v0.1.md](docs/specs/cmc-spec-v0.1.md)) draws on academic prior art (EDC/EMNLP 2024, Graphiti/Zep, SimpleMem, EMem-G); the implementation here pulls the three highest-impact ideas — content-addressed identity, tiered escalation, overlapping-window extraction — and ships them with zero new infrastructure.
 
-**Deeper:** [Entity Resolution guide](docs/entity-resolution.md), [Shingled Extraction](docs/shingled-extraction.md), [CMC-Lite spec](docs/specs/cmc-spec-v0.1.md).
+**Deeper:** [Entity Resolution guide](docs/entity-resolution.md), [Shingled Extraction](docs/shingled-extraction.md), [CMC-Lite spec](docs/specs/cmc-lite-v0.1.md).
 
 ## Documentation
 
