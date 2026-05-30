@@ -191,4 +191,3 @@ Most existing docs only show "new fact, new atom" — they don't show how to mod
 - [`jobs.md`](jobs.md) — the package/hydrate/settle workflow `INSTRUCTION` atoms participate in.
 - [`entitlements.md`](entitlements.md) — cap-chain and scope enforcement.
 - [`benchmarks/README.md`](benchmarks/README.md) — measured precision, false-merge rate, falsification battery.
-- [`cleanup/atom-examples.md`](cleanup/atom-examples.md) — the working spec that scoped which use cases got documented here.

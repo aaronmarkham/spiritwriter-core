@@ -2,9 +2,7 @@
 
 Short, runnable Python modules — one use case per file — that show what
 an atom looks like in different shapes and what fields you'd fill in
-for each. The companion explainer is [`docs/atoms.md`](../../docs/atoms.md);
-the spec that scopes which use cases get covered is at
-[`docs/cleanup/atom-examples.md`](../../docs/cleanup/atom-examples.md).
+for each. The companion explainer is [`docs/atoms.md`](../../docs/atoms.md).
 
 Each script is self-contained: builds the atom(s), puts them in a
 temp `ShardStore`, prints what got stored + the hydrated context.
