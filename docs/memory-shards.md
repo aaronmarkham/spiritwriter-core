@@ -20,6 +20,8 @@ Everything else (storage, encryption, network distribution, hydration into agent
 
 Atoms are the smallest retrievable thing. Each atom has a `kind` (semantic type) and an optional `entity`/`key`/`value` triple for structured lookup. The `text` field always carries the human-readable form for embedding or full-text search.
 
+This section covers the dataclass shape, content addressing, and the rendering rules used during hydration. For an explainer on **why** atoms have this shape — what's flexible vs not, when to use each kind, and worked examples covering the breadth of the AtomKind enum (FACT, DECISION, PREFERENCE, CONVENTION, CONTEXT, CHECKPOINT, INSTRUCTION, ENTITY, plus mixed-kind composition and parent/variant lineage) — read [`atoms.md`](atoms.md) and the runnable examples it links to under [`examples/atoms/`](../examples/atoms/).
+
 ```python
 from spiritwriter.fabric.shard import ShardAtom, AtomKind
 

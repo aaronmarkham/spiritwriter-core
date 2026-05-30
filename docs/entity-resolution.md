@@ -6,6 +6,8 @@ That's the resolution problem this module solves. **Phalanx** is the system; the
 
 No embedding model, no LLM calls. SQLite, normalization, and tiered confidence scoring.
 
+The registry resolves over `ShardAtom`s — the (`entity`, `key`, `value`) triples on `FACT` and `ENTITY` atoms are what `ess_fields` references. If you haven't read about atoms yet, start at [`atoms.md`](atoms.md) (especially the `ENTITY` and `FACT` use cases and [`examples/atoms/10_entity.py`](../examples/atoms/10_entity.py)) before diving into how the resolver consumes them.
+
 ## The Tier System
 
 Resolution returns a `ResolutionTier` with a confidence score:
