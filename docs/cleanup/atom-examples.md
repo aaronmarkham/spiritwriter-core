@@ -126,32 +126,68 @@ ShardAtom(text="The user prefers concise, technical responses.",
 
 Resume-point pattern. Shows:
 - CHECKPOINT kind for "agent reached step N"
-- Often paired with `source_ref` pointing at the trace event
+- Paired with `source_ref` pointing at the trace event (the
+  hash-chained `chain:<run_id>#<event_hash>` form from `tracing.md`)
 - How the (entity, key, value) triple encodes which pipeline,
   which step
 
-Example shape:
+Base example:
 ```python
 ShardAtom(text="Completed stage 3 of 5 (transcript generated).",
           kind=AtomKind.CHECKPOINT,
           entity="run-abc-123", key="pipeline.stage", value="3",
-          source_ref="trace:abc#42")
+          source_ref="chain:run-abc-123#a7b3c2...")
 ```
+
+**Closing the loop with trace** (must follow the base example, NOT
+stop at it — trace integration is what makes checkpoints actually
+useful for resume):
+
+- A second example showing the producing side: an agent emits a
+  trace event via `TraceEmitter`, then captures a CHECKPOINT atom
+  whose `source_ref` pins to that event via
+  `emitter.current_trace_ref()`. Resume reads the shard, follows
+  the `source_ref` back into the trace, verifies the chain is
+  intact, and continues from there.
+- Cross-link to `docs/tracing.md` § "Cap Context and Provenance
+  Queries" — the `trace_ref` field on `MemoryShard` exists for
+  exactly this composition.
 
 ### 2.7 — Sub-agent instruction (INSTRUCTION) `LOCKED priority 2`
 
 Delegation pattern. Shows:
 - INSTRUCTION kind for "do X" / "constraint: Y"
-- How instructions package into a job's task_shard alongside content
-- Difference from CONVENTION (broader rule) vs INSTRUCTION (specific
-  to this delegation)
+- How instructions package into a job's `task_shard` alongside the
+  content shard (`docs/jobs.md` pattern)
+- Difference from CONVENTION (broader rule, scoped to a project or
+  user) vs INSTRUCTION (specific to this delegated job)
 
-Example shape:
+Base example:
 ```python
 ShardAtom(text="Summarize in 3 paragraphs, no bullet lists.",
           kind=AtomKind.INSTRUCTION,
           entity="job-xyz", key="output.format", value="prose-only")
 ```
+
+**Closing the loop with delegation + trace** (must follow the base
+example — delegation is a load-bearing feature and the example
+should show the full shape, not just the atom in isolation):
+
+- A second example showing the full job-packaging shape: orchestrator
+  builds a content shard (FACT/CONTEXT atoms) AND a task shard
+  (INSTRUCTION atoms) AND an entitlement token, packages them via
+  `spiritwriter.fabric.jobs`, emits `job_packaged` and `job_started`
+  trace events, hands the bundle to a sub-agent under a leaf cap.
+  Sub-agent hydrates, executes, returns a result shard signed under
+  its own cap. Orchestrator emits `job_completed` with the result
+  shard's id, closing the chain.
+- Cross-link to `docs/jobs.md` for the package/hydrate/settle
+  workflow, `docs/entitlements.md` for the cap-chain, and
+  `docs/tracing.md` for the chain-of-custody events.
+- This example is the seam between INSTRUCTION atoms and the
+  delegation primitive — without it, readers see a single atom and
+  miss that the whole point of the kind is its role in
+  trace-witnessed sub-agent work.
 
 ### 2.8 — Canonical entity record (ENTITY) `LOCKED priority 2`
 
@@ -183,6 +219,79 @@ Example shape: a single shard with 4–5 atoms covering the above kinds.
 Shows the absolute minimum. Just `ShardAtom(text="...")`. Worth
 documenting explicitly because users often think they need to fill
 every field.
+
+### 2.11 — Parent atom with child variants (lineage permutations) `LOCKED priority 1`
+
+The zeitghost bias-news pattern, real and worked. Shows:
+- One parent atom representing the canonical / original content
+- Multiple child atoms (variants / permutations) that all derive
+  from the parent
+- Each child shard's `parent_shard_id` links back to the parent shard
+- Same `scope` ties them; same `entity` field across all variants
+  (e.g. `entity="article:<sha256-of-url>"`)
+- How `CanonicalRegistry` would treat the parent + children: they
+  resolve to the same canonical_id because they share defining
+  fields, then a downstream consumer picks the variant matching its
+  bias slider
+
+The use case matters because **most docs only show "new fact, new
+atom"** — they don't show how to model "same thing, multiple
+expressions." Zeitghost is the worked example: each article has 3
+variants (left-leaning, original, right-leaning) all linked to one
+canonical article. A bias slider on the page picks which variant is
+visible; the underlying lineage is auditable.
+
+Example shape (one parent + three variants):
+
+```python
+# Parent: the canonical / original article
+parent = MemoryShard(
+    atoms=[
+        ShardAtom(text=original_headline,
+                  kind=AtomKind.FACT,
+                  entity=f"article:{url_sha}", key="headline",
+                  value=original_headline),
+        ShardAtom(text=original_body,
+                  kind=AtomKind.FACT,
+                  entity=f"article:{url_sha}", key="body",
+                  value=original_body),
+    ],
+    scope="sw:article:zeitghost",
+    origin="zeitghost-ingest",
+)
+
+# Child variants — same scope/entity, different content,
+# parent_shard_id pinning lineage
+def variant(bias_label: str, rewritten_body: str) -> MemoryShard:
+    return MemoryShard(
+        atoms=[
+            ShardAtom(text=rewritten_body,
+                      kind=AtomKind.FACT,
+                      entity=f"article:{url_sha}", key="body",
+                      value=rewritten_body),
+            ShardAtom(text=bias_label,
+                      kind=AtomKind.ENTITY,
+                      entity=f"article:{url_sha}", key="bias_variant",
+                      value=bias_label),
+        ],
+        scope="sw:article:zeitghost",
+        origin="zeitghost-bias-rewriter",
+        parent_shard_id=parent.shard_id,
+    )
+
+left  = variant("left",  llm_rewrite_left(original_body))
+right = variant("right", llm_rewrite_right(original_body))
+```
+
+The example should also call out:
+- All four shards (parent + 3 variants) live in the same scope
+  and resolve to the same canonical entity via the `article:<url_sha>`
+  shared entity key.
+- A consumer can fetch any variant by canonical_id + bias filter; the
+  lineage chain is reconstructible for audit.
+- `parent_shard_id` is the cheap, schema-level way to express
+  "this is a derivation of that" — no inter-atom FK needed, the
+  relationship lives at the shard level where it belongs.
 
 ---
 
@@ -266,12 +375,20 @@ every field.
 | 2026-05-30 | 10 use cases scoped: 5 priority-1, 4 priority-2, 1 priority-3 | Range over depth — each example short enough to read inline. Heavier walkthroughs belong in the phalanx-flow worked example (todo #7). |
 | 2026-05-30 | Examples live in TWO places: inline prose in `docs/atoms.md` and runnable Python under `examples/atoms/` | Inline for readability, runnable for regression coverage. Tests verify the runnable ones don't drift from the prose ones. |
 | 2026-05-30 | Encrypted-shard, chat-transcript, and confidence-field cases deferred | Each belongs in another doc (encryption.md, phalanx-flow walkthrough, or as a minor extension to existing examples). |
+| 2026-05-30 | Priorities approved as proposed | 5 P1, 4 P2, 1 P3. |
+| 2026-05-30 | Examples directory layout: per-file (`examples/atoms/01_fact.py` etc.) | Per-file navigation; one use case per file. |
+| 2026-05-30 | `docs/atoms.md` lives on this branch (`claude/atom-examples`) alongside the spec | Renamed branch from `claude/cleanup-atom-examples` to `claude/atom-examples`. Pulled atoms.md over from `cleanup/cmc-canonicalize`. Both ship together. |
+| 2026-05-30 | New use case 2.11: parent atom with child variants (lineage permutations) | Added at Aaron's request — zeitghost bias-news pattern. Real worked example; priority 1. Shows "same entity, multiple expressions" which most existing docs miss. |
+| 2026-05-30 | 2.6 (CHECKPOINT) and 2.7 (INSTRUCTION) expanded scope | Each now requires TWO examples: a base atom shape AND a "closing the loop" example showing integration with trace (2.6) or delegation+trace (2.7). Delegation is a load-bearing feature; documenting INSTRUCTION atoms in isolation would miss the whole point. |
 
 ---
 
-## 7 · Open questions for Aaron
+## 7 · Open questions
 
-1. **Priorities right?** 5 priority-1 (FACT, DECISION, PREFERENCE, CONVENTION, CONTEXT — the load-bearing kinds for most use cases), 4 priority-2 (CHECKPOINT, INSTRUCTION, ENTITY, composition), 1 priority-3 (minimal). Want to re-shuffle or cut anything?
-2. **Examples directory layout** — `examples/atoms/` with one file per use case (`01_fact.py`, `02_decision.py`, etc.) or all in one `atom_examples.py`? I'd lean per-file for navigation; you may have a preference.
-3. **`docs/atoms.md` ownership** — that draft is currently on `cleanup/cmc-canonicalize`. Move it to a new `claude/atom-examples` branch with this spec, or fold both into a single PR eventually?
-4. **Any use cases missing from my list?** Things you've encountered in frio / csp / spiritwriter usage that exercised the atoms primitive in a way I haven't captured.
+All resolved 2026-05-30. See decision log §6 for what landed.
+
+Original questions and answers:
+1. Priorities — approved as proposed (5 P1, 4 P2, 1 P3, plus new 2.11 also P1).
+2. Examples directory layout — per-file (`examples/atoms/01_fact.py` etc.).
+3. `docs/atoms.md` ownership — lives on this branch (`claude/atom-examples`) alongside the spec; pulled from `cleanup/cmc-canonicalize`.
+4. Missing use cases — **parent atom with child variants (lineage permutations)** added as use case 2.11. Real example: zeitghost bias-news pattern. **2.6 and 2.7 expanded** to require a follow-on "closing the loop" example each, since delegation + trace are load-bearing and a single atom in isolation underdocuments them.
