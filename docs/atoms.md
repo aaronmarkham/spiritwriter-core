@@ -52,7 +52,7 @@ ShardAtom(text="The Fugaku supercomputer is in Kobe, Japan.",
           source_ref="paper:fugaku-overview-2020#p3")
 ```
 
-Why the triple matters here: it gives `CanonicalRegistry` something to deduplicate on later. Two atoms with `entity="Fugaku"` + `key="location"` + value="Kobe, Japan"` will resolve to the same canonical record even if they came from different sources. `source_ref` is the citation trail back to whatever produced the atom.
+Why the triple matters here: it gives `CanonicalRegistry` something to deduplicate on later. Two atoms with `entity="Fugaku"` + `key="location"` + `value="Kobe, Japan"` will resolve to the same canonical record even if they came from different sources. `source_ref` is the citation trail back to whatever produced the atom.
 
 ### Decision with rationale (`DECISION`) — [`02_decision.py`](../examples/atoms/02_decision.py)
 

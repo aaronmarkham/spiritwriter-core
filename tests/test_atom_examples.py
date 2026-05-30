@@ -100,8 +100,15 @@ def test_example_round_trips_through_store(tmp_path, filename, _):
 
 
 def test_checkpoint_with_trace(tmp_path):
-    """07 builds a CHECKPOINT shard pinned to a real trace event;
-    the trace chain must verify."""
+    """07 builds a CHECKPOINT shard pinned to a real trace event; the
+    trace chain must verify and the shard must round-trip through the
+    store with source_ref/trace_ref preserved.
+
+    Note on determinism: unlike the single-shard examples, 07's shard_id
+    is *not* stable across runs because trace events include wall-clock
+    timestamps that flow into the chain hash → source_ref → atom hash →
+    shard_id. The base CHECKPOINT shape (06) is covered by the
+    parametrized determinism check; 07 is the trace-integration overlay."""
     from spiritwriter.fabric.emitter import verify_chain
     mod = _load_module("07_checkpoint_with_trace.py")
     trace_path = tmp_path / "trace.jsonl"
@@ -116,18 +123,29 @@ def test_checkpoint_with_trace(tmp_path):
         "shard-level trace_ref should mirror the atom's source_ref"
     assert verify_chain(events), "trace chain integrity must hold"
 
+    # Round-trip through the store with source_ref + trace_ref preserved
+    store = ShardStore(tmp_path / "shards")
+    ref = store.put(shard)
+    assert ref.shard_id == shard.shard_id
+    back = store.get(ref.shard_id)
+    assert back is not None
+    assert back.atoms[0].source_ref == atom.source_ref, \
+        "source_ref must round-trip through store"
+    assert back.trace_ref == shard.trace_ref, \
+        "shard-level trace_ref must round-trip through store"
+
 
 # ── 09: INSTRUCTION via delegation ──────────────────────────────────
 
 
-def test_instruction_delegation(tmp_path, monkeypatch):
+def test_instruction_delegation():
     """09 runs the full package_job flow end to end. Smoke-tests that
-    the example doesn't crash; details (instructions present in the
-    task shard, content shard reachable via the entitlement) are
-    covered by the example's own assertions when it runs."""
+    the example doesn't crash; main() manages its own temp dir via
+    tempfile.TemporaryDirectory(), so no fixtures are needed here.
+    Details (instructions present in the task shard, content shard
+    reachable via the entitlement) are covered by the example's own
+    runtime path."""
     mod = _load_module("09_instruction_delegation.py")
-    # Patch tempfile inside the example to use our tmp_path
-    monkeypatch.chdir(tmp_path)
     mod.main()  # raises if any step fails
 
 
@@ -136,7 +154,7 @@ def test_instruction_delegation(tmp_path, monkeypatch):
 
 def test_lineage_variants_build_parent_plus_two(tmp_path):
     """13 returns parent + 2 variants, variants link back via parent_shard_id,
-    all share scope + entity."""
+    all share scope + entity. All three round-trip through the store."""
     mod = _load_module("13_lineage_variants.py")
     shards = mod.build()
     assert len(shards) == 3, "expected parent + 2 variants"
@@ -152,3 +170,23 @@ def test_lineage_variants_build_parent_plus_two(tmp_path):
         for atom in v.atoms:
             assert atom.entity == parent_entity, \
                 "variant atoms must share the parent's entity"
+
+    # Determinism: rebuild → same shard_ids
+    shards2 = mod.build()
+    for s1, s2 in zip(shards, shards2):
+        assert s1.shard_id == s2.shard_id, \
+            "13 build() is non-deterministic; shard_id differs across runs"
+
+    # Round-trip parent + variants through the store; parent_shard_id
+    # must survive the trip on the variants.
+    store = ShardStore(tmp_path / "shards")
+    refs = [store.put(s) for s in shards]
+    for s, r in zip(shards, refs):
+        assert r.shard_id == s.shard_id
+        back = store.get(r.shard_id)
+        assert back is not None
+        assert back.parent_shard_id == s.parent_shard_id, \
+            "parent_shard_id must round-trip through store"
+        for orig_atom, back_atom in zip(s.atoms, back.atoms):
+            assert orig_atom.content_hash == back_atom.content_hash, \
+                "atom content_hash mismatch on round-trip"
