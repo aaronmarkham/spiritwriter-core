@@ -60,9 +60,9 @@ defends*, and *what we actually measured*. Code-adjacent docs tell you
 - [`docs/entity-resolution.md`](../entity-resolution.md) — the deep-dive
   for Phalanx (the entity-resolution system the ESS-accuracy harness
   measures)
+- [`docs/shingled-extraction.md`](../shingled-extraction.md) — the
+  separate atom-extraction primitive that produces the inputs the
+  resolver consumes
 - [`docs/specs/cmc-spec-v0.1.md`](../specs/cmc-spec-v0.1.md) and
   [`docs/specs/cmc-lite-v0.1.md`](../specs/cmc-lite-v0.1.md) — the
   spec docs the harness validates against
-- [`docs/cleanup/cmc-phalanx-canonicalize.md`](../cleanup/cmc-phalanx-canonicalize.md)
-  — coordination doc covering the naming/marketing cleanup that this
-  campaign unblocked

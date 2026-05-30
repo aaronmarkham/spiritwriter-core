@@ -434,7 +434,7 @@ number that prompted this campaign):
 - T4 calibration runs 0.27–0.32 actual precision vs stated 0.50 across
   every person corpus (confirmed in `case_only`, `inmate_clean`, `people`,
   `publications`). Engine ticket for later — T4 is flag-only, doesn't
-  touch any auto-merge guarantee. Logged in [`cleanup/cmc-phalanx-canonicalize.md`](../cleanup/cmc-phalanx-canonicalize.md).
+  touch any auto-merge guarantee.
 - A free-text-atom corpus (separate from `csp_kb_AI_Res`'s entity-index
   scan) could reproduce the original "80–100% vs Jaccard 9–36%" claim
   from cmc-lite-v0.1.md — that claim was about free-text memory atoms,
