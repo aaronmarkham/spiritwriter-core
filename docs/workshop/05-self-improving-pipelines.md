@@ -183,4 +183,4 @@ Each lesson builds on the previous one. Together, they turn a "run agent and hop
 ---
 
 Previous: [Lesson 4: Trace as a Verification Layer](04-trace-as-verification-layer.md)
-Back to: [Workshop Overview](README.md)
+Next: [Lesson 6: Audit Failure Modes](06-audit-failure-modes.md)
