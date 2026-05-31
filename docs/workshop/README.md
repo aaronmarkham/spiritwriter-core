@@ -1,8 +1,8 @@
 # Workshop: Adding AI Agents to a Security Audit Pipeline
 
-Five lessons on building reliable AI agent pipelines, drawn from real incidents building [Frio](https://github.com/aaronmarkham/frio)'s audit pipeline across 20 OCV apps and 5 states. Every lesson starts with something that broke and shows the fix.
+Lessons on building reliable AI agent pipelines, drawn from real incidents building [Frio](https://github.com/aaronmarkham/frio)'s audit pipeline across 20 OCV apps and 5 states. Every lesson starts with something that broke and shows the fix.
 
-The lessons build on each other: environment setup → tool verification → prompt engineering → provenance tracing → continuous improvement.
+The lessons build on each other: environment setup → tool verification → prompt engineering → provenance tracing → continuous improvement → distinguishing audit failures from agent failures → scaling that reliability.
 
 ## Lessons
 
@@ -11,6 +11,8 @@ The lessons build on each other: environment setup → tool verification → pro
 3. [Prompt Ambiguity and Non-Deterministic Output](03-prompt-ambiguity-and-nondeterministic-output.md) — writing prompts that specify requirements, not capabilities
 4. [Trace as a Verification Layer](04-trace-as-verification-layer.md) — automated verification with spiritwriter provenance chains
 5. [Self-Improving Pipelines](05-self-improving-pipelines.md) — A/B testing prompts with trace-based scoring
+6. [Audit Failure Modes](06-audit-failure-modes.md) — when the pipeline runs clean but the audit is still wrong: false negatives, evidence drift, findings rot, trust calibration drift, audit-of-audit gaps
+7. *Scaling with Confidence* — coming next: pilot → production gates, ensemble verification, detecting silent fleet degradation
 
 ## Prerequisites
 
