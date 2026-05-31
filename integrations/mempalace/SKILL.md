@@ -30,7 +30,7 @@ Two systems, complementary strengths, zero overlap:
 | Semantic search (ChromaDB embeddings) | Content-addressed storage (SHA-256) |
 | BM25 keyword reranking | AES-256-GCM / NaCl encryption |
 | Palace navigation (wings/rooms/drawers) | Entitlements & scoped access control |
-| AAAK compression dialect | Entity resolution (Phalanx / CMC-Lite) |
+| AAAK compression dialect | Entity resolution (CanonicalRegistry) |
 | L0-L3 memory wake-up stack | Hash-chained provenance |
 | Knowledge graph (SQLite) | IPFS distribution |
 
@@ -49,7 +49,7 @@ pip install spiritwriter-core mempalace
 
 **Encryption at rest** — AES-256-GCM or NaCl sealed boxes for the entire palace. Same MemPalace API, encrypted on disk.
 
-**Entity resolution across conversations** — MemPalace's entity_registry.py does regex disambiguation ("is 'Max' a person or a word?"). Phalanx adds tiered confidence matching so "Max" in session 1 and "Max" in session 47 are linked as the same canonical entity.
+**Entity resolution across conversations** — MemPalace's entity_registry.py does regex disambiguation ("is 'Max' a person or a word?"). spiritwriter's `CanonicalRegistry` adds tiered confidence matching so "Max" in session 1 and "Max" in session 47 are linked as the same canonical entity.
 
 **Revision history** — upserts create lineage chains via parent_shard_id. Walk the full edit history of any drawer.
 
