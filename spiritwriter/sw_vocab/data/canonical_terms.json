@@ -23,7 +23,7 @@
   {
     "term": "Phalanx",
     "category": "system",
-    "definition": "spiritwriter-core's definition-based entity resolution system — the resolver only. CanonicalRegistry is its runtime engine. Renamed from 'shingles' (overlapping shields metaphor > overlapping roof tiles; avoids medical connotation). Does NOT encompass shingled extraction; that's a separate primitive (see docs/shingled-extraction.md). Per decision C in docs/cleanup/cmc-phalanx-canonicalize.md, Phalanx is reserved for deep-dive technical docs; do not use in marketing surfaces.",
+    "definition": "spiritwriter-core's definition-based entity resolution system — the resolver only. CanonicalRegistry is its runtime engine. Renamed from 'shingles' (overlapping shields metaphor > overlapping roof tiles; avoids medical connotation). Does NOT encompass shingled extraction; that's a separate primitive (see docs/shingled-extraction.md). Reserved for deep-dive technical docs (e.g. docs/entity-resolution.md body); do not use on marketing surfaces (root README, getting-started, landing pages).",
     "defined_in": "docs/entity-resolution.md",
     "aliases": [
       "shingles"
