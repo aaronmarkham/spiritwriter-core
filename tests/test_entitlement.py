@@ -80,6 +80,21 @@ def test_is_expired_no_expiry():
     assert not is_expired(_make_token())
 
 
+def test_is_expired_canonical_z_form():
+    """Tokens are stamped in Z-suffixed UTC (see _now_iso). fromisoformat()
+    rejects the 'Z' on Python 3.9/3.10, so is_expired must normalize it
+    rather than crash (which would silently disable expiry enforcement)."""
+    assert not is_expired(_make_token(expires_at="2099-01-01T00:00:00Z"))
+    assert is_expired(_make_token(expires_at="2000-01-01T00:00:00Z"))
+
+
+def test_is_expired_naive_timestamp_does_not_crash():
+    """A naive (tz-less) timestamp must be treated as UTC, not raise a
+    naive-vs-aware TypeError during comparison."""
+    assert is_expired(_make_token(expires_at="2000-01-01T00:00:00"))
+    assert not is_expired(_make_token(expires_at="2099-01-01T00:00:00"))
+
+
 def test_get_shard_key_success():
     key = generate_job_key()
     t = _make_token(shard_keys={"shard-x": key})
