@@ -426,7 +426,7 @@ Properties: `spent`, `remaining`.
 
 - `parse_job_block(task_text) -> tuple[str, str, str]` — `(token_str, content_shard_id, task_shard_id)`
 - `hydrate_job(store, task_text, tracer=None) -> JobContext`
-- `create_result_shard(job, results, agent_id="job-runner") -> MemoryShard`
+- `create_result_shard(job, results, agent_id="job-runner", parent_shard_id=None) -> MemoryShard` — `parent_shard_id` (added in 0.8.2) pins lineage at the meaningful predecessor (the plaintext content shard the orchestrator extracted), not the encrypted job-internal shard. See [`docs/jobs.md` § "Lineage through encryption"](jobs.md#composing-jobs).
 
 See [jobs.md](jobs.md) for the full delegated-job guide.
 

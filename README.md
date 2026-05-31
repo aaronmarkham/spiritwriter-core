@@ -245,6 +245,10 @@ python -m pytest tests/test_demos.py -v                 # the four examples abov
 python -m pytest tests/test_ipfs_backend.py -v -m ipfs  # IPFS integration (requires Kubo)
 ```
 
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for release notes (0.8.0+). Pre-1.0 SemVer: **minor** for breaking changes, **patch** for additive/non-breaking changes.
+
 ## License
 
 Apache 2.0

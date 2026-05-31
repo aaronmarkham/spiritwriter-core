@@ -230,7 +230,7 @@ When `tracer` and `token_id` are both set, every `record()` call emits a `budget
 
 ## Result Shards
 
-`create_result_shard(job, results, agent_id="job-runner")` packages a result dict into a `MemoryShard` linked back to the job's content/task shards via `meta`:
+`create_result_shard(job, results, agent_id="job-runner", parent_shard_id=None)` packages a result dict into a `MemoryShard` linked back to the job's content/task shards via `meta`. The `parent_shard_id` kwarg (added in 0.8.2) pins lineage at the meaningful predecessor — see [Lineage through encryption](#composing-jobs) below for which shard to pin and why.
 
 ```python
 result = create_result_shard(job, {
@@ -283,7 +283,18 @@ pilots = [
 
 **Resumable jobs.** Persist the `PackagedJob` ids to a checkpoint shard at every successful stage; on restart, look up the checkpoint and resume from the next stage. See [traced-workflows.md](traced-workflows.md) for the full pattern.
 
-**Lineage through encryption.** `package_job()` builds its own encrypted content shard internally — that shard's id is different from any plaintext content shard you might keep on the orchestrator side. When pinning a result shard's `parent_shard_id`, pin it at the **plaintext predecessor** (the atoms you cared about), not the encrypted job-internal shard. The worked example at [`examples/06_phalanx_flow/`](../examples/06_phalanx_flow/) shows the pattern: extracted-paper shard → delegated summarization → result shard linked back to the extracted-paper shard, not the encrypted shipping container.
+**Lineage through encryption.** `package_job()` builds its own encrypted content shard internally — that shard's id is different from any plaintext content shard you might keep on the orchestrator side. When pinning a result shard's `parent_shard_id`, pin it at the **plaintext predecessor** (the atoms you cared about), not the encrypted job-internal shard. Since 0.8.2 the runner makes this first-class via the `parent_shard_id` kwarg on `create_result_shard()`:
+
+```python
+result = create_result_shard(
+    job,
+    {"budget": tracker.summary(), "outputs": [...]},
+    parent_shard_id=source_content_shard_id,  # pin at the plaintext predecessor
+)
+store.put(result)
+```
+
+The worked example at [`examples/06_phalanx_flow/`](../examples/06_phalanx_flow/) shows the pattern end to end: extracted-paper shard → delegated summarization → result shard linked back to the extracted-paper shard, not the encrypted shipping container.
 
 ## What This Layer Is Not
 

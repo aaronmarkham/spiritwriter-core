@@ -224,11 +224,39 @@ def create_result_shard(
     job: JobContext,
     results: dict[str, Any],
     agent_id: str = "job-runner",
+    *,
+    parent_shard_id: str | None = None,
 ) -> MemoryShard:
     """Create a result shard from job execution output.
 
     The result shard captures what was produced, costs, and output refs.
     It's linked to the job via scope and can be encrypted with the same key.
+
+    Args:
+        job: The hydrated JobContext the runner is producing a result for.
+        results: Dict of execution output. Recognized keys: ``budget``
+            (cost summary dict), ``outputs`` (list of {type, ref}),
+            ``warnings`` (list of strings).
+        agent_id: Identity of the runner producing the result. Becomes
+            the result shard's ``origin``.
+        parent_shard_id: **Keyword-only.** Optional content-addressed
+            predecessor for lineage. **Pin this at the plaintext content
+            shard your orchestrator extracted/curated** — NOT at
+            ``job.content_shard_id``, which is the encrypted job-internal
+            shard ``package_job()`` built. Those two shards have
+            different ids (different bytes after encryption) and the
+            meaningful predecessor for audit lineage is the plaintext
+            one. Default ``None`` means no parent recorded — acceptable
+            for one-shot work, but the orchestrator-with-source-atoms
+            case is the canonical pattern (see
+            ``docs/jobs.md`` § "Lineage through encryption").
+
+            **Signing implication.** ``parent_shard_id`` is included in
+            ``signing_payload()``. Setting it via this kwarg means the
+            parent is in the signed bytes from construction. The
+            previous mutate-then-re-put pattern would silently
+            invalidate any signature applied at construction — another
+            reason to prefer this kwarg over post-hoc field mutation.
     """
     atoms = []
 
@@ -273,6 +301,7 @@ def create_result_shard(
         origin=agent_id,
         decay_class=DecayClass.STABLE,
         tags=["job-result"],
+        parent_shard_id=parent_shard_id,
         meta={
             "content_shard_id": job.content_shard_id,
             "task_shard_id": job.task_shard_id,

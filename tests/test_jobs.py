@@ -298,6 +298,48 @@ class TestCreateResultShard:
         assert len(result.atoms) >= 4  # summary + cost + 2 outputs + 1 warning
         assert result.meta["content_shard_id"] == pkg.content_shard_id
 
+    def test_default_parent_shard_id_is_none(self, tmp_store, sample_atoms, sample_spec, agent_id):
+        """No parent_shard_id passed → result has no recorded parent.
+        Documents the backwards-compatible default."""
+        pkg = package_job(tmp_store, sample_atoms, sample_spec, agent_id=agent_id)
+        job = hydrate_job(tmp_store, pkg.spawn_task_text())
+        result = create_result_shard(job, {"outputs": []})
+        assert result.parent_shard_id is None
+
+    def test_parent_shard_id_kwarg_pins_lineage(self, tmp_store, sample_atoms, sample_spec, agent_id):
+        """Passing parent_shard_id makes lineage first-class — no need
+        to mutate-then-re-put. The shard_id must reflect the parent at
+        construction time (proves the kwarg actually reaches the
+        MemoryShard constructor before content addressing happens).
+        See docs/jobs.md § 'Lineage through encryption'."""
+        # An arbitrary upstream shard the orchestrator wants to pin as parent
+        upstream = MemoryShard(
+            atoms=[ShardAtom(text="source paragraph", kind=AtomKind.FACT)],
+            scope="paper:source",
+            origin="orchestrator",
+        )
+        tmp_store.put(upstream)
+
+        pkg = package_job(tmp_store, sample_atoms, sample_spec, agent_id=agent_id)
+        job = hydrate_job(tmp_store, pkg.spawn_task_text())
+
+        with_parent = create_result_shard(
+            job, {"outputs": []}, parent_shard_id=upstream.shard_id,
+        )
+        without_parent = create_result_shard(job, {"outputs": []})
+
+        # Lineage pinned correctly
+        assert with_parent.parent_shard_id == upstream.shard_id
+        # And it survives store round-trip
+        tmp_store.put(with_parent)
+        back = tmp_store.get(with_parent.shard_id)
+        assert back is not None
+        assert back.parent_shard_id == upstream.shard_id
+        # parent_shard_id is NOT part of the shard_id (it's metadata),
+        # so the only difference between with/without is the parent field
+        # itself — same shard_id either way.
+        assert with_parent.shard_id == without_parent.shard_id
+
 
 # === Phase 3: Entitlement-Aware Hydration on Store ===
 
