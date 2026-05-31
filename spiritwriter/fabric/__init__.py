@@ -68,6 +68,13 @@ from spiritwriter.fabric.canonicalize import (
     normalize_date,
     age_to_bucket,
     fuzzy_score,
+    # Pre-resolution normalization helpers (the registry does NOT
+    # auto-apply normalizers; pre-process candidates with these before
+    # calling resolve()/upsert()). See docs/entity-resolution.md.
+    first_initial,
+    strip_punctuation,
+    apply_normalizers,
+    pipeline,
 )
 
 __all__ = [
@@ -129,6 +136,10 @@ __all__ = [
     "normalize_date",
     "age_to_bucket",
     "fuzzy_score",
+    "first_initial",
+    "strip_punctuation",
+    "apply_normalizers",
+    "pipeline",
     "verify_chain",
     "verify_trace_chain",
     "events_by_cap",
