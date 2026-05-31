@@ -123,7 +123,7 @@ def package_job(
     store: ShardStore,
     content_atoms: list[ShardAtom],
     job_spec: JobSpec,
-    agent_id: str = "lilit",
+    agent_id: str,
     granted_to: str = "job-runner",
     capabilities: list[str] | None = None,
     secrets: list[str] | None = None,
@@ -136,7 +136,13 @@ def package_job(
         store: ShardStore to persist encrypted shards
         content_atoms: Knowledge atoms (research, facts, sources)
         job_spec: Production instructions
-        agent_id: Who is packaging this job
+        agent_id: Who is packaging this job. **Required** — this value
+            is recorded as the `origin` field on both the content and
+            task shards (which is part of their content-addressed
+            `shard_id`) and as `granted_by` on the entitlement token's
+            audit trail. There is no honest default; supply your
+            orchestrator's actual identifier (e.g.
+            `"orchestrator:summary-pipeline"` or `"my-app:v2"`).
         granted_to: Sub-agent identity
         capabilities: What the sub-agent can do (defaults to standard set)
         secrets: Which API keys the sub-agent can access

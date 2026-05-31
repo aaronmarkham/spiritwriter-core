@@ -398,7 +398,7 @@ Fields: `content_shard_id`, `task_shard_id`, `entitlement_token`, `job_key` (in-
 
 ### Functions
 
-- `package_job(store, content_atoms, job_spec, agent_id="lilit", granted_to="job-runner", capabilities=None, secrets=None, scope_prefix="job", tracer=None) -> PackagedJob`
+- `package_job(store, content_atoms, job_spec, agent_id, granted_to="job-runner", capabilities=None, secrets=None, scope_prefix="job", tracer=None) -> PackagedJob` — `agent_id` is **required** (no default); becomes the `origin` field on both shards (part of content-addressed `shard_id`) and the entitlement's `granted_by`. Pass your orchestrator's actual identifier, e.g. `"orchestrator:summary-pipeline"`.
 
 ---
 
