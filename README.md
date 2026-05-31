@@ -8,7 +8,7 @@ Durable, content-addressed memory · provable traces · scoped delegation · ent
 
 If you've built more than one agentic system, you've rebuilt the same glue every time. Where does what the agent learned live, and how do you keep it from drifting into contradiction? How do you hand a sub-task to another agent without handing over the keys to everything? And three steps later, when something went wrong — can you prove what actually happened?
 
-Most teams rebuild that layer per app, suffer the misalignments and delegation failures and memory drift, or rent it from a managed service that takes custody of their data and their latency budget. Nobody does *provable* tracing or scoped entitlements without heavy infrastructure. There's no standard library for the layer **beneath** the agent.
+Most teams rebuild that layer per app, suffer the misalignments and delegation failures and memory drift, or rent it from a managed service that takes custody of their data and their latency budget. Few teams do *provable* tracing or scoped entitlements without standing up heavy infrastructure. There's no standard library for the layer **beneath** the agent.
 
 spiritwriter is that layer.
 
@@ -156,13 +156,13 @@ The same primitive handles the inverse: "Carlos Martinez", "MARTINEZ, CARLOS A",
 Two layers, one per concern:
 
 - **`CanonicalRegistry`** — one SQLite file. The entity-resolution index: three tables (`entities`, `sightings`, `merges`), WAL mode for concurrent readers.
-- **`ShardStore`** — content-addressed JSON-LD atoms on disk. The underlying knowledge the registry points at.
+- **`ShardStore`** — content-addressed JSON atoms on disk. The underlying knowledge the registry points at.
 
 The registry holds *which canonical entity each sighting maps to*; the shards hold *what the entity actually is*. Same architecture whether you're on a laptop or a multi-node deployment. See [Memory Shards](docs/memory-shards.md) and [Shard Store](docs/shard-store.md).
 
 ### Why These Design Choices
 
-- **Local-first.** A `CanonicalRegistry` is one SQLite file; the shards it points at are plain JSON-LD. No service to run, no vector DB to host, no daemon to keep alive. The registry *is* the artifact — email it, version-control it, copy it between machines, restore it from a backup.
+- **Local-first.** A `CanonicalRegistry` is one SQLite file; the shards it points at are plain JSON. No service to run, no vector DB to host, no daemon to keep alive. The registry *is* the artifact — email it, version-control it, copy it between machines, restore it from a backup.
 - **Deterministic before fuzzy.** Auto-merge only at T1 and T2. Anything weaker becomes a flagged event for human review. False merges are the worst failure mode in entity resolution, and silent ones are unauditable. The resolver fails loud.
 - **No LLM in the auto-merge path.** LLMs hallucinate, and for entity resolution that means silently combining records of two different people. Deterministic + fuzzy with explicit tiers is verifiable end-to-end; LLM judgment isn't. Use an LLM upstream to extract atoms if you want; keep it out of the merge decision.
 - **Schema-driven, domain-agnostic.** Same engine handles people, products, papers, articles — anything where you can name the defining fields. Tier thresholds tune per domain. The schema's hash is stored on first open; reopening with a different schema raises `ValueError` rather than silently misclassifying records.
@@ -170,7 +170,7 @@ The registry holds *which canonical entity each sighting maps to*; the shards ho
 
 ### The Numbers
 
-**100% auto-merge precision — 0 incorrect merges across 5 benchmark corpora**, and it catches 100% of same-entity matches: it auto-merges at T1/T2 and flags everything weaker for review, so nothing slips through silently. No embeddings, no LLM calls — SQLite, normalization, and string matching. See [docs/benchmarks/runs-log.md](docs/benchmarks/runs-log.md) for the measurements and the falsification battery behind them.
+**100% auto-merge precision — 0 incorrect merges across 5 benchmark corpora**, and it surfaces 100% of same-entity matches for review — auto-merged at T1/T2 when safe, flagged otherwise — so nothing slips through silently. No embeddings, no LLM calls — SQLite, normalization, and string matching. See [docs/benchmarks/runs-log.md](docs/benchmarks/runs-log.md) for the measurements and the falsification battery behind them.
 
 The full spec ([docs/specs/cmc-spec-v0.1.md](docs/specs/cmc-spec-v0.1.md)) draws on academic prior art (EDC/EMNLP 2024, Graphiti/Zep, SimpleMem, EMem-G); the implementation pulls the three highest-impact ideas — content-addressed identity, tiered escalation, and [shingled extraction](docs/shingled-extraction.md) — and ships them with zero new infrastructure.
 
