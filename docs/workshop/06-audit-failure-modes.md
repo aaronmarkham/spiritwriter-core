@@ -31,7 +31,7 @@ The five modes below are all "pipeline ran clean, audit still wrong" — and eac
 
 ## Failure mode 1: False negatives
 
-**Scenario.** Your APK audit returns "no exposed credentials found" — and the trace verifies, the methodology atom shows `rz-bin` was used, the report is well-formed. A month later, a security researcher finds an AWS key hardcoded in a string resource your extractor never read.
+**Scenario.** Your APK audit returns "no exposed credentials found" — and the trace verifies, the methodology event shows `rz-bin` was used, the report is well-formed. A month later, a security researcher finds an AWS key hardcoded in a string resource your extractor never read.
 
 **Why it's audit-specific.** Every gate in lessons 1–5 was satisfied. The agent did exactly what you told it to. The failure is in what you told it to look at: your extractor reads DEX bytecode and `res/values/strings.xml`, but the key was in `assets/config.json`. The audit doesn't claim "no key in `assets/`" — it claims "no key found" — and the claim is too broad for what the methodology actually covers.
 
@@ -41,7 +41,7 @@ The five modes below are all "pipeline ran clean, audit still wrong" — and eac
 
 2. **Score against ground truth, not against prior runs.** Lesson 5's A/B scoring measures "did the new prompt match the baseline's findings count?" That's necessary but not sufficient — if the baseline already had blind spots, the new prompt will too, and the score will look fine. The known-bad corpus is your ground truth.
 
-3. **Document methodology scope explicitly in each report.** A `methodology_scope` atom listing exactly what was inspected ("DEX classes, AndroidManifest, res/values/strings.xml") turns the false negative from "we missed it" into "we never looked there" — same outcome, very different remediation.
+3. **Document methodology scope explicitly in each report.** A `methodology_scope` trace event listing exactly what was inspected ("DEX classes, AndroidManifest, res/values/strings.xml") turns the false negative from "we missed it" into "we never looked there" — same outcome, very different remediation.
 
 **Recovery.**
 
@@ -55,15 +55,15 @@ When a false negative is found in production, the immediate fix is broaden cover
 
 **Detection.**
 
-1. **Content-address the input.** Hash the artifact (`sha256sum apk.apk`) at fetch time. Store the hash as an `input_hash` atom on the audit shard. Re-verify before publishing the report: if `sha256sum` of the file at the source URL no longer matches, the report's about a stale artifact.
+1. **Content-address the input.** Hash the artifact (`sha256sum apk.apk`) at fetch time. Record the hash on an `input_fetched` trace event. Re-verify before publishing the report: if `sha256sum` of the file at the source URL no longer matches, the report's about a stale artifact.
 
-2. **Pin source metadata.** Record the URL, fetch timestamp, and ETag (if available) on the input atom. A report can then say "audited 2026-05-30T14:00:00Z; sha256:abc123…; source ETag at fetch: def456…" instead of just naming the artifact.
+2. **Pin source metadata.** Record the URL, fetch timestamp, and ETag (if available) on the same `input_fetched` event. A report can then say "audited 2026-05-30T14:00:00Z; sha256:abc123…; source ETag at fetch: def456…" instead of just naming the artifact.
 
 3. **Re-verify at publish time.** Before a report leaves the pipeline, fetch the head of the source URL and compare. If they don't match, hold the report and re-audit, or publish with a clear "input has changed since audit" annotation.
 
 **Recovery.**
 
-When evidence drift is detected after publish, the report needs an explicit `input_superseded` atom recording the new hash and the audit's continued validity (or not). Silent re-issue without acknowledging the drift trains downstream consumers to ignore your version stamps.
+When evidence drift is detected after publish, the report needs an explicit `input_superseded` trace event recording the new hash and the audit's continued validity (or not). Silent re-issue without acknowledging the drift trains downstream consumers to ignore your version stamps.
 
 ## Failure mode 3: Findings rot
 
@@ -73,15 +73,15 @@ When evidence drift is detected after publish, the report needs an explicit `inp
 
 **Detection.**
 
-1. **Pin the toolchain version on every finding.** Trace atoms for the audit should record: model id (`claude-sonnet-4-6` or whatever was actually called), prompt content hash, agent skill version, every external tool version (`rz-bin -v`). The trace chain is your bill-of-materials for the claim.
+1. **Pin the toolchain version on every finding.** Trace events for the audit should record: model id (`claude-sonnet-4-6` or whatever was actually called), prompt content hash, agent skill version, every external tool version (`rz-bin -v`). The trace chain is your bill-of-materials for the claim.
 
 2. **Re-audit a sample on toolchain change.** When you upgrade a model or rewrite a prompt, run the new version against 10–20 historical reports. Any finding that changes is your delta — investigate before promoting.
 
-3. **Mark findings with their basis hash.** A finding atom should carry the content hash of `(prompt + model_id + tool_versions + input_hash)`. Reproducibility is "can I recompute the basis hash?" — if not, the finding's basis has rotted away.
+3. **Mark findings with their basis hash.** Each finding should carry a `basis_hash` field — the content hash of `(prompt + model_id + tool_versions + input_hash)`. Reproducibility is "can I recompute the basis hash?" — if not, the finding's basis has rotted away.
 
 **Recovery.**
 
-When findings rot is identified, the original report stays as a witness to "what we believed then" — don't retroactively rewrite it. New reports get pinned to the new toolchain. A `superseded_by` atom on the old report points at the re-audit that revisited the finding.
+When findings rot is identified, the original report stays as a witness to "what we believed then" — don't retroactively rewrite it. New reports get pinned to the new toolchain. A `superseded_by` annotation on the old report points at the re-audit that revisited the finding.
 
 ## Failure mode 4: Trust calibration drift
 
@@ -113,7 +113,7 @@ When drift is identified, **recalibrate, don't retroactively rewrite.** The fix 
 
 2. **Sample meta-decisions for re-review.** Take 5% of approvals (or some sampling rate) and have a different reviewer re-evaluate them blind. Disagreement above your threshold means the meta-audit has its own calibration drift.
 
-3. **Don't let approvals dissolve into "looks good".** Require a structured justification atom alongside every approval. "Confirmed false positive: string match is in a comment, not active code" is auditable; "lgtm" is not.
+3. **Don't let approvals dissolve into "looks good".** Require a structured justification field alongside every approval. "Confirmed false positive: string match is in a comment, not active code" is auditable; "lgtm" is not.
 
 **Recovery.**
 
@@ -121,25 +121,25 @@ When an audit-of-audit gap surfaces (usually because two reviewers disagree abou
 
 ## Putting it together
 
-The five modes share a shape: **lessons 1–5 verify the agent's work product; lesson 6 verifies the audit's value as a claim**. Each gets its own detection pattern, and each pattern produces a new kind of trace atom or per-finding metadata:
+The five modes share a shape: **lessons 1–5 verify the agent's work product; lesson 6 verifies the audit's value as a claim**. Each gets its own detection pattern, and each pattern produces either a new trace event type or a per-finding metadata field:
 
-| Mode | Detection pattern | New atom / metadata |
+| Mode | Detection pattern | New trace event / metadata |
 |---|---|---|
-| False negatives | Known-bad regression corpus | `methodology_scope` |
-| Evidence drift | Content-address inputs; re-verify at publish | `input_hash`, `input_superseded` |
-| Findings rot | Pin toolchain on every finding | `basis_hash`, `superseded_by` |
-| Trust calibration drift | Periodic hold-out + per-bin precision | `confidence_calibration_run` |
-| Audit-of-audit gaps | Trace the reviewer, sample for re-review | `review_decision`, `meta_audit_sample` |
+| False negatives | Known-bad regression corpus | `methodology_scope` event |
+| Evidence drift | Content-address inputs; re-verify at publish | `input_fetched`, `input_superseded` events |
+| Findings rot | Pin toolchain on every finding | `basis_hash` field, `superseded_by` annotation |
+| Trust calibration drift | Periodic hold-out + per-bin precision | `confidence_calibration_run` event |
+| Audit-of-audit gaps | Trace the reviewer, sample for re-review | `review_decision` event, `meta_audit_sample` event |
 
-The trace chain from lesson 4 is the backbone; each new atom kind plugs into it the same way.
+The trace chain from lesson 4 is the backbone; each new event type plugs into it the same way. The metadata fields and annotations ride on individual finding/report records — same primitives, different layer.
 
 ## Checklist
 
 - [ ] Build (or adopt) a known-bad regression corpus and run it against every methodology change
-- [ ] Add a `methodology_scope` atom listing exactly what each audit inspected
-- [ ] Content-address every input artifact; record the hash on the audit shard
-- [ ] Re-verify input hashes at report-publish time; hold or annotate on drift
-- [ ] Pin the toolchain (model id, prompt hash, tool versions) in trace atoms for every finding
+- [ ] Emit a `methodology_scope` trace event listing exactly what each audit inspected
+- [ ] Content-address every input artifact; record the hash on the `input_fetched` event
+- [ ] Re-verify input hashes at report-publish time; hold or emit `input_superseded` on drift
+- [ ] Pin the toolchain (model id, prompt hash, tool versions) in trace events for every finding
 - [ ] Run a hold-out labeled corpus monthly; compute per-confidence-bin precision; chart over time
 - [ ] Treat human/automated approvals as their own auditable layer; require structured justification
 - [ ] Sample meta-decisions for blind re-review
