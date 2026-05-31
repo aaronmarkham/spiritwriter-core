@@ -138,7 +138,7 @@ You're extracting facts about Aaron from a stack of documents. Document 1 surfac
 
 Each document gives partial defining-field coverage, and your extractor classifies Bear three different ways: a name in Document 1, a generic animal in Document 2, a specific dog in Document 3. Three identifiers for the same entity, and they don't align. A naive system keeps them separate (you have three Bears, no convergence as more documents arrive) or collapses by surface name alone (now Bear-the-dog merges with Bear-the-beer brand mentioned in Document 4). Embedding-based systems hallucinate the boundaries — they score "Bear" the dog close to "Bear" the bear close to "Bear" the brand, and the merge decisions become unauditable.
 
-**Phalanx** — the resolver — hashes the *defining fields* (name + entity type + owner + …) into an **Entity Sense Signature (ESS)**, a deterministic identity hash. As more documents land, defining fields accumulate per entity. Document 1 gives `name=Bear, owner=Aaron`. Document 3 adds `entity_type=dog, breed=borador`. The growing field set produces a stable ESS the moment you have enough fields to disambiguate. Fields not yet known don't penalize the match — they're absent from the hash, and ESS overlap rewards the fields you *do* share.
+The resolver hashes the *defining fields* (name + entity type + owner + …) into an **Entity Sense Signature (ESS)**, a deterministic identity hash. As more documents land, defining fields accumulate per entity. Document 1 gives `name=Bear, owner=Aaron`. Document 3 adds `entity_type=dog, breed=borador`. The growing field set produces a stable ESS the moment you have enough fields to disambiguate. Fields not yet known don't penalize the match — they're absent from the hash, and ESS overlap rewards the fields you *do* share.
 
 The same primitive handles the inverse: "Carlos Martinez", "MARTINEZ, CARLOS A", and "C. Martinez" across three rosters dedupe into one entity, because their defining fields normalize to the same hash regardless of surface spelling. (One caveat worth knowing up front: the registry normalizes only case and whitespace — anything more is the caller's job. See [Normalize before you resolve](docs/entity-resolution.md#normalize-before-you-resolve).)
 
@@ -163,7 +163,7 @@ The registry holds *which canonical entity each sighting maps to*; the shards ho
 ### Why These Design Choices
 
 - **Local-first.** A `CanonicalRegistry` is one SQLite file; the shards it points at are plain JSON-LD. No service to run, no vector DB to host, no daemon to keep alive. The registry *is* the artifact — email it, version-control it, copy it between machines, restore it from a backup.
-- **Deterministic before fuzzy.** Auto-merge only at T1 and T2. Anything weaker becomes a flagged event for human review. False merges are the worst failure mode in entity resolution, and silent ones are unauditable. Phalanx fails loud.
+- **Deterministic before fuzzy.** Auto-merge only at T1 and T2. Anything weaker becomes a flagged event for human review. False merges are the worst failure mode in entity resolution, and silent ones are unauditable. The resolver fails loud.
 - **No LLM in the auto-merge path.** LLMs hallucinate, and for entity resolution that means silently combining records of two different people. Deterministic + fuzzy with explicit tiers is verifiable end-to-end; LLM judgment isn't. Use an LLM upstream to extract atoms if you want; keep it out of the merge decision.
 - **Schema-driven, domain-agnostic.** Same engine handles people, products, papers, articles — anything where you can name the defining fields. Tier thresholds tune per domain. The schema's hash is stored on first open; reopening with a different schema raises `ValueError` rather than silently misclassifying records.
 - **Lightweight to bootstrap.** No embedding model to train or host, no GPU, no vector index to rebuild on schema change. From `pip install` to resolving entities in seconds, on a laptop, offline.
@@ -172,7 +172,7 @@ The registry holds *which canonical entity each sighting maps to*; the shards ho
 
 **100% auto-merge precision — 0 incorrect merges across 5 benchmark corpora**, and it catches 100% of same-entity matches: it auto-merges at T1/T2 and flags everything weaker for review, so nothing slips through silently. No embeddings, no LLM calls — SQLite, normalization, and string matching. See [docs/benchmarks/runs-log.md](docs/benchmarks/runs-log.md) for the measurements and the falsification battery behind them.
 
-The full spec draws on academic prior art (EDC/EMNLP 2024, Graphiti/Zep, SimpleMem, EMem-G); the implementation pulls the three highest-impact ideas — content-addressed identity, tiered escalation, and [shingled extraction](docs/shingled-extraction.md) — and ships them with zero new infrastructure.
+The full spec ([docs/specs/cmc-spec-v0.1.md](docs/specs/cmc-spec-v0.1.md)) draws on academic prior art (EDC/EMNLP 2024, Graphiti/Zep, SimpleMem, EMem-G); the implementation pulls the three highest-impact ideas — content-addressed identity, tiered escalation, and [shingled extraction](docs/shingled-extraction.md) — and ships them with zero new infrastructure.
 
 **Deeper:** [Entity Resolution guide](docs/entity-resolution.md), [Shingled Extraction](docs/shingled-extraction.md), [CMC-Lite spec](docs/specs/cmc-lite-v0.1.md).
 
@@ -195,7 +195,7 @@ The full spec draws on academic prior art (EDC/EMNLP 2024, Graphiti/Zep, SimpleM
 | [Network Distribution](docs/network-distribution.md) | IPFS backend, manifests, private swarm, L1/L2 resolution |
 | [Substrate Flavor](docs/substrate-flavor.md) | wire format + verification rules for library-free implementers in any language |
 | [Audit](docs/audit.md) | tamper-evident Android APK security audits |
-| [Integration Guide](docs/integration-guide.md) | how frio, the news sites, and Claude Studio Producer use it |
+| [Integration Guide](docs/integration-guide.md) | how frio, perseus-news, and Claude Studio Producer use it |
 | [API Reference](docs/api-reference.md) | complete public API surface |
 
 ## Examples
@@ -242,10 +242,12 @@ spiritwriter/
 │   ├── runner.py        # hydrate_job, BudgetTracker, create_result_shard
 │   └── backends/
 │       └── ipfs.py      # IPFS / Kubo backend
+├── geo/            # Geographic types and view shards (experimental)
 ├── ingest/         # Document ingestion (PDF)
 ├── integrations/   # Third-party memory-provider adapters (mempalace, ...)
 ├── kb/             # Knowledge base CRUD
 ├── llm/            # LLM provider abstraction (Anthropic)
+├── models/         # DocumentAtom, KnowledgeProject
 ├── secrets/        # OS keychain API key management
 ├── sw_vocab/       # Terminology canonicalization for spiritwriter's own docs
 └── stopwords.py    # Centralized stopword list
@@ -275,6 +277,10 @@ python -m pytest tests/ -v                              # full suite
 python -m pytest tests/test_demos.py -v                 # the demos above
 python -m pytest tests/test_ipfs_backend.py -v -m ipfs  # IPFS integration (requires Kubo)
 ```
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for release notes (0.8.0+). Pre-1.0 SemVer: **minor** for breaking changes, **patch** for additive/non-breaking changes.
 
 ## License
 
