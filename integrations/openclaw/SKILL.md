@@ -125,7 +125,7 @@ keypair = generate_owner_keypair()
 sealed = seal_shard(shard, keypair.public_key)
 ```
 
-### Entity resolution (Phalanx) — who is "Max"?
+### Entity resolution — who is "Max"?
 
 ```python
 from spiritwriter.fabric.canonicalize import CanonicalRegistry, CanonicalSchema

@@ -50,6 +50,15 @@
     ]
   },
   {
+    "term": "vec0",
+    "category": "external",
+    "definition": "sqlite-vec's virtual-table extension for vector search inside SQLite. Status in spiritwriter-core: NOT a current dependency. Listed in spiritwriter-canonicalize.md as an optional future path for T3/T4 embedding-backed fuzzy matching once string similarity stops being enough. The historical docs/specs/cmc-lite-v0.1.md spec planned to use vec0; the shipped CanonicalRegistry deliberately doesn't (see that spec's status header).",
+    "defined_in": "docs/specs/spiritwriter-canonicalize.md",
+    "aliases": [
+      "sqlite-vec"
+    ]
+  },
+  {
     "term": "Consensus Memory Canonicalization",
     "category": "system",
     "definition": "Full canonicalization pipeline drawing on academic prior art (EDC/EMNLP 2024, Graphiti/Zep, SimpleMem). Four stages: Normalize & Embed, Cluster & Block, Consensus & Merge, Reify & Store. Targets ≥85% recall on semantic duplicates with ≤5% false-merge rate.",

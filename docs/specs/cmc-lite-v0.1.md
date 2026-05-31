@@ -4,7 +4,7 @@
 
 **Version**: 0.1
 **Date**: 2026-02-19
-**Status**: Implementation-ready
+**Status**: **Historical — implementation deviated.** The shipped `CanonicalRegistry` (see [`docs/entity-resolution.md`](../entity-resolution.md) and [`spiritwriter-canonicalize.md`](spiritwriter-canonicalize.md)) kept this spec's three load-bearing ideas — Entity Sense Signatures, tiered resolution, multi-pass consensus — but dropped the vec0 + OpenClaw embedding layer entirely. String similarity + tiered escalation turned out to be enough; the implementation ships with zero new dependencies. Read this spec for the original design rationale, not as a description of what's running today. Treat references to `SQLite + vec0 + GPT-4.1-mini`, `vec0_search()`, `CREATE VIRTUAL TABLE ... USING vec0(...)`, `OpenClaw's existing embedding infrastructure`, and `text-embedding-3-small via OpenClaw` as the original plan, not the as-built. The atom-extraction half — overlapping-window chunking with multi-pass consensus voting — did ship and is documented at [`docs/shingled-extraction.md`](../shingled-extraction.md).
 **Parent spec**: `specs/cmc-spec-v0.1.md` (full CMC pipeline — deferred)
 
 ---
