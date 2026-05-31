@@ -10,6 +10,8 @@ The registry resolves over `ShardAtom`s — the (`entity`, `key`, `value`) tripl
 
 For how atoms get *made* from long-form text in the first place — overlapping windows, multi-pass consensus voting, no fact lost at chunk boundaries — see [`shingled-extraction.md`](shingled-extraction.md). That's a separate primitive from the resolver, often used together.
 
+For a worked example of the resolver consuming atoms end-to-end (paper → shingled chunking → atoms → memory shard → delegated job → Phalanx resolution), run [`examples/06_phalanx_flow/`](../examples/06_phalanx_flow/). It also demonstrates the normalization step every ingestion pipeline needs before resolution — `K. Yamamoto` and `Kazuhiko Yamamoto` only collapse to one canonical entity after the first-name initial pre-pass.
+
 ## The Tier System
 
 Resolution returns a `ResolutionTier` with a confidence score:

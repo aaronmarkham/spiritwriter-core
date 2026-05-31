@@ -178,6 +178,8 @@ The `examples/` directory contains self-contained demos that exercise the fabric
 | [02_todo_fanout](examples/02_todo_fanout/) | Compound request split into 4 subagents, each writing a result shard with `source_ref` lineage, assembled by the parent |
 | [03_skills_and_tools](examples/03_skills_and_tools/) | Agent uses skills and tools to plan a trip; every invocation recorded with input/output hashes |
 | [04_governance_divergence](examples/04_governance_divergence/) | Same job run twice — Run A behaves, Run B exceeds budget and capabilities; parent detects violations via trace |
+| [05_delegation_with_trace](examples/05_delegation_with_trace/) | Per-key delegation: root → orchestrator → 3 workers, each with its own Ed25519 leaf cap; signed shards trace back to the event that produced them |
+| [06_phalanx_flow](examples/06_phalanx_flow/) | Full pipeline — paper → shingled chunking → atoms → memory shard → delegated summarization job → Phalanx entity resolution. All under one trace; composes [shingled extraction](docs/shingled-extraction.md), [delegated jobs](docs/jobs.md), and the [`CanonicalRegistry`](docs/entity-resolution.md) |
 
 Run the test suite with `python -m pytest tests/test_demos.py -v`.
 

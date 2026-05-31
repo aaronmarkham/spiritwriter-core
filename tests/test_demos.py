@@ -406,6 +406,116 @@ class TestDemo05DelegationWithTrace:
             )
 
 
+# ── Demo 6: Phalanx flow ───────────────────────────────────────────
+
+
+class TestDemo06PhalanxFlow:
+    """End-to-end: paper → shingled chunking → atoms → memory shard →
+    delegated job → Phalanx entity resolution, all under one trace.
+
+    The demo composes the three named primitives (shingled extraction,
+    delegated jobs, CanonicalRegistry) so a regression in any of their
+    integration points lights up here. If this breaks, look at what
+    changed in the primitives' API surfaces — the demo only uses public
+    fabric APIs.
+    """
+
+    @pytest.fixture(autouse=True, scope="class")
+    def run_demo(self, tmp_path_factory):
+        out = tmp_path_factory.mktemp("demo06")
+        demo = _load_demo("06_phalanx_flow")
+        rc = demo.main(output_dir=out)
+        TestDemo06PhalanxFlow._dir = out
+        TestDemo06PhalanxFlow._rc = rc
+
+    def test_main_exits_zero(self):
+        assert self._rc == 0
+
+    def test_trace_created_and_verifies(self):
+        from spiritwriter.fabric.emitter import verify_chain
+        path = self._dir / "trace.jsonl"
+        assert path.exists(), "trace.jsonl should be created"
+        events = _load_events(path)
+        assert verify_chain(events), "trace chain failed verification"
+        # Sanity: each stage emits at least one event
+        assert len(events) >= 10
+
+    def test_all_stage_event_types_present(self):
+        """Each of the four stages plus the job-packaging integration
+        should produce its distinctive event type. Catches a stage
+        silently being skipped or refactored away."""
+        events = _load_events(self._dir / "trace.jsonl")
+        types = {e["type"] for e in events}
+        # Stage-specific
+        assert "shingled_chunking_completed" in types
+        assert "content_shard_stored" in types
+        assert "entity_resolved" in types
+        assert "worker_starting" in types
+        assert "worker_completed" in types
+        # package_job + hydrate_job integration
+        assert "entitlement_granted" in types
+        assert "job_packaged" in types
+        assert "job_started" in types
+        assert "shard_decrypted" in types
+        assert "capability_checked" in types
+
+    def test_phalanx_merged_yamamoto_variants(self):
+        """The two Yamamoto surface forms ('K. Yamamoto' / 'Kazuhiko
+        Yamamoto') must resolve to ONE canonical id after normalization.
+        This is the entity-resolution promise the demo makes — if it
+        breaks, either the normalization stopped collapsing initials or
+        ess_fields stopped including last_name."""
+        events = _load_events(self._dir / "trace.jsonl")
+        resolutions = [e for e in events if e["type"] == "entity_resolved"]
+        yamamoto_canons = {
+            e["canonical_id"] for e in resolutions
+            if "Yamamoto" in e["surface_form"]
+        }
+        assert len(yamamoto_canons) == 1, (
+            f"Yamamoto variants should resolve to one canonical id, "
+            f"got {len(yamamoto_canons)}: {yamamoto_canons}"
+        )
+
+    def test_eight_mentions_three_canonical_authors(self):
+        """8 author mentions in the paper (3 byline + 3 affiliations +
+        2 acknowledgments) should collapse to 3 canonical authors."""
+        events = _load_events(self._dir / "trace.jsonl")
+        resolutions = [e for e in events if e["type"] == "entity_resolved"]
+        assert len(resolutions) == 8, f"expected 8 mentions, got {len(resolutions)}"
+        canon_ids = {e["canonical_id"] for e in resolutions}
+        assert len(canon_ids) == 3, f"expected 3 canonical authors, got {len(canon_ids)}"
+
+    def test_result_shard_lineage_pins_to_content(self):
+        """The summarization result must pin its parent_shard_id at the
+        stage-2 content shard (the meaningful predecessor), not at the
+        encrypted job-internal shard package_job() built. Otherwise the
+        lineage chain `paper-atoms → summary` is broken."""
+        from spiritwriter.fabric.store import ShardStore
+
+        events = _load_events(self._dir / "trace.jsonl")
+        content_stored = next(e for e in events if e["type"] == "content_shard_stored")
+        worker_done = next(e for e in events if e["type"] == "worker_completed")
+
+        store = ShardStore(self._dir / "shards")
+        result = store.get(worker_done["result_shard_id"])
+        assert result is not None, "result shard should be in the store"
+        assert result.parent_shard_id == content_stored["shard_id"], (
+            "result.parent_shard_id should point at the stage-2 plaintext "
+            "content shard, not the encrypted job-internal one"
+        )
+
+    def test_registry_db_created_and_populated(self):
+        """The authors.db SQLite file should exist and have the 3
+        canonical entities the demo merged into."""
+        import sqlite3
+
+        db_path = self._dir / "authors.db"
+        assert db_path.exists(), "authors.db should be created"
+        with sqlite3.connect(db_path) as conn:
+            count = conn.execute("SELECT COUNT(*) FROM entities").fetchone()[0]
+        assert count == 3, f"expected 3 canonical entities in registry, got {count}"
+
+
 # ── Flavor doc worked examples ────────────────────────────────────────
 #
 # The hex values below mirror the worked examples in
