@@ -17,8 +17,8 @@ metadata:
     install:
       - id: spiritwriter-mempalace
         kind: pip
-        label: "Install spiritwriter-core + MemPalace"
-        package: "spiritwriter-core[mempalace]"
+        label: "Install spiritwriter + MemPalace"
+        package: "spiritwriter[mempalace]"
 ---
 
 # spiritwriter + MemPalace
@@ -37,8 +37,8 @@ Two systems, complementary strengths, zero overlap:
 Install both and they discover each other automatically. Install order doesn't matter.
 
 ```bash
-pip install spiritwriter-core mempalace
-# or: pip install spiritwriter-core[mempalace]
+pip install spiritwriter mempalace
+# or: pip install spiritwriter[mempalace]
 ```
 
 ## What Changes When Both Are Installed
@@ -164,4 +164,4 @@ Benchmarks for token savings are in progress.
 
 ## License
 
-spiritwriter-core: Apache 2.0. MemPalace: MIT. Fully compatible.
+spiritwriter: Apache 2.0. MemPalace: MIT. Fully compatible.

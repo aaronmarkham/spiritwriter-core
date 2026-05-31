@@ -1,4 +1,4 @@
-# spiritwriter-core
+# spiritwriter
 
 Shared Python library for knowledge management, secrets, LLM abstraction, and **memory/trace shards**.
 

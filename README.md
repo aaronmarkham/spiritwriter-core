@@ -1,4 +1,4 @@
-# spiritwriter-core
+# spiritwriter
 
 **Agent memory you own.**
 
@@ -255,7 +255,7 @@ spiritwriter/
 
 ## Integrations
 
-spiritwriter-core ships a pluggable memory-provider protocol (`spiritwriter/integrations/base.py`) so any external memory system can be backed by content-addressed shards. One adapter is in-tree:
+spiritwriter ships a pluggable memory-provider protocol (`spiritwriter/integrations/base.py`) so any external memory system can be backed by content-addressed shards. One adapter is in-tree:
 
 - **[mempalace](https://github.com/aaronmarkham/mempalace)** — atomic memory store with decay-based recall and contextual entity weighting. The `spiritwriter/integrations/mempalace/` adapter wires it to the shard store and entity registry.
 

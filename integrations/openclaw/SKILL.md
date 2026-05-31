@@ -15,23 +15,23 @@ metadata:
       anyBins:
         - python3
     install:
-      - id: spiritwriter-core
+      - id: spiritwriter
         kind: pip
-        label: "Install spiritwriter-core"
-        package: spiritwriter-core
+        label: "Install spiritwriter"
+        package: spiritwriter
       - id: spiritwriter-sealed
         kind: pip
         label: "Install with sealed-box encryption (NaCl)"
-        package: "spiritwriter-core[sealed]"
+        package: "spiritwriter[sealed]"
       - id: spiritwriter-full
         kind: pip
         label: "Install everything (sealed + IPFS network)"
-        package: "spiritwriter-core[sealed,network]"
+        package: "spiritwriter[sealed,network]"
 ---
 
 # spiritwriter — Agent Memory That Stays Local
 
-spiritwriter-core was built because agent memory shouldn't cost $100/day in token burn, and your intents shouldn't flow through third-party services. It gives your agent structured, encrypted, content-addressed memory — stored locally, recalled efficiently, with a full provenance chain.
+spiritwriter was built because agent memory shouldn't cost $100/day in token burn, and your intents shouldn't flow through third-party services. It gives your agent structured, encrypted, content-addressed memory — stored locally, recalled efficiently, with a full provenance chain.
 
 Battle-tested in production since February 2026 with OpenClaw agents.
 
@@ -47,7 +47,7 @@ spiritwriter is a Python library, not a CLI tool. Your agent uses it via Python 
 
 ```bash
 # Install
-pip install spiritwriter-core
+pip install spiritwriter
 
 # From your agent code or hooks:
 from spiritwriter.fabric.shard import MemoryShard, ShardAtom, AtomKind
@@ -165,7 +165,7 @@ assert verify_chain(tracer.get_events())
 If [MemPalace](https://github.com/MemPalace/mempalace) is also installed, spiritwriter auto-discovers it and adds semantic search over your shards. MemPalace handles retrieval (vector search, BM25 reranking), spiritwriter handles trust (encryption, provenance, entity resolution). See the `mempalace` integration skill for details.
 
 ```bash
-pip install spiritwriter-core[mempalace]
+pip install spiritwriter[mempalace]
 ```
 
 ## Decay Classes

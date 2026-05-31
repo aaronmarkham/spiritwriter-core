@@ -1,7 +1,7 @@
 """Spiritwriter integrations — pluggable memory system bridges.
 
 Auto-discovers installed memory providers at import time.
-Install order doesn't matter: if both spiritwriter-core and a
+Install order doesn't matter: if both spiritwriter and a
 memory provider (MemPalace, Mem0, etc.) are installed, the
 integration activates automatically.
 
@@ -34,7 +34,7 @@ def _discover() -> None:
     """Probe for installed memory providers. Safe to call multiple times.
 
     Checks whether the third-party package is importable (not just the
-    spiritwriter integration module, which ships with spiritwriter-core).
+    spiritwriter integration module, which ships with spiritwriter).
     A provider is only registered if its backing package is installed.
     """
     global _discovered

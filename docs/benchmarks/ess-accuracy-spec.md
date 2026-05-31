@@ -162,7 +162,7 @@ eval/results/<timestamp>/
 
 ```markdown
 # ESS Accuracy Report — 2026-05-17T22:00:00Z
-spiritwriter-core 0.7.2 · commit abc1234
+spiritwriter 0.7.2 · commit abc1234
 
 ## Headline
 Recall@T1+T2:  0.91   (target ≥0.85)   ✓

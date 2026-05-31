@@ -1,4 +1,4 @@
-# spiritwriter-core: `canonicalize` Module Spec
+# spiritwriter: `canonicalize` Module Spec
 
 **Status:** Draft
 **Date:** 2026-02-25

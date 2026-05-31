@@ -83,11 +83,11 @@ This isn't theoretical. The patterns come from Frio, a real system monitoring IC
 - A framework for thinking about surveillance-resistant system design
 - Exposure to Spiritwriter's shard and entitlement model for building governed agent systems
 
-**Prerequisites:** Laptop with Python 3.9+. We'll provide a starter repo built on spiritwriter-core. Familiarity with Python and basic crypto concepts helpful but not required — we'll explain as we go.
+**Prerequisites:** Laptop with Python 3.9+. We'll provide a starter repo built on spiritwriter. Familiarity with Python and basic crypto concepts helpful but not required — we'll explain as we go.
 
 **Materials provided:**
 
-- Starter code repo with scaffolding and test data (built on spiritwriter-core)
+- Starter code repo with scaffolding and test data (built on spiritwriter)
 - Reference architecture diagram
 - Cheat sheet: NaCl sealed-box operations in PyNaCl
 - Spiritwriter quick-start guide for extending the prototype into a distributed system
@@ -113,14 +113,14 @@ Intermediate. Python proficiency helpful. Crypto concepts explained from first p
 - **Governance framing added** — the entitlements/capability/trace stack is the differentiator. "How do you delegate work to agents you don't trust?" is the question nobody else is answering with shipping code.
 - **Self-improving loop sharpened** — agents return improved *abilities* (not just results). This is the versioned capability evolution we discussed. "Abilities" distinguishes from Claude Code "skills" — abilities are versioned, distributed agent capabilities that travel in shards.
 - **Bio updated** — mentions Spiritwriter as open-source release, not just Frio.
-- **Workshop ties to spiritwriter-core** — attendees leave with spiritwriter installed and a working prototype. Instant adoption funnel.
+- **Workshop ties to spiritwriter** — attendees leave with spiritwriter installed and a working prototype. Instant adoption funnel.
 
 ### Sprint priorities for CFP strength (by April 1)
 1. **Seed Patin Patin case into Frio** — concrete monitoring data makes the CFP real ("we've been tracking public cases since March")
 2. **IPFS shard prototype** — "we've demonstrated IPFS-based job distribution" vs. "we plan to"
 3. **Tampermonkey skeleton** — even a non-functional scaffold shows the contributor model is real code
 4. **Percival page on nl1** — one page of aggregate stats at a URL you can point to
-5. **spiritwriter-core README + quick-start** — if a reviewer Googles it, something should exist
+5. **spiritwriter README + quick-start** — if a reviewer Googles it, something should exist
 
 ### CFP strategy
 - Submit for BOTH talk and workshop. Workshop = free ticket. Talk = better visibility.
@@ -132,13 +132,13 @@ Intermediate. Python proficiency helpful. Crypto concepts explained from first p
 - **NEW: Spiritwriter as open-source launch** — ToorCamp is the venue. Workshop is the adoption funnel. Talk is the story. GitHub repo is the artifact.
 
 ### Workshop logistics
-- Prep starter repo with scaffolding by mid-June (spiritwriter-core must be pip-installable by then)
+- Prep starter repo with scaffolding by mid-June (spiritwriter must be pip-installable by then)
 - Test the workshop flow with 2-3 friends before ToorCamp
 - Consider: can the workshop output actually be used to join the Frio contributor network? Recursive recruitment.
 - Need offline fallback — Doe Bay WiFi is notoriously bad. Pre-download all deps.
 
 ### Open questions
-- How much of spiritwriter-core needs to be public by April 1? (Minimum: README + architecture doc. Code can follow.)
+- How much of spiritwriter needs to be public by April 1? (Minimum: README + architecture doc. Code can follow.)
 - Should the talk explicitly frame Spiritwriter as "the governance layer the industry doesn't have yet"? Or let the audience draw that conclusion?
 - Percival naming — keep it or rename? It's a good name but needs a one-sentence explainer in the talk.
 

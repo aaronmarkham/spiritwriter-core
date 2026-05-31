@@ -1,10 +1,10 @@
 # Integration Guide
 
-How real-world applications use spiritwriter-core's memory shards, encryption, and entity resolution. These examples come from production systems.
+How real-world applications use spiritwriter's memory shards, encryption, and entity resolution. These examples come from production systems.
 
 ## Frio — Zero-Knowledge Jail Roster Monitoring
 
-[Frio](https://github.com/aaronmarkham/frio) monitors jail rosters across ~55 sources to alert families when a person is booked. It uses spiritwriter-core for encrypted search shards, fuzzy name matching, and result delivery — all without the operator seeing search terms.
+[Frio](https://github.com/aaronmarkham/frio) monitors jail rosters across ~55 sources to alert families when a person is booked. It uses spiritwriter for encrypted search shards, fuzzy name matching, and result delivery — all without the operator seeing search terms.
 
 ### Architecture
 
@@ -315,7 +315,7 @@ def known_url_hashes(store):
 
 ## Claude Studio Producer — Multi-Tenant Agent Memory
 
-[Claude Studio Producer](https://github.com/aaronmarkham/claude-studio-producer) is a multi-agent video production system. While it doesn't yet import spiritwriter-core directly, its memory architecture is designed to align with the shard model.
+[Claude Studio Producer](https://github.com/aaronmarkham/claude-studio-producer) is a multi-agent video production system. While it doesn't yet import spiritwriter directly, its memory architecture is designed to align with the shard model.
 
 ### Memory Hierarchy → Shard Scope Mapping
 
@@ -398,13 +398,13 @@ kb_shard = MemoryShard(
 
 ## Third-Party Memory Systems
 
-spiritwriter-core is designed to complement — not compete with — existing memory retrieval systems. It provides the **trust layer** (content addressing, encryption, entity resolution, provenance, access control, distribution) while retrieval systems provide **semantic search**. All integrations use the pluggable provider protocol in `spiritwriter.integrations`.
+spiritwriter is designed to complement — not compete with — existing memory retrieval systems. It provides the **trust layer** (content addressing, encryption, entity resolution, provenance, access control, distribution) while retrieval systems provide **semantic search**. All integrations use the pluggable provider protocol in `spiritwriter.integrations`.
 
 ### License Compatibility
 
 | System | License | Compatible? | Integration Status |
 |--------|---------|-------------|-------------------|
-| spiritwriter-core | Apache-2.0 | -- | -- |
+| spiritwriter | Apache-2.0 | -- | -- |
 | MemPalace | MIT | Yes | Available (`spiritwriter.integrations.mempalace`) |
 | Mem0 | Apache-2.0 | Yes | Planned |
 | Zep | Apache-2.0 | Yes | Planned |
@@ -461,7 +461,7 @@ if mp and mp.is_available():
 
 **What each side contributes:**
 
-| MemPalace | spiritwriter-core |
+| MemPalace | spiritwriter |
 |-----------|-------------------|
 | Semantic search (ChromaDB) | Content-addressed storage (SHA-256) |
 | BM25 keyword reranking | AES-256-GCM / NaCl encryption |
@@ -474,9 +474,9 @@ if mp and mp.is_available():
 **Install:**
 
 ```bash
-pip install spiritwriter-core[mempalace]
+pip install spiritwriter[mempalace]
 # or just install both:
-pip install spiritwriter-core mempalace
+pip install spiritwriter mempalace
 ```
 
 #### ShardBackend: Content-Addressed Drawers
@@ -673,7 +673,7 @@ The provider protocol supports Zep's temporal queries via `SearchQuery.after` / 
 
 ### Lazy Imports (Optional Dependency)
 
-When spiritwriter-core is optional, use lazy imports:
+When spiritwriter is optional, use lazy imports:
 
 ```python
 _shard_module = None
@@ -693,8 +693,8 @@ def _ensure_imports():
             })
         except ImportError:
             raise ImportError(
-                "spiritwriter-core is required for shard operations. "
-                "Install with: pip install spiritwriter-core"
+                "spiritwriter is required for shard operations. "
+                "Install with: pip install spiritwriter"
             )
     return _shard_module
 ```

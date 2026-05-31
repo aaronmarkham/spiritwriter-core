@@ -6,14 +6,14 @@ This document describes the wire format and verification rules of the
 Spiritwriter content-addressed memory substrate. An agent that has read
 this document — plus a delegation bundle (cap chain + their own
 keypair) — can produce and verify valid shards in any language without
-installing `spiritwriter-core`.
+installing `spiritwriter`.
 
 The primitives required: `sha256`, `Ed25519 sign/verify`, and a JSON
 encoder that supports sorted keys. Every modern stdlib has these or a
 single small dependency.
 
 > **Status.** Describes what is currently implemented in
-> `spiritwriter-core` v0.6+. The surface is intentionally small. Future
+> `spiritwriter` v0.6+. The surface is intentionally small. Future
 > additions (revocation sets, trust epochs, a `shards.spiritwriter.ai`
 > HTTP protocol) are deferred until the primitives below are exercised
 > in production. Worked examples are reproducible —

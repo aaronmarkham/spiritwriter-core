@@ -56,7 +56,7 @@ def _require_nacl() -> None:
     if not HAS_NACL:
         raise ImportError(
             "Sealed-box encryption requires PyNaCl. "
-            "Install it with: pip install 'spiritwriter-core[sealed]'"
+            "Install it with: pip install 'spiritwriter[sealed]'"
         )
 
 

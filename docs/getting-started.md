@@ -1,8 +1,8 @@
-# Getting Started with spiritwriter-core
+# Getting Started with spiritwriter
 
 AI agents pick up knowledge faster than they can keep track of it. The same agent that discovered "this codebase uses FastAPI for the web layer" needs that fact again ten minutes later, or a sub-agent needs it, or a teammate's agent needs it tomorrow. The shapes that solve this — vector stores, prompt-stuffing, ad-hoc JSON files — each fail somewhere: no audit trail, no access control, no way to dedupe across agents, no way to expire stale knowledge.
 
-**spiritwriter-core** is a Python library for content-addressed agent memory. Knowledge lives in **shards** — immutable, SHA-256-addressed bundles with provenance, scope-based access control, decay metadata, and optional encryption. Shards persist locally, distribute over IPFS, hydrate into agent context on demand, and carry hash-chained traces of every action taken with them.
+**spiritwriter** is a Python library for content-addressed agent memory. Knowledge lives in **shards** — immutable, SHA-256-addressed bundles with provenance, scope-based access control, decay metadata, and optional encryption. Shards persist locally, distribute over IPFS, hydrate into agent context on demand, and carry hash-chained traces of every action taken with them.
 
 This doc walks the core model end-to-end, then points at the deep-dive docs for each piece.
 
@@ -212,7 +212,7 @@ The deep-dive docs aren't a linear tutorial — they're reference material organ
 | Auditing Android binaries | [audit](audit.md) |
 | Anything — full surface | [api-reference](api-reference.md), [integration-guide](integration-guide.md) |
 
-## What spiritwriter-core Is Not
+## What spiritwriter Is Not
 
 Worth being explicit about scope:
 

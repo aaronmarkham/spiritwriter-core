@@ -1,6 +1,6 @@
 # API Reference
 
-Complete public API surface of spiritwriter-core.
+Complete public API surface of spiritwriter.
 
 ## spiritwriter.fabric.shard
 

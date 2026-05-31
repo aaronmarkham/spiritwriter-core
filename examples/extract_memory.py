@@ -8,7 +8,7 @@ sit inside at least one fully-overlapping window thanks to the shingle
 overlap, so nothing gets clipped.
 
 This is a worked example, not a production tool. It demonstrates how
-to plug spiritwriter-core's shard/atom primitives into a custom
+to plug spiritwriter's shard/atom primitives into a custom
 extraction pipeline. Adapt freely.
 
 Usage:

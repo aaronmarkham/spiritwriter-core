@@ -275,7 +275,7 @@ def check_backend():
 # === Top-level CLI (for `spiritwriter secrets ...`) ===
 
 @click.group()
-@click.version_option(package_name="spiritwriter-core")
+@click.version_option(package_name="spiritwriter")
 def main():
     """spiritwriter — shared foundation for AI content pipelines."""
     pass

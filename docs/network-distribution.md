@@ -7,7 +7,7 @@ The pattern works because shards are content-addressed. Two stores holding the s
 ## Install
 
 ```bash
-pip install 'spiritwriter-core[network]'
+pip install 'spiritwriter[network]'
 ```
 
 The `[network]` extra adds the `requests` dependency for the Kubo HTTP API. You'll also need a running Kubo (IPFS) node — see [Private Swarm Setup](#private-swarm-setup) for production config; for local development:
