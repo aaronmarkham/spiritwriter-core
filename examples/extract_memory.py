@@ -35,7 +35,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
 import re
 import sys
 from datetime import datetime
@@ -379,8 +378,9 @@ def extract_file_with_consensus(
     1. Chunk the file into overlapping shingle windows
     2. Run extraction on each chunk, repeated for `num_passes` passes
     3. Atoms appearing in ≥2 passes are kept (consensus survivors)
-    4. Single-pass atoms only kept if confidence ≥ 0.8 (handled
-       per-atom by the LLM prompt's confidence threshold)
+    4. When num_passes == 1, all pass-1 atoms are returned as-is
+       (no consensus to vote on; the per-atom `confidence < 0.5`
+       gate in `_parse_items` is the only filter)
 
     Returns (consensus_atoms, total_cost_usd).
     """
