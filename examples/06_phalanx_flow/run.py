@@ -37,7 +37,8 @@ from pathlib import Path
 
 from spiritwriter.fabric.canonicalize import (
     CanonicalRegistry, CanonicalSchema,
-    # Pre-resolution normalization helpers (shipped in 0.8.1).
+    # Pre-resolution normalization helpers — see
+    # docs/entity-resolution.md § "Normalize before you resolve".
     apply_normalizers, first_initial, strip_punctuation, pipeline,
 )
 from spiritwriter.fabric.emitter import TraceEmitter, verify_chain

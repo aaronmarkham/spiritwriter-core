@@ -504,6 +504,42 @@ class TestDemo06PhalanxFlow:
             "content shard, not the encrypted job-internal one"
         )
 
+    # Regression sentinels — pinning the exact shard ids the demo produces
+    # turns any silent drift in: paper text, atom curation, AUTHOR_NORMALIZERS,
+    # the chunking constants, the summarization text, or anything else
+    # touching content-addressed bytes into a loud test failure. Same
+    # pattern as TestFlavorDocExamples' EXPECTED_FLAVOR_VALUES — the
+    # alarm-not-the-spec.
+    #
+    # When intentionally changing demo 06 (e.g. updating the paper, the
+    # curated atoms, or the summary text): re-run the demo, copy the
+    # new ids below.
+    EXPECTED_CONTENT_SHARD_ID = (
+        "4f527240d9bc1ff921922ea470126b7a757d183fffe06b60a5aa0691f4e9d3bd"
+    )
+    EXPECTED_RESULT_SHARD_ID = (
+        "20ee3221d8b5e5286cc08ddf5959815158a6afb0b1a305ae655f64b232df38dc"
+    )
+
+    def test_shard_ids_pinned(self):
+        """Catch silent drift in content-addressed bytes. If the demo
+        is intentionally changed (paper text, atom curation, normalizers,
+        chunking, summary text), update EXPECTED_* above."""
+        events = _load_events(self._dir / "trace.jsonl")
+        content_stored = next(e for e in events if e["type"] == "content_shard_stored")
+        worker_done = next(e for e in events if e["type"] == "worker_completed")
+
+        assert content_stored["shard_id"] == self.EXPECTED_CONTENT_SHARD_ID, (
+            "Content shard id drifted — atom curation or normalization "
+            "changed silently. Update EXPECTED_CONTENT_SHARD_ID if "
+            "intentional."
+        )
+        assert worker_done["result_shard_id"] == self.EXPECTED_RESULT_SHARD_ID, (
+            "Result shard id drifted — summarization text, parent linkage, "
+            "or runner-side changes affected the result bytes. Update "
+            "EXPECTED_RESULT_SHARD_ID if intentional."
+        )
+
     def test_registry_db_created_and_populated(self):
         """The authors.db file should exist and the registry should
         report exactly 3 canonical entities (the same merged-author
