@@ -146,9 +146,9 @@ The trace chain from lesson 4 is the backbone; each new event type plugs into it
 
 ## What comes next
 
-You can detect audit failure modes in your own pipeline. Now the question is what changes when you go from "one analyst's well-instrumented pipeline" to "a fleet of audits running unattended across a growing input set." Scaling confidence is its own discipline — that's **Lesson 7: Scaling with Confidence** (coming next).
+You can detect audit failure modes in your own pipeline. Now the question is what changes when you go from "one analyst's well-instrumented pipeline" to "a fleet of audits running unattended across a growing input set." Scaling confidence is its own discipline — that's [Lesson 7: Scaling with Confidence](07-scaling-with-confidence.md).
 
 ---
 
 Previous: [Lesson 5: Self-Improving Pipelines](05-self-improving-pipelines.md)
-Next: *Lesson 7: Scaling with Confidence — coming next*
+Next: [Lesson 7: Scaling with Confidence](07-scaling-with-confidence.md)
