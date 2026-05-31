@@ -286,16 +286,27 @@ class IPFSBackend:
 
         return ShardLocation(shard_id=shard_id, cid=cid, local=True, pinned=self._config.pin_by_default)
 
-    def publish_public(self, shard: MemoryShard) -> ShardLocation:
-        """Publish a shard to the PUBLIC IPFS network.
+    def publish_public(self, shard: MemoryShard, *, confirm_public: bool = False) -> ShardLocation:
+        """Publish a PLAINTEXT shard to the PUBLIC IPFS network.
 
         Use this only for intentionally public content. Bypasses the
-        private swarm requirement. The shard will be readable by anyone
-        who discovers the CID.
+        private swarm requirement. The shard is published as plaintext and
+        will be permanently readable by anyone who discovers the CID.
 
-        Raises ValueError if the shard is not encrypted/sealed — publishing
-        plaintext to public IPFS is almost always a mistake.
+        A ``MemoryShard`` is always plaintext; encrypted or sealed content
+        uses :meth:`publish_encrypted` / :meth:`publish_sealed` instead.
+        Because publishing plaintext to public IPFS is irreversible and
+        almost always a mistake, callers must opt in explicitly.
+
+        Raises:
+            ValueError: if ``confirm_public`` is not set to ``True``.
         """
+        if not confirm_public:
+            raise ValueError(
+                "publish_public() exposes plaintext on the public IPFS network "
+                "permanently. Pass confirm_public=True to acknowledge this, or use "
+                "publish_encrypted()/publish_sealed() to keep the content private."
+            )
         shard_id = shard.shard_id
         existing_cid = self._cid_map.get(f"public:{shard_id}")
         if existing_cid:
