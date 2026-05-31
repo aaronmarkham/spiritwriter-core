@@ -283,6 +283,8 @@ pilots = [
 
 **Resumable jobs.** Persist the `PackagedJob` ids to a checkpoint shard at every successful stage; on restart, look up the checkpoint and resume from the next stage. See [traced-workflows.md](traced-workflows.md) for the full pattern.
 
+**Lineage through encryption.** `package_job()` builds its own encrypted content shard internally — that shard's id is different from any plaintext content shard you might keep on the orchestrator side. When pinning a result shard's `parent_shard_id`, pin it at the **plaintext predecessor** (the atoms you cared about), not the encrypted job-internal shard. The worked example at [`examples/06_phalanx_flow/`](../examples/06_phalanx_flow/) shows the pattern: extracted-paper shard → delegated summarization → result shard linked back to the extracted-paper shard, not the encrypted shipping container.
+
 ## What This Layer Is Not
 
 - **Not async.** `package_job` and `hydrate_job` are synchronous. Drive concurrency at the orchestrator layer (asyncio, threads, or multiple sub-agent processes).

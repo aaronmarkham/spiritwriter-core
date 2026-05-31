@@ -98,6 +98,15 @@ keep the cost report accurate. `--regex` runs a free offline fallback
 via `spiritwriter.fabric.extract.extract_atoms` — noisier, but no API
 key required.
 
+## End-to-end worked example
+
+[`examples/06_phalanx_flow/`](../examples/06_phalanx_flow/) runs the
+full pipeline: a synthetic paper is shingled-chunked, atomized,
+bundled into a memory shard, handed to a sub-agent via a delegated
+job, and the entities mentioned in it are resolved through Phalanx —
+all under a single trace whose chain verifies end-to-end. Deterministic
+(no LLM, no network) so it's safe to run anywhere.
+
 ## Related reading
 
 - [`atoms.md`](atoms.md) — the `ShardAtom` primitive and the AtomKind enum that extraction populates
