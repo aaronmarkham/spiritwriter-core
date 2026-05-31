@@ -118,7 +118,9 @@ registry = CanonicalRegistry("/tmp/inmates.db", schema)
 
 The registry opens a SQLite database in WAL mode. The schema is hashed and stored on first open — reopening with a different schema raises `ValueError`, so you can't accidentally feed records to a registry that disagrees about identity.
 
-The `NORMALIZERS` dict is your contract with the schema. If you change it, you change what "same entity" means — and any registry built against the old normalizers will collide with the new ones. Treat it as part of the schema definition; version it alongside.
+The `NORMALIZERS` dict is your contract with the schema. If you change it, you change what "same entity" means — and any registry built against the old normalizers will silently collide or diverge with the new ones (the same misattribution failure mode this whole section exists to prevent, shifted up a level). Treat it as part of the schema definition; version it alongside.
+
+**The registry's `schema_hash()` guard does NOT extend to normalizers.** Reopening a registry with a different `CanonicalSchema` raises `ValueError`; reopening with a different `NORMALIZERS` map proceeds silently and starts producing different ESS digests for the same source records. By deliberate design — apps own normalization — but worth eyes-open. If your app re-deploys with normalizer changes, consider hashing your normalizer set as part of your release metadata and asserting it on registry open. Anything past `.strip().lower()` is your contract to keep stable.
 
 ## Resolving Records
 
@@ -226,11 +228,18 @@ T3 doesn't auto-merge. The merge event lands in the `merges` table for review �
 ### Batch Processing
 
 ```python
+from spiritwriter.fabric.canonicalize import canonicalize_batch
+
 records = [
     {"last_name": "Smith",  "first_name": "John",   "dob": "1985-03-15", "source_id": "001"},
     {"last_name": "SMITH",  "first_name": "JOHN A", "dob": "1985-03-15", "source_id": "002"},
     {"last_name": "Johnson","first_name": "Jane",   "dob": "1992-08-20", "source_id": "003"},
 ]
+
+# Note: canonicalize_batch does NOT pre-normalize candidates — same rule
+# as resolve()/upsert(). For the merge pattern modeled in
+# "Normalize before you resolve", run records through apply_normalizers()
+# (or a list comprehension) before passing them to the batch call.
 
 results = canonicalize_batch(
     records, registry,
@@ -268,7 +277,7 @@ ess1.overlap(ess3)    # 1.0 — shared fields all match
 ess1 == ess3          # False — different field set, different digest
 ```
 
-**Watch out:** ESS normalization is `.strip().lower()`, not `normalize_name()`. That means `"Carlos"` and `"CARLOS A"` produce *different* digests — fuzzy matching exists to bridge that gap. Don't try to be clever and pre-normalize before passing to ESS; the registry handles it.
+**Watch out:** `EntitySenseSig.compute()`'s built-in normalization is `.strip().lower()` only, *not* `normalize_name()`. That means `"Carlos"` and `"CARLOS A"` produce *different* digests at this low level. At the registry-via-`resolve()`-and-`upsert()` level, app-side normalization via `apply_normalizers()` IS the recommended pattern — see [Normalize before you resolve](#normalize-before-you-resolve). The fuzzy fallback bridges the gap for whatever your normalizers don't collapse.
 
 ### Age Bucketing
 

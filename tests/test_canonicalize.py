@@ -709,6 +709,32 @@ class TestPipeline:
         assert norm("xyz") == "xyz"
 
 
+class TestHelperDoctests:
+    """Run the doctests embedded in the normalization-helper docstrings.
+
+    The helpers' docstrings carry worked examples (first_initial('K.')
+    → 'K', strip_punctuation("O'Brien") → 'OBrien', etc.). Without a
+    runner the contract can rot silently — this test fails if any
+    documented example stops behaving as documented.
+
+    Scope is limited to the canonicalize module on purpose; not adding
+    --doctest-modules globally because other modules in the tree have
+    docstring snippets that aren't intended to be doctest-shaped.
+    """
+
+    def test_canonicalize_doctests_pass(self):
+        import doctest
+
+        from spiritwriter.fabric import canonicalize
+
+        results = doctest.testmod(canonicalize, verbose=False)
+        assert results.failed == 0, (
+            f"{results.failed} doctest failure(s) in canonicalize.py "
+            f"out of {results.attempted} attempted — fix the docstring "
+            f"example or the helper, whichever drifted."
+        )
+
+
 class TestNormalizationIntegration:
     """End-to-end: with normalization, the same person under different
     surface forms collapses to a single canonical entity. Without it,
