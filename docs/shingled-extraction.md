@@ -63,27 +63,40 @@ For the atom shapes themselves and the kinds (`FACT`, `DECISION`, `CONVENTION`, 
 
 ## Reference implementation
 
-[`examples/extract_memory.py`](../examples/extract_memory.py) is the working implementation. It targets memory-folder extraction (markdown files of agent notes), but the chunking + multi-pass + consensus logic is generic — point it at anything text-shaped.
+[`examples/extract_memory.py`](../examples/extract_memory.py) is the working implementation. It targets markdown extraction (single file or directory of files), but the chunking + multi-pass + consensus logic is generic — point it at anything text-shaped.
 
 Key knobs:
 
 ```python
 CHUNK_TARGET_CHARS = 2000   # ~500 tokens per chunk
-CHUNK_OVERLAP_CHARS = 400   # ~100 token overlap (shingle window)
+CHUNK_OVERLAP_CHARS = 400   # the shingle window — atoms at chunk
+                            # boundaries appear in ≥2 chunks
 MAX_TOKENS_PER_CALL = 4000  # LLM max output tokens per chunk
 ```
 
 CLI:
 
 ```bash
-python3 examples/extract_memory.py                   # all memory files, 2 passes
-python3 examples/extract_memory.py --passes 3        # higher consensus threshold
-python3 examples/extract_memory.py --dry-run         # preview, no store writes
-python3 examples/extract_memory.py --force           # re-extract processed files
-python3 examples/extract_memory.py memory/2026-02-20.md  # specific file
+# Required: --input (file or dir) and --store (where the shard lands)
+python examples/extract_memory.py --input ./notes/ --store ./shards/
+python examples/extract_memory.py --input ./MEMORY.md --store ./shards/
+
+# Common options
+python examples/extract_memory.py --input ./notes/ --store ./shards/ --passes 3
+python examples/extract_memory.py --input ./notes/ --store ./shards/ --dry-run
+python examples/extract_memory.py --input ./notes/ --store ./shards/ --force
+python examples/extract_memory.py --input ./notes/ --store ./shards/ --regex
+python examples/extract_memory.py --input ./notes/ --store ./shards/ \
+    --model claude-sonnet-4-6 --price-in 3.0 --price-out 15.0
 ```
 
-The example file's variable names retain the historical "shingle" spelling; a planned cleanup will rename them to match this doc.
+The LLM path uses Anthropic Claude via the `anthropic` SDK and
+`spiritwriter.secrets.get_api_key("ANTHROPIC_API_KEY")` (keychain first,
+then env-var fallback). Default model is `claude-haiku-4-5` for cost;
+override with `--model` plus matching `--price-in` / `--price-out` to
+keep the cost report accurate. `--regex` runs a free offline fallback
+via `spiritwriter.fabric.extract.extract_atoms` — noisier, but no API
+key required.
 
 ## Related reading
 

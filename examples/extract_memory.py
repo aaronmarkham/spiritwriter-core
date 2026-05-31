@@ -1,62 +1,73 @@
 #!/usr/bin/env python3
-"""Extract shard atoms from memory files using LLM with shingle consensus.
+"""Extract ShardAtoms from markdown files via shingled extraction.
 
-Uses overlapping windows (shingles) and multi-pass extraction to ensure
-no knowledge is lost to truncation or boundary effects. Multiple extraction
-passes vote on atoms — only atoms that appear in 2+ passes are kept.
+Overlapping windows + multi-pass consensus voting — see
+docs/shingled-extraction.md for the why. Only atoms that appear in
+≥N passes survive (default 2-of-N). Atoms straddling chunk boundaries
+sit inside at least one fully-overlapping window thanks to the shingle
+overlap, so nothing gets clipped.
 
-At ~$0.03/pass over all files, 3 passes cost under a dime for
-consensus-validated memories.
+This is a worked example, not a production tool. It demonstrates how
+to plug spiritwriter-core's shard/atom primitives into a custom
+extraction pipeline. Adapt freely.
 
 Usage:
-    python3 shards/extract_memory.py                       # extract from all memory files
-    python3 shards/extract_memory.py memory/2026-02-20.md  # specific file
-    python3 shards/extract_memory.py --dry-run             # preview without storing
-    python3 shards/extract_memory.py --passes 3            # number of consensus passes (default 2)
-    python3 shards/extract_memory.py --force               # re-extract already-processed files
-    python3 shards/extract_memory.py --regex               # use regex fallback (no API call)
+    # Required: --input and --store
+    python examples/extract_memory.py --input ./notes/ --store ./shards/
+    python examples/extract_memory.py --input ./MEMORY.md --store ./shards/
+    python examples/extract_memory.py --input ./notes/ --store ./shards/ --passes 3
+    python examples/extract_memory.py --input ./notes/ --store ./shards/ --dry-run
+    python examples/extract_memory.py --input ./notes/ --store ./shards/ --regex
+
+Requirements:
+    pip install anthropic   # for LLM-based extraction (default)
+    Set ANTHROPIC_API_KEY in OS keychain or env.
+    Without an API key, --regex fallback runs the bundled
+    regex extractor (noisier, but free and offline).
+
+Cost: ~$0.001-0.003 per markdown file per pass with claude-haiku-4-5
+at default chunk sizes. Two-pass consensus over a memory folder of
+~20 files typically lands under $0.10.
 """
 
-import sys
-import os
-import re
-import json
-import hashlib
-from pathlib import Path
-from datetime import datetime
-from collections import Counter
+from __future__ import annotations
 
-# Add spiritwriter-core to path
-SW_PATH = Path.home() / "Documents" / "GitHub" / "spiritwriter-core"
-if SW_PATH.exists():
-    sys.path.insert(0, str(SW_PATH))
+import argparse
+import hashlib
+import json
+import re
+import sys
+from datetime import datetime
+from pathlib import Path
 
 from spiritwriter.fabric.shard import (
     MemoryShard, ShardAtom, AtomKind, DecayClass,
 )
 from spiritwriter.fabric.store import ShardStore
-from spiritwriter.fabric.extract import extract_atoms, classify_decay
+from spiritwriter.fabric.extract import extract_atoms
+from spiritwriter.secrets import get_api_key
 
-WORKSPACE = Path(__file__).parent.parent
-STORE_PATH = WORKSPACE / "shards"
-MEMORY_DIR = WORKSPACE / "memory"
-MEMORY_MD = WORKSPACE / "MEMORY.md"
 
-# Track what we've already extracted (by file content hash)
-EXTRACTED_LOG = STORE_PATH / ".extracted_files"
-
-# Chunking config
+# === Shingled-extraction config ===
 CHUNK_TARGET_CHARS = 2000   # ~500 tokens per chunk
-CHUNK_OVERLAP_CHARS = 400   # ~100 token overlap (shingle window)
+CHUNK_OVERLAP_CHARS = 400   # the shingle window — atoms at chunk
+                            # boundaries appear in ≥2 chunks
 MAX_TOKENS_PER_CALL = 4000  # LLM max output tokens per chunk
 
+# === LLM config (Anthropic Claude) ===
+DEFAULT_MODEL = "claude-haiku-4-5"
+# Pricing per 1M tokens, claude-haiku-4-5 (override via --model + --price-* if you switch)
+DEFAULT_PRICE_INPUT_PER_1M = 1.0
+DEFAULT_PRICE_OUTPUT_PER_1M = 5.0
+
+
 EXTRACTION_PROMPT = """\
-You are a knowledge extraction system. Given a section of markdown from an AI agent's memory file, extract structured knowledge atoms.
+You are a knowledge extraction system. Given a section of markdown from an agent's memory file, extract structured knowledge atoms.
 
 For each piece of extractable knowledge, output a JSON object with these fields:
 - "text": The original or cleaned-up source text (1-2 sentences max)
 - "kind": One of: "decision", "fact", "convention", "preference", "entity", "context", "instruction"
-- "entity": The subject (e.g., "Aaron", "CSP", "spiritwriter-core", "Lilit"). Use lowercase for generic subjects.
+- "entity": The subject (e.g., a person, project, or system name like "Aaron", "myproject", "api-gateway"). Use lowercase for generic subjects.
 - "key": A short label for what this is about (max 60 chars)
 - "value": The actual information or choice made
 - "decay": One of: "permanent", "stable", "active", "session"
@@ -66,20 +77,23 @@ Guidelines:
 - DECISIONS: Explicit choices with rationale. "We chose X over Y because Z"
 - FACTS: Durable information. Names, versions, URLs, relationships, architecture details.
 - CONVENTIONS: Rules and patterns. "Always do X", "Never do Y"
-- PREFERENCES: Personal preferences. "Aaron prefers X"
+- PREFERENCES: Personal preferences. "The user prefers X"
 - ENTITIES: Key project/person details worth remembering
 - INSTRUCTIONS: How-to knowledge, workflows, commands
 - CONTEXT: Important contextual knowledge that doesn't fit other categories
 
 Skip:
 - Transient debugging notes
-- Routine status updates ("pushed commit X") unless they contain important context
+- Routine status updates ("pushed commit X") unless they carry important context
 - Anything too vague to be useful later
 - Keep it concise — prefer fewer high-quality atoms over many noisy ones
 
 Output ONLY a JSON array of objects. No markdown, no explanation.
 If nothing worth extracting, output: []
 """
+
+
+# ── Helpers ─────────────────────────────────────────────────────────
 
 
 def _sha256_str(text: str) -> str:
@@ -94,10 +108,10 @@ def _tokenize(text: str) -> set[str]:
 
 
 def _atom_signature(atom: ShardAtom) -> str:
-    """Create a normalized signature for consensus matching.
+    """Normalized signature for consensus matching.
 
-    Uses kind + entity + sorted key tokens. This allows matching
-    across passes even when key phrasing varies:
+    kind + entity + sorted key tokens. Matches across passes even when
+    key phrasing varies:
     - "dog name" vs "pet name" won't match (different semantics)
     - "quota status" vs "quota status details" WILL match (shared tokens)
     """
@@ -109,7 +123,7 @@ def _atom_signature(atom: ShardAtom) -> str:
 
 
 def _signatures_match(sig1: str, sig2: str) -> bool:
-    """Fuzzy match two atom signatures using Jaccard similarity on key tokens."""
+    """Fuzzy match two atom signatures via Jaccard similarity on key tokens."""
     parts1 = sig1.split("|", 2)
     parts2 = sig2.split("|", 2)
 
@@ -132,42 +146,42 @@ def _signatures_match(sig1: str, sig2: str) -> bool:
     return jaccard >= 0.4
 
 
-def load_extracted_files() -> dict[str, str]:
-    if EXTRACTED_LOG.exists():
-        return json.loads(EXTRACTED_LOG.read_text())
+def load_extracted_log(path: Path) -> dict[str, str]:
+    """Cache of which files we've already extracted (by content hash)."""
+    if path.exists():
+        return json.loads(path.read_text())
     return {}
 
 
-def save_extracted_files(data: dict[str, str]):
-    EXTRACTED_LOG.write_text(json.dumps(data, indent=2) + "\n")
+def save_extracted_log(path: Path, data: dict[str, str]):
+    path.write_text(json.dumps(data, indent=2) + "\n")
 
 
-def get_memory_files(specific: str | None = None) -> list[Path]:
-    if specific:
-        p = Path(specific)
-        if not p.is_absolute():
-            p = WORKSPACE / p
-        return [p] if p.exists() else []
-    files = []
-    if MEMORY_MD.exists():
-        files.append(MEMORY_MD)
-    if MEMORY_DIR.exists():
-        files.extend(sorted(MEMORY_DIR.glob("*.md")))
-    return files
+def discover_files(input_path: Path) -> list[Path]:
+    """Return markdown files under input_path (or [input_path] if it's a file)."""
+    if input_path.is_file():
+        return [input_path]
+    if input_path.is_dir():
+        return sorted(input_path.glob("**/*.md"))
+    return []
+
+
+# ── Shingled chunking ───────────────────────────────────────────────
 
 
 def chunk_text(text: str, target_chars: int = CHUNK_TARGET_CHARS,
                overlap_chars: int = CHUNK_OVERLAP_CHARS) -> list[str]:
-    """Split text into overlapping chunks, breaking at line boundaries.
+    """Split text into overlapping chunks at line boundaries.
 
-    Never splits mid-line. Overlap ensures atoms at chunk boundaries
-    are seen in at least two chunks (shingle principle).
+    Never splits mid-line. The shingle overlap ensures atoms at chunk
+    boundaries are seen in at least two chunks — the shingled-extraction
+    principle.
     """
     lines = text.splitlines(keepends=True)
     if not lines:
         return []
 
-    chunks = []
+    chunks: list[str] = []
     current_chunk: list[str] = []
     current_len = 0
 
@@ -194,61 +208,82 @@ def chunk_text(text: str, target_chars: int = CHUNK_TARGET_CHARS,
 
         i += 1
 
-    # Don't forget the last chunk
+    # Last chunk (only if it has substantial content beyond the overlap)
     if current_chunk:
         last = "".join(current_chunk)
-        # Only add if it has substantial content beyond what's already in previous chunk
         if not chunks or len(last) > overlap_chars * 1.5:
             chunks.append(last)
 
     return chunks if chunks else [text]
 
 
-def llm_extract_chunk(text: str, filepath: str, chunk_idx: int,
-                      total_chunks: int, pass_num: int) -> tuple[list[ShardAtom], float]:
-    """Extract atoms from a single text chunk via LLM. Returns (atoms, cost)."""
+# ── LLM-backed extraction (Claude) ──────────────────────────────────
+
+
+def _get_anthropic_client():
+    """Returns (client, api_key) or (None, None) if SDK / key missing.
+
+    Uses spiritwriter.secrets.get_api_key() so the OS keychain is
+    consulted first, then env vars.
+    """
     try:
-        from openai import OpenAI
+        import anthropic
     except ImportError:
-        print("    openai package not installed, falling back to regex", file=sys.stderr)
-        return regex_extract_text(text), 0.0
+        print("    anthropic SDK not installed — falling back to regex.",
+              file=sys.stderr)
+        print("    Install with: pip install anthropic", file=sys.stderr)
+        return None, None
 
-    api_key = os.environ.get("OPENAI_API_KEY")
+    api_key = get_api_key("ANTHROPIC_API_KEY")
     if not api_key:
-        print("    OPENAI_API_KEY not set, falling back to regex", file=sys.stderr)
-        return regex_extract_text(text), 0.0
+        print("    ANTHROPIC_API_KEY not set (keychain or env) — "
+              "falling back to regex.", file=sys.stderr)
+        return None, None
 
-    client = OpenAI(api_key=api_key)
+    return anthropic.Anthropic(api_key=api_key), api_key
 
+
+def llm_extract_chunk(
+    client, model: str, text: str, source_ref: str,
+    chunk_idx: int, total_chunks: int, pass_num: int,
+    price_in: float, price_out: float,
+) -> tuple[list[ShardAtom], float]:
+    """Extract atoms from a single chunk via Claude. Returns (atoms, cost_usd)."""
     chunk_label = f"[chunk {chunk_idx + 1}/{total_chunks}, pass {pass_num}]"
 
-    resp = client.chat.completions.create(
-        model="gpt-4.1-mini",
-        messages=[
-            {"role": "system", "content": EXTRACTION_PROMPT},
-            {"role": "user", "content": f"File: {filepath} {chunk_label}\n\n{text}"},
-        ],
-        temperature=0.1,  # Low temp for consistent extraction across passes
+    resp = client.messages.create(
+        model=model,
         max_tokens=MAX_TOKENS_PER_CALL,
+        system=EXTRACTION_PROMPT,
+        messages=[{
+            "role": "user",
+            "content": f"File: {source_ref} {chunk_label}\n\n{text}",
+        }],
+        temperature=0.1,  # low temp for consistent extraction across passes
     )
 
-    raw = resp.choices[0].message.content.strip()
+    # Claude SDK: content is a list of blocks; we want the text from the first text block
+    raw = ""
+    for block in resp.content:
+        if getattr(block, "type", None) == "text":
+            raw = block.text.strip()
+            break
 
-    # Check for truncation (incomplete JSON)
-    if resp.choices[0].finish_reason == "length":
-        print(f"    ⚠ Response truncated {chunk_label} — chunk may be too large", file=sys.stderr)
-        # Try to salvage: find last complete JSON object
+    truncated = (resp.stop_reason == "max_tokens")
+    if truncated:
+        print(f"    ⚠ Response hit max_tokens {chunk_label} — chunk may be too large",
+              file=sys.stderr)
         raw = _salvage_truncated_json(raw)
 
-    # Parse JSON
+    # Strip markdown fencing if Claude added it despite the prompt
     if raw.startswith("```"):
         raw = re.sub(r'^```(?:json)?\n?', '', raw)
         raw = re.sub(r'\n?```$', '', raw)
 
-    cost = 0.0
-    usage = resp.usage
-    if usage:
-        cost = (usage.prompt_tokens * 0.4 + usage.completion_tokens * 1.6) / 1_000_000
+    # Cost (USD)
+    in_tok = resp.usage.input_tokens if resp.usage else 0
+    out_tok = resp.usage.output_tokens if resp.usage else 0
+    cost = (in_tok * price_in + out_tok * price_out) / 1_000_000
 
     try:
         items = json.loads(raw)
@@ -259,34 +294,24 @@ def llm_extract_chunk(text: str, filepath: str, chunk_idx: int,
     if not isinstance(items, list):
         return [], cost
 
-    atoms = _parse_items(items, filepath)
-    return atoms, cost
+    return _parse_items(items, source_ref), cost
 
 
 def _salvage_truncated_json(raw: str) -> str:
-    """Try to recover atoms from truncated JSON array.
-
-    If the response was cut off mid-array, find the last complete
-    object and close the array.
-    """
-    # Find the last complete object (ends with })
+    """If the response was cut mid-array, find the last complete object and close."""
     last_close = raw.rfind("}")
     if last_close == -1:
         return "[]"
-
     truncated = raw[:last_close + 1]
-
-    # Close the array
     if not truncated.rstrip().endswith("]"):
         truncated = truncated.rstrip().rstrip(",") + "\n]"
-
     return truncated
 
 
-def _parse_items(items: list, filepath: str) -> list[ShardAtom]:
-    """Parse LLM JSON output into ShardAtoms."""
+def _parse_items(items: list, source_ref: str) -> list[ShardAtom]:
+    """Convert the LLM's JSON output into ShardAtoms."""
     kind_map = {k.value: k for k in AtomKind}
-    atoms = []
+    atoms: list[ShardAtom] = []
 
     for item in items:
         if not isinstance(item, dict):
@@ -295,30 +320,35 @@ def _parse_items(items: list, filepath: str) -> list[ShardAtom]:
         if confidence < 0.5:
             continue
 
-        kind_str = item.get("kind", "context")
-        kind = kind_map.get(kind_str, AtomKind.CONTEXT)
+        kind = kind_map.get(item.get("kind", "context"), AtomKind.CONTEXT)
         text_val = item.get("text", "").strip()
         if not text_val:
             continue
 
-        atom = ShardAtom(
+        atoms.append(ShardAtom(
             text=text_val,
             kind=kind,
             entity=item.get("entity"),
             key=item.get("key", "")[:60],
             value=item.get("value"),
             confidence=confidence,
-            source_ref=filepath,
-        )
-        atoms.append(atom)
+            source_ref=source_ref,
+        ))
 
     return atoms
 
 
+# ── Regex fallback (offline, no API key needed) ─────────────────────
+
+
 def regex_extract_text(text: str) -> list[ShardAtom]:
-    """Fallback: regex-based extraction (noisy but free)."""
-    atoms = []
-    seen = set()
+    """Regex-based extraction via spiritwriter.fabric.extract.extract_atoms.
+
+    Noisier than LLM extraction but free and offline. Useful for
+    smoke-testing the pipeline without burning API calls.
+    """
+    atoms: list[ShardAtom] = []
+    seen: set[str] = set()
     for line in text.splitlines():
         line = line.strip()
         if not line or line.startswith("#"):
@@ -327,8 +357,7 @@ def regex_extract_text(text: str) -> list[ShardAtom]:
         clean = re.sub(r'`(.+?)`', r'\1', clean)
         clean = re.sub(r'^\s*[-*]\s*', '', clean).strip()
         if 15 <= len(clean) <= 300:
-            extracted = extract_atoms(clean)
-            for atom in extracted:
+            for atom in extract_atoms(clean):
                 h = atom.content_hash
                 if h not in seen:
                     seen.add(h)
@@ -336,20 +365,28 @@ def regex_extract_text(text: str) -> list[ShardAtom]:
     return atoms
 
 
-def extract_file_with_consensus(filepath: Path, rel_path: str,
-                                num_passes: int, use_regex: bool) -> tuple[list[ShardAtom], float]:
-    """Extract atoms from a file using chunked shingle consensus.
+# ── Per-file extraction with consensus ──────────────────────────────
 
-    1. Chunk the file into overlapping windows
-    2. Run extraction on each chunk, N times (passes)
-    3. Atoms appearing in 2+ passes are kept (consensus)
-    4. Single-pass atoms kept only if confidence >= 0.8
 
-    Returns (consensus_atoms, total_cost).
+def extract_file_with_consensus(
+    filepath: Path, source_ref: str, num_passes: int,
+    use_regex: bool, client, model: str,
+    price_in: float, price_out: float,
+) -> tuple[list[ShardAtom], float]:
+    """Extract atoms from a file using shingled extraction + consensus voting.
+
+    1. Chunk the file into overlapping shingle windows
+    2. Run extraction on each chunk, repeated for `num_passes` passes
+    3. Atoms appearing in ≥2 passes are kept (consensus survivors)
+    4. When num_passes == 1, all pass-1 atoms are returned as-is
+       (no consensus to vote on; the per-atom `confidence < 0.5`
+       gate in `_parse_items` is the only filter)
+
+    Returns (consensus_atoms, total_cost_usd).
     """
     content = filepath.read_text()
 
-    if use_regex:
+    if use_regex or client is None:
         return regex_extract_text(content), 0.0
 
     chunks = chunk_text(content)
@@ -362,17 +399,20 @@ def extract_file_with_consensus(filepath: Path, rel_path: str,
     for pass_num in range(1, num_passes + 1):
         pass_atoms: list[ShardAtom] = []
         for chunk_idx, chunk in enumerate(chunks):
-            atoms, cost = llm_extract_chunk(chunk, rel_path, chunk_idx, len(chunks), pass_num)
+            atoms, cost = llm_extract_chunk(
+                client, model, chunk, source_ref,
+                chunk_idx, len(chunks), pass_num,
+                price_in, price_out,
+            )
             pass_atoms.extend(atoms)
             total_cost += cost
         pass_results.append(pass_atoms)
 
-    # Build consensus via fuzzy signature matching
-    # For each atom in pass 1, check if a fuzzy-matching atom exists in other passes
+    # Consensus via fuzzy signature matching
     if num_passes == 1:
         consensus_atoms = pass_results[0]
     else:
-        # Use pass 1 as the anchor, count fuzzy matches across other passes
+        # Use pass 1 as anchor; count fuzzy matches across other passes
         anchor = pass_results[0]
         other_passes = pass_results[1:]
 
@@ -383,10 +423,9 @@ def extract_file_with_consensus(filepath: Path, rel_path: str,
 
             for other_atoms in other_passes:
                 for other_atom in other_atoms:
-                    other_sig = _atom_signature(other_atom)
-                    if _signatures_match(sig, other_sig):
+                    if _signatures_match(sig, _atom_signature(other_atom)):
                         votes += 1
-                        # Upgrade to higher-confidence version if available
+                        # Prefer the higher-confidence version if available
                         if other_atom.confidence > atom.confidence:
                             atom = other_atom
                         break
@@ -394,14 +433,12 @@ def extract_file_with_consensus(filepath: Path, rel_path: str,
             if votes >= 2:
                 consensus_atoms.append(atom)
 
-        # Also check atoms unique to later passes that match each other
-        # (in case pass 1 missed something that passes 2+ both found)
+        # Atoms unique to later passes that match each other (in case
+        # pass 1 missed something later passes both saw)
         if len(other_passes) >= 2:
             for atom in other_passes[0]:
                 sig = _atom_signature(atom)
-                # Already captured?
-                already = any(_signatures_match(sig, _atom_signature(a)) for a in consensus_atoms)
-                if already:
+                if any(_signatures_match(sig, _atom_signature(a)) for a in consensus_atoms):
                     continue
                 for other_atoms in other_passes[1:]:
                     for other_atom in other_atoms:
@@ -410,58 +447,96 @@ def extract_file_with_consensus(filepath: Path, rel_path: str,
                             break
 
     total_candidates = sum(len(p) for p in pass_results)
-    print(f"    consensus: {len(consensus_atoms)} kept from {total_candidates} candidates across {num_passes} passes")
+    print(f"    consensus: {len(consensus_atoms)} kept from {total_candidates} "
+          f"candidates across {num_passes} passes")
 
     return consensus_atoms, total_cost
 
 
+# ── Main ────────────────────────────────────────────────────────────
+
+
 def main():
-    import argparse
-    parser = argparse.ArgumentParser(description="Extract shard atoms from memory files")
-    parser.add_argument("files", nargs="*", help="Specific files to extract from")
-    parser.add_argument("--dry-run", action="store_true", help="Show extractions without storing")
-    parser.add_argument("--force", action="store_true", help="Re-extract already-processed files")
-    parser.add_argument("--regex", action="store_true", help="Use regex fallback instead of LLM")
+    parser = argparse.ArgumentParser(
+        description=(
+            "Extract ShardAtoms from markdown using shingled extraction "
+            "(overlapping windows + multi-pass consensus voting). "
+            "See docs/shingled-extraction.md."
+        ),
+    )
+    parser.add_argument("--input", type=Path, required=True,
+                        help="Markdown file or directory to extract from")
+    parser.add_argument("--store", type=Path, required=True,
+                        help="ShardStore directory where the extracted shard is written")
+    parser.add_argument("--scope", default="memory:extracted",
+                        help="Scope for the extracted shard (default: memory:extracted)")
+    parser.add_argument("--origin", default="example:extract_memory",
+                        help="Origin agent id recorded on the shard "
+                             "(default: example:extract_memory)")
     parser.add_argument("--passes", type=int, default=2,
                         help="Number of consensus passes (default: 2)")
-    parser.add_argument("--scope", default="memory:extracted",
-                        help="Scope for extracted shard (default: memory:extracted)")
+    parser.add_argument("--model", default=DEFAULT_MODEL,
+                        help=f"Claude model id (default: {DEFAULT_MODEL})")
+    parser.add_argument("--price-in", type=float, default=DEFAULT_PRICE_INPUT_PER_1M,
+                        help="USD per 1M input tokens (default: %(default).2f)")
+    parser.add_argument("--price-out", type=float, default=DEFAULT_PRICE_OUTPUT_PER_1M,
+                        help="USD per 1M output tokens (default: %(default).2f)")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="Preview extraction without writing the shard")
+    parser.add_argument("--force", action="store_true",
+                        help="Re-extract files even if their content hash is unchanged")
+    parser.add_argument("--regex", action="store_true",
+                        help="Use regex fallback instead of the LLM (free, offline, noisier)")
     args = parser.parse_args()
 
-    store = ShardStore(STORE_PATH)
-    extracted_files = load_extracted_files()
+    if not args.input.exists():
+        print(f"Input not found: {args.input}", file=sys.stderr)
+        sys.exit(1)
 
-    target_files = (get_memory_files(args.files[0] if args.files else None)
-                    if args.files else get_memory_files())
+    store = ShardStore(args.store)
+    extracted_log_path = args.store / ".extracted_files"
+    extracted_log = load_extracted_log(extracted_log_path)
+
+    target_files = discover_files(args.input)
     if not target_files:
-        print("No memory files found.")
+        print(f"No markdown files found under {args.input}")
         return
+
+    # Set up LLM client once (None if SDK or key missing → regex fallback)
+    client = None
+    if not args.regex:
+        client, _ = _get_anthropic_client()
 
     all_atoms: list[ShardAtom] = []
     file_stats: dict[str, int] = {}
     total_cost = 0.0
 
     for filepath in target_files:
-        rel_path = str(filepath.relative_to(WORKSPACE))
+        # source_ref is the file path relative to the input root when input
+        # is a dir, else just the file name
+        if args.input.is_dir():
+            rel = str(filepath.relative_to(args.input))
+        else:
+            rel = filepath.name
         content = filepath.read_text()
         content_hash = _sha256_str(content)
 
-        if not args.force and extracted_files.get(rel_path) == content_hash:
+        if not args.force and extracted_log.get(rel) == content_hash:
             print(f"  {filepath.name}: unchanged, skipping")
             continue
 
         print(f"  {filepath.name}: extracting...")
 
         atoms, cost = extract_file_with_consensus(
-            filepath, rel_path, args.passes, args.regex
+            filepath, rel, args.passes, args.regex,
+            client, args.model, args.price_in, args.price_out,
         )
         total_cost += cost
         file_stats[filepath.name] = len(atoms)
         all_atoms.extend(atoms)
 
-        # Mark as extracted (even if dry run, track what we've seen)
         if not args.dry_run:
-            extracted_files[rel_path] = content_hash
+            extracted_log[rel] = content_hash
 
     # Global dedup across files
     seen_sigs: set[str] = set()
@@ -474,7 +549,7 @@ def main():
     dupes_removed = len(all_atoms) - len(deduped)
     all_atoms = deduped
 
-    print(f"\n=== Extraction Results ===")
+    print(f"\n=== Extraction results ===")
     print(f"Files processed: {len(file_stats)}")
     print(f"Atoms extracted: {len(all_atoms)} ({dupes_removed} cross-file dupes removed)")
     print(f"Total LLM cost: ${total_cost:.4f}")
@@ -495,33 +570,36 @@ def main():
 
     if not all_atoms:
         print("No new atoms to extract.")
-        save_extracted_files(extracted_files)
+        save_extracted_log(extracted_log_path, extracted_log)
         return
 
     shard = MemoryShard(
         scope=args.scope,
         atoms=all_atoms,
-        origin="lilit:extract_memory",
+        origin=args.origin,
         tags=[f"extracted-{datetime.now().strftime('%Y-%m-%d')}"],
         meta={
             "extracted_at": datetime.now().isoformat(),
-            "method": "regex" if args.regex else "llm",
+            "method": "regex" if (args.regex or client is None) else "llm",
+            "model": args.model if not args.regex and client is not None else None,
             "passes": args.passes,
-            "cost": round(total_cost, 4),
+            "cost_usd": round(total_cost, 4),
+            "input_root": str(args.input),
         },
     )
 
     ref = store.put(shard)
-    shard_id = ref.shard_id
-    store.set_ref("memory-extracted", shard_id)
-    save_extracted_files(extracted_files)
+    store.set_ref("memory-extracted", ref.shard_id)
 
-    print(f"\nStored shard: {shard_id[:16]}...")
-    print(f"  Scope: {args.scope}")
-    print(f"  Atoms: {len(all_atoms)}")
+    save_extracted_log(extracted_log_path, extracted_log)
+
+    print(f"\nStored shard: {ref.shard_id[:16]}...")
+    print(f"  Scope:  {args.scope}")
+    print(f"  Origin: {args.origin}")
+    print(f"  Atoms:  {len(all_atoms)}")
     print(f"  Tokens: ~{shard.token_estimate}")
-    print(f"  Ref: memory-extracted")
-    print(f"  Cost: ${total_cost:.4f}")
+    print(f"  Ref:    memory-extracted")
+    print(f"  Cost:   ${total_cost:.4f}")
 
 
 if __name__ == "__main__":

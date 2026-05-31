@@ -129,7 +129,7 @@ spec = JobSpec(
     constraints={"max_words": 60},
 )
 
-pkg = package_job(store, content_atoms, spec, tracer=emitter)
+pkg = package_job(store, content_atoms, spec, agent_id="orchestrator", tracer=emitter)
 task_text = pkg.spawn_task_text()  # hand this to the sub-agent
 ```
 

@@ -38,7 +38,7 @@ spec = JobSpec(
     constraints={"max_words": "60"},
 )
 
-pkg = package_job(store, content_atoms, spec, tracer=tracer)
+pkg = package_job(store, content_atoms, spec, agent_id="orchestrator", tracer=tracer)
 
 # Spawn the sub-agent with the wrapped task text
 task_text = pkg.spawn_task_text()
@@ -139,7 +139,7 @@ class VideoJobSpec(JobSpec):
         return atoms
 ```
 
-Pass an instance of the subclass anywhere a `JobSpec` is expected — `package_job(store, atoms, VideoJobSpec(prompt=..., output_format="mov"))`. The runner side reads atoms by `key`, so adding new keys is always safe; renaming or removing a key is the breaking change to watch.
+Pass an instance of the subclass anywhere a `JobSpec` is expected — `package_job(store, atoms, VideoJobSpec(prompt=..., output_format="mov"), agent_id="orchestrator")`. The runner side reads atoms by `key`, so adding new keys is always safe; renaming or removing a key is the breaking change to watch.
 
 ## PackagedJob
 

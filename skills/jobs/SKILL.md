@@ -48,7 +48,7 @@ spec = JobSpec(
     constraints={"max_words": "60"},            # optional, becomes constraint.<key> atoms
 )
 
-pkg = package_job(store, content_atoms, spec, tracer=tracer)
+pkg = package_job(store, content_atoms, spec, agent_id="orchestrator", tracer=tracer)
 
 # pkg.entitlement_token  — scoped access
 # pkg.content_shard_id / pkg.task_shard_id  — encrypted shard ids

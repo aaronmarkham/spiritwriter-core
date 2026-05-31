@@ -50,6 +50,13 @@ def sample_spec():
     )
 
 
+@pytest.fixture
+def agent_id():
+    """Test orchestrator identity. Required by package_job() — gets
+    recorded as the shards' origin and the entitlement's granted_by."""
+    return "test-orchestrator"
+
+
 # === Phase 4: Job Packaging ===
 
 class TestJobSpec:
@@ -140,40 +147,41 @@ class TestJobSpec:
 
 
 class TestPackageJob:
-    def test_package_roundtrip(self, tmp_store, sample_atoms, sample_spec):
+    def test_package_roundtrip(self, tmp_store, sample_atoms, sample_spec, agent_id):
         pkg = package_job(
             store=tmp_store,
             content_atoms=sample_atoms,
             job_spec=sample_spec,
+            agent_id=agent_id,
         )
         assert pkg.content_shard_id
         assert pkg.task_shard_id
         assert pkg.entitlement_token is not None
         assert len(pkg.job_key) == 32
 
-    def test_encrypted_shards_stored(self, tmp_store, sample_atoms, sample_spec):
-        pkg = package_job(tmp_store, sample_atoms, sample_spec)
+    def test_encrypted_shards_stored(self, tmp_store, sample_atoms, sample_spec, agent_id):
+        pkg = package_job(tmp_store, sample_atoms, sample_spec, agent_id=agent_id)
         assert tmp_store.has_encrypted(pkg.content_shard_id)
         assert tmp_store.has_encrypted(pkg.task_shard_id)
 
-    def test_entitlement_has_both_keys(self, tmp_store, sample_atoms, sample_spec):
-        pkg = package_job(tmp_store, sample_atoms, sample_spec)
+    def test_entitlement_has_both_keys(self, tmp_store, sample_atoms, sample_spec, agent_id):
+        pkg = package_job(tmp_store, sample_atoms, sample_spec, agent_id=agent_id)
         token = pkg.entitlement_token
         assert pkg.content_shard_id in token.shard_keys
         assert pkg.task_shard_id in token.shard_keys
 
-    def test_entitlement_capabilities(self, tmp_store, sample_atoms, sample_spec):
-        pkg = package_job(tmp_store, sample_atoms, sample_spec)
+    def test_entitlement_capabilities(self, tmp_store, sample_atoms, sample_spec, agent_id):
+        pkg = package_job(tmp_store, sample_atoms, sample_spec, agent_id=agent_id)
         token = pkg.entitlement_token
         assert Capability.SHARD_READ in token.capabilities
         assert Capability.KB_PRODUCE in token.capabilities
 
-    def test_entitlement_budget(self, tmp_store, sample_atoms, sample_spec):
-        pkg = package_job(tmp_store, sample_atoms, sample_spec)
+    def test_entitlement_budget(self, tmp_store, sample_atoms, sample_spec, agent_id):
+        pkg = package_job(tmp_store, sample_atoms, sample_spec, agent_id=agent_id)
         assert pkg.entitlement_token.budget_usd == 15.0
 
-    def test_spawn_task_text(self, tmp_store, sample_atoms, sample_spec):
-        pkg = package_job(tmp_store, sample_atoms, sample_spec)
+    def test_spawn_task_text(self, tmp_store, sample_atoms, sample_spec, agent_id):
+        pkg = package_job(tmp_store, sample_atoms, sample_spec, agent_id=agent_id)
         text = pkg.spawn_task_text()
         assert "<sw-job>" in text
         assert "<entitlement>" in text
@@ -181,9 +189,10 @@ class TestPackageJob:
         assert pkg.task_shard_id in text
         assert "job runner" in text.lower()
 
-    def test_custom_capabilities(self, tmp_store, sample_atoms, sample_spec):
+    def test_custom_capabilities(self, tmp_store, sample_atoms, sample_spec, agent_id):
         pkg = package_job(
             tmp_store, sample_atoms, sample_spec,
+            agent_id=agent_id,
             capabilities=[Capability.SHARD_READ],
             secrets=["LUMA_API_KEY"],
         )
@@ -213,9 +222,9 @@ class TestParseJobBlock:
 
 
 class TestHydrateJob:
-    def test_full_roundtrip(self, tmp_store, sample_atoms, sample_spec):
+    def test_full_roundtrip(self, tmp_store, sample_atoms, sample_spec, agent_id):
         """Package → spawn text → parse → hydrate → get content back."""
-        pkg = package_job(tmp_store, sample_atoms, sample_spec)
+        pkg = package_job(tmp_store, sample_atoms, sample_spec, agent_id=agent_id)
         task_text = pkg.spawn_task_text()
 
         job = hydrate_job(tmp_store, task_text)
@@ -225,22 +234,22 @@ class TestHydrateJob:
         assert len(job.content_shard.atoms) == 3
         assert job.budget_usd == 15.0
 
-    def test_config_extraction(self, tmp_store, sample_atoms, sample_spec):
-        pkg = package_job(tmp_store, sample_atoms, sample_spec)
+    def test_config_extraction(self, tmp_store, sample_atoms, sample_spec, agent_id):
+        pkg = package_job(tmp_store, sample_atoms, sample_spec, agent_id=agent_id)
         job = hydrate_job(tmp_store, pkg.spawn_task_text())
         config = job.config
         assert "production_prompt" in config
         assert "budget_limit" in config
 
-    def test_content_text(self, tmp_store, sample_atoms, sample_spec):
-        pkg = package_job(tmp_store, sample_atoms, sample_spec)
+    def test_content_text(self, tmp_store, sample_atoms, sample_spec, agent_id):
+        pkg = package_job(tmp_store, sample_atoms, sample_spec, agent_id=agent_id)
         job = hydrate_job(tmp_store, pkg.spawn_task_text())
         text = job.content_text
         assert "ingrown" in text.lower() or "salicylic" in text.lower()
 
-    def test_wrong_store_fails(self, tmp_store, sample_atoms, sample_spec):
+    def test_wrong_store_fails(self, tmp_store, sample_atoms, sample_spec, agent_id):
         """Hydrating from a different store should fail."""
-        pkg = package_job(tmp_store, sample_atoms, sample_spec)
+        pkg = package_job(tmp_store, sample_atoms, sample_spec, agent_id=agent_id)
         task_text = pkg.spawn_task_text()
 
         empty_store = ShardStore(tmp_store.root / "empty")
@@ -272,8 +281,8 @@ class TestBudgetTracker:
 
 
 class TestCreateResultShard:
-    def test_basic_result(self, tmp_store, sample_atoms, sample_spec):
-        pkg = package_job(tmp_store, sample_atoms, sample_spec)
+    def test_basic_result(self, tmp_store, sample_atoms, sample_spec, agent_id):
+        pkg = package_job(tmp_store, sample_atoms, sample_spec, agent_id=agent_id)
         job = hydrate_job(tmp_store, pkg.spawn_task_text())
 
         result = create_result_shard(job, {
@@ -422,8 +431,8 @@ class TestTraceIntegration:
         with open(tracer.out_path) as f:
             return [json.loads(line) for line in f]
 
-    def test_package_job_emits_traces(self, tmp_store, sample_atoms, sample_spec, tracer):
-        pkg = package_job(tmp_store, sample_atoms, sample_spec, tracer=tracer)
+    def test_package_job_emits_traces(self, tmp_store, sample_atoms, sample_spec, agent_id, tracer):
+        pkg = package_job(tmp_store, sample_atoms, sample_spec, agent_id=agent_id, tracer=tracer)
         events = self._read_events(tracer)
         types = [e["type"] for e in events]
         assert "entitlement_granted" in types
@@ -434,8 +443,8 @@ class TestTraceIntegration:
         assert grant_evt["budget_usd"] == 15.0
         assert len(grant_evt["shard_ids"]) == 2
 
-    def test_hydrate_job_emits_traces(self, tmp_store, sample_atoms, sample_spec, tracer):
-        pkg = package_job(tmp_store, sample_atoms, sample_spec)
+    def test_hydrate_job_emits_traces(self, tmp_store, sample_atoms, sample_spec, agent_id, tracer):
+        pkg = package_job(tmp_store, sample_atoms, sample_spec, agent_id=agent_id)
         job = hydrate_job(tmp_store, pkg.spawn_task_text(), tracer=tracer)
         events = self._read_events(tracer)
         types = [e["type"] for e in events]
@@ -461,13 +470,13 @@ class TestTraceIntegration:
         assert events[0]["amount"] == 4.32
         assert events[1]["total_spent"] == pytest.approx(4.34)
 
-    def test_full_pipeline_trace_chain(self, tmp_store, sample_atoms, sample_spec, tmp_path):
+    def test_full_pipeline_trace_chain(self, tmp_store, sample_atoms, sample_spec, agent_id, tmp_path):
         """Full pipeline: package → hydrate → spend → complete — all traced in one chain."""
         trace_path = str(tmp_path / "full-trace.jsonl")
-        tracer = TraceEmitter(run_id="full-test", agent_id="lilit", out_path=trace_path)
+        tracer = TraceEmitter(run_id="full-test", agent_id=agent_id, out_path=trace_path)
 
         # Package (main agent)
-        pkg = package_job(tmp_store, sample_atoms, sample_spec, tracer=tracer)
+        pkg = package_job(tmp_store, sample_atoms, sample_spec, agent_id=agent_id, tracer=tracer)
 
         # Hydrate (sub-agent)
         job = hydrate_job(tmp_store, pkg.spawn_task_text(), tracer=tracer)
