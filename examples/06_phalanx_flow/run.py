@@ -37,7 +37,7 @@ import tempfile
 from pathlib import Path
 
 from spiritwriter.fabric.canonicalize import (
-    CanonicalRegistry, CanonicalSchema, ResolutionTier,
+    CanonicalRegistry, CanonicalSchema,
 )
 from spiritwriter.fabric.emitter import TraceEmitter, verify_chain
 from spiritwriter.fabric.jobs import JobSpec, package_job
@@ -255,6 +255,13 @@ def normalize_author(cand: dict) -> dict:
     Here: first_name reduced to its first letter (so 'K.' and
     'Kazuhiko' both become 'K'); last_name uppercased + stripped of
     punctuation.
+
+    After this normalization, the byline ('K. Yamamoto') and
+    affiliation ('Kazuhiko Yamamoto') forms produce identical ESS
+    digests — so the merge happens at T1_EXACT, not via the fuzzy
+    fallback. The schema's fuzzy_fields are configured (to demonstrate
+    how an app would express them) but aren't actually exercised on
+    this corpus.
     """
     first = (cand.get("first_name") or "").strip().lstrip(".").strip()
     first_initial = (first[0].upper() if first else "")

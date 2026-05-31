@@ -505,15 +505,31 @@ class TestDemo06PhalanxFlow:
         )
 
     def test_registry_db_created_and_populated(self):
-        """The authors.db SQLite file should exist and have the 3
-        canonical entities the demo merged into."""
-        import sqlite3
+        """The authors.db file should exist and the registry should
+        report exactly 3 canonical entities (the same merged-author
+        story the trace events tell, but checked via the registry's
+        public stats() API rather than via raw SQL — keeps the test
+        from coupling to internal table names)."""
+        from spiritwriter.fabric.canonicalize import (
+            CanonicalRegistry, CanonicalSchema,
+        )
 
         db_path = self._dir / "authors.db"
         assert db_path.exists(), "authors.db should be created"
-        with sqlite3.connect(db_path) as conn:
-            count = conn.execute("SELECT COUNT(*) FROM entities").fetchone()[0]
-        assert count == 3, f"expected 3 canonical entities in registry, got {count}"
+
+        # Reopen with the same schema the demo used so the registry's
+        # mismatch check passes
+        schema = CanonicalSchema(
+            name="author",
+            ess_fields=["last_name", "first_name"],
+            fuzzy_fields={"last_name": 0.90, "first_name": 0.50},
+            context_fields=["affiliation"],
+        )
+        with CanonicalRegistry(db_path, schema) as registry:
+            stats = registry.stats()
+        assert stats["entities"] == 3, (
+            f"expected 3 canonical entities in registry, got {stats['entities']}"
+        )
 
 
 # ── Flavor doc worked examples ────────────────────────────────────────
