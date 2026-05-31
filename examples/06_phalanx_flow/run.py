@@ -31,13 +31,14 @@ Usage:
 from __future__ import annotations
 
 import json
-import re
 import sys
 import tempfile
 from pathlib import Path
 
 from spiritwriter.fabric.canonicalize import (
     CanonicalRegistry, CanonicalSchema,
+    # Pre-resolution normalization helpers (shipped in 0.8.1).
+    apply_normalizers, first_initial, strip_punctuation, pipeline,
 )
 from spiritwriter.fabric.emitter import TraceEmitter, verify_chain
 from spiritwriter.fabric.jobs import JobSpec, package_job
@@ -243,37 +244,21 @@ def curated_atoms_from_paper() -> list[ShardAtom]:
 # ── Stage 3: Phalanx entity resolution ──────────────────────────────
 
 
-def normalize_author(cand: dict) -> dict:
-    """Pre-normalize candidate fields before resolution.
-
-    This is how a real ingestion pipeline preps records for Phalanx:
-    collapse cosmetic differences (case, periods, full-name vs initial)
-    so the ESS digest is stable across surface forms. The registry
-    does NOT do this automatically — by design, so applications keep
-    control over what counts as 'the same' for their domain.
-
-    Here: first_name reduced to its first letter (so 'K.' and
-    'Kazuhiko' both become 'K'); last_name uppercased + stripped of
-    punctuation.
-
-    After this normalization, the byline ('K. Yamamoto') and
-    affiliation ('Kazuhiko Yamamoto') forms produce identical ESS
-    digests — so the merge happens at T1_EXACT, not via the fuzzy
-    fallback. The schema's fuzzy_fields are configured (to demonstrate
-    how an app would express them) but aren't actually exercised on
-    this corpus.
-    """
-    first = (cand.get("first_name") or "").strip().lstrip(".").strip()
-    first_initial = (first[0].upper() if first else "")
-
-    last = (cand.get("last_name") or "").upper()
-    last = re.sub(r"[^\w\s-]", "", last).strip()
-
-    return {
-        **cand,
-        "first_name": first_initial,
-        "last_name": last,
-    }
+# Per-field normalizers for author records. Declared once, reused for
+# every candidate via apply_normalizers() below. See
+# docs/entity-resolution.md § "Normalize before you resolve" for the
+# why-and-when; the helpers themselves (first_initial,
+# strip_punctuation, pipeline) live in spiritwriter.fabric.canonicalize.
+#
+# After this normalization, the byline ('K. Yamamoto') and affiliation
+# ('Kazuhiko Yamamoto') forms produce identical ESS digests — so the
+# merge happens at T1_EXACT, not via the fuzzy fallback. The schema's
+# fuzzy_fields are configured (to demonstrate how an app would express
+# them) but aren't actually exercised on this corpus.
+AUTHOR_NORMALIZERS = {
+    "first_name": first_initial,                          # 'K.' / 'Kazuhiko' → 'K'
+    "last_name":  pipeline(str.upper, strip_punctuation), # 'O\'Brien' → 'OBRIEN'
+}
 
 
 def author_candidates_from_paper() -> list[dict]:
@@ -318,13 +303,13 @@ def resolve_authors(registry: CanonicalRegistry,
     per resolution. Returns a {canonical_id: [(original_candidate, tier), ...]}
     map showing how many surface forms collapsed into each entity.
 
-    Each candidate is pre-normalized (see normalize_author) before
+    Each candidate is pre-normalized via AUTHOR_NORMALIZERS before
     resolution — that's where 'K. Yamamoto' and 'Kazuhiko Yamamoto'
     become indistinguishable to the ESS digest.
     """
     by_canon: dict[str, list[tuple[dict, str]]] = {}
     for i, cand in enumerate(candidates):
-        normalized = normalize_author(cand)
+        normalized = apply_normalizers(cand, AUTHOR_NORMALIZERS)
         result = registry.resolve(normalized)
         canon = registry.upsert(
             normalized, result,
@@ -398,14 +383,15 @@ def delegate_summarization(store: ShardStore,
         "[paper:fugaku-top500-2022]"
     )
 
+    # Lineage: pin parent_shard_id at the stage-2 plaintext content
+    # shard (not the encrypted job-internal one package_job built).
+    # That's the meaningful predecessor — the atoms the paper was
+    # extracted into. Since 0.8.2, create_result_shard takes
+    # parent_shard_id as a kwarg, so we don't have to mutate-then-re-put.
     result = create_result_shard(job, {
         "budget": {"spent_usd": 0.0, "budget_usd": spec.budget_usd},
         "outputs": [{"type": "summary", "ref": summary_text}],
-    })
-    # Lineage: pin back to the source content shard from stage 2 (not
-    # the encrypted internal one package_job built). That's the
-    # meaningful predecessor — the atoms the paper was extracted into.
-    result.parent_shard_id = source_content_shard_id
+    }, parent_shard_id=source_content_shard_id)
     store.put(result)
 
     tracer.emit("worker_completed",
