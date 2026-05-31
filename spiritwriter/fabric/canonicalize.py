@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 from difflib import SequenceMatcher
 from enum import Enum
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Callable, Iterator
 
 import logging
 
@@ -30,6 +30,16 @@ logger = logging.getLogger(__name__)
 
 
 # ── Normalization utilities ──────────────────────────────────────────
+#
+# Important: the registry does NOT auto-apply any of these to candidate
+# fields beyond the baseline `.strip().lower()` that ESS digest
+# computation does internally. Anything beyond case + whitespace (e.g.
+# punctuation stripping, initial reduction, date format unification)
+# must be done by the caller *before* calling resolve()/upsert(). The
+# helpers below plus `apply_normalizers()` are the recommended way to
+# build that per-domain pre-processing step. See
+# "Normalize before you resolve" in docs/entity-resolution.md.
+
 
 def normalize_name(s: str) -> str:
     """Normalize a name for comparison.
@@ -42,6 +52,90 @@ def normalize_name(s: str) -> str:
     # Collapse whitespace
     s = re.sub(r"\s+", " ", s)
     return s
+
+
+def first_initial(s: str | None) -> str:
+    """Reduce a name to its first letter (uppercased).
+
+    Useful when one source emits initials ("K.") and another emits
+    full names ("Kazuhiko") for the same person — running both through
+    this helper before resolution collapses them to the same ESS digest.
+
+    >>> first_initial("K.")
+    'K'
+    >>> first_initial("Kazuhiko")
+    'K'
+    >>> first_initial("  jane  ")
+    'J'
+    >>> first_initial("")
+    ''
+    >>> first_initial(None)
+    ''
+    """
+    if not s:
+        return ""
+    s = s.strip().lstrip(".").strip()
+    return s[0].upper() if s else ""
+
+
+def strip_punctuation(s: str | None) -> str:
+    """Strip ASCII punctuation except hyphens (which are name-internal).
+
+    >>> strip_punctuation("K.")
+    'K'
+    >>> strip_punctuation("Smith-Jones")
+    'Smith-Jones'
+    >>> strip_punctuation("O'Brien")
+    'OBrien'
+    >>> strip_punctuation(None)
+    ''
+    """
+    if not s:
+        return ""
+    return re.sub(r"[^\w\s-]", "", s)
+
+
+def apply_normalizers(
+    candidate: dict[str, Any],
+    normalizers: dict[str, Callable[[Any], Any]],
+) -> dict[str, Any]:
+    """Return a new candidate with per-field normalizers applied.
+
+    Fields without a normalizer pass through unchanged. None values
+    are passed to the normalizer; how to handle them is the
+    normalizer's choice (the helpers in this module all accept None
+    and return "").
+
+    Does NOT mutate the input. The returned dict is suitable to pass
+    directly to ``CanonicalRegistry.resolve()`` / ``upsert()``.
+
+    >>> apply_normalizers(
+    ...     {"first_name": "K.", "last_name": "Yamamoto", "id": 42},
+    ...     {"first_name": first_initial, "last_name": str.upper},
+    ... )
+    {'first_name': 'K', 'last_name': 'YAMAMOTO', 'id': 42}
+    """
+    return {
+        k: normalizers[k](v) if k in normalizers else v
+        for k, v in candidate.items()
+    }
+
+
+def pipeline(*fns: Callable[[Any], Any]) -> Callable[[Any], Any]:
+    """Compose normalizer functions left-to-right.
+
+    Useful inside ``apply_normalizers()`` when a field needs multiple
+    transformations: ``pipeline(str.strip, str.upper, strip_punctuation)``.
+
+    >>> norm = pipeline(str.strip, str.upper, strip_punctuation)
+    >>> norm("  o'brien.  ")
+    'OBRIEN'
+    """
+    def composed(x: Any) -> Any:
+        for fn in fns:
+            x = fn(x)
+        return x
+    return composed
 
 
 _DATE_FORMATS = [
@@ -194,6 +288,18 @@ class CanonicalSchema:
     """Defines how a domain's entities are resolved.
 
     Applications create one of these to configure the engine.
+
+    **Normalization is the caller's responsibility.** This schema is
+    declarative only — the registry does NOT auto-apply normalizers to
+    the candidate dicts you pass to ``resolve()`` / ``upsert()``. The
+    baseline that ESS computation does internally (``.strip().lower()``)
+    is the floor. Anything beyond case + whitespace — punctuation
+    stripping, name-initial reduction, date format unification — must
+    be done by the caller *before* invoking resolution. See the
+    helpers ``first_initial``, ``strip_punctuation``,
+    ``apply_normalizers``, and ``pipeline`` in this module, and the
+    "Normalize before you resolve" section of
+    ``docs/entity-resolution.md`` for the recommended pattern.
     """
     name: str                                # e.g. "inmate", "memory_entity"
 
@@ -348,6 +454,15 @@ class CanonicalRegistry:
         4. Context field check → T4 or NO_MATCH
 
         Does NOT modify the registry. Call upsert() to persist.
+
+        **`candidate` is NOT auto-normalized.** ESS computation does
+        ``.strip().lower()`` internally — that's the only baked-in
+        transformation. If two sources emit the same person as
+        ``"K. Yamamoto"`` and ``"Kazuhiko Yamamoto"`` and you want them
+        to match, pre-normalize each candidate (e.g. via
+        ``apply_normalizers(cand, {"first_name": first_initial})``)
+        before calling this method. See
+        ``docs/entity-resolution.md`` § "Normalize before you resolve".
         """
         ess = self._compute_ess(candidate)
 

@@ -36,12 +36,65 @@ That pipeline needs embedding infrastructure (vec0), LLM calls in the clustering
 
 The CanonicalRegistry documented below is the runtime half; `extract_memory.py` is the ingestion half. Together: extract atoms from text using overlapping windows, then resolve entities across atoms using ESS + tiered matching.
 
+## Normalize before you resolve
+
+**The registry does not auto-normalize candidate fields beyond the baseline `.strip().lower()` that ESS computation does internally.** Anything more — punctuation stripping, name-initial reduction, date format unification, abbreviation expansion — has to happen *before* you call `resolve()` / `upsert()`. This is by design: applications own what counts as "the same" for their domain. But it's a sharp corner, because the default behavior silently misattributes records when callers don't realize they need to pre-normalize.
+
+The failure mode looks like this:
+
+```python
+# WRONG — no pre-normalization
+short = {"first_name": "K.", "last_name": "Yamamoto"}
+long  = {"first_name": "Kazuhiko", "last_name": "Yamamoto"}
+
+registry.upsert(short, registry.resolve(short), "byline", "0")
+result = registry.resolve(long)
+result.tier   # ResolutionTier.T4_WEAK or NO_MATCH — NOT T1, because
+              # ESS('K.', 'Yamamoto') ≠ ESS('Kazuhiko', 'Yamamoto').
+              # Two canonical entities get created for the same person.
+```
+
+The fix: declare a per-field normalizer map and pipe candidates through `apply_normalizers()` before calling the registry. The helpers ship at the top of `spiritwriter.fabric.canonicalize`:
+
+```python
+from spiritwriter.fabric.canonicalize import (
+    CanonicalRegistry, CanonicalSchema,
+    # Pre-resolution normalization helpers — see "Normalize before you resolve"
+    apply_normalizers, first_initial, strip_punctuation, pipeline,
+)
+
+# Declare once per schema; reuse for every candidate
+NORMALIZERS = {
+    "first_name": first_initial,                           # 'K.' / 'Kazuhiko' → 'K'
+    "last_name":  pipeline(str.upper, strip_punctuation),  # 'O\'Brien' → 'OBRIEN'
+}
+
+def ingest(candidate):
+    cand = apply_normalizers(candidate, NORMALIZERS)
+    result = registry.resolve(cand)
+    return registry.upsert(cand, result, source_name="...", source_id="...",
+                           raw=candidate)  # preserve the original surface form
+```
+
+Helpers shipped with the module:
+
+| Helper | What it does | Use for |
+|---|---|---|
+| `first_initial(s)` | First letter, uppercased | Collapsing `'K.'` / `'Kazuhiko'` / `'K'` to one form |
+| `strip_punctuation(s)` | Strip ASCII punctuation (hyphens preserved) | Names with apostrophes, periods, commas |
+| `normalize_name(s)` | Uppercase + strip + collapse whitespace + strip punctuation | General-purpose name field |
+| `normalize_date(s)` | Parse various date formats → ISO 8601 | DOB / event date fields that arrive in mixed formats |
+| `apply_normalizers(cand, map)` | Apply per-field normalizers; fields without a normalizer pass through | The composer; what you actually call |
+| `pipeline(*fns)` | Compose normalizers left-to-right | When a field needs multiple transformations |
+
+For more, see the demo at [`examples/06_phalanx_flow/`](../examples/06_phalanx_flow/) — `normalize_author()` there is the worked equivalent.
+
 ## Quick Start
 
 ```python
 from spiritwriter.fabric.canonicalize import (
     CanonicalRegistry, CanonicalSchema, ResolutionTier,
-    canonicalize_batch, normalize_name, fuzzy_score,
+    apply_normalizers, first_initial, normalize_name, normalize_date,
 )
 
 schema = CanonicalSchema(
@@ -53,17 +106,26 @@ schema = CanonicalSchema(
     age_bucket_size=2,
 )
 
+# Declare per-field normalizers once; reuse for every candidate.
+NORMALIZERS = {
+    "last_name":  normalize_name,    # uppercase + strip + collapse + strip punct
+    "first_name": first_initial,     # 'Carlos' / 'C.' / 'Carlos A' → 'C'
+    "dob":        normalize_date,    # any common date format → ISO 8601
+}
+
 registry = CanonicalRegistry("/tmp/inmates.db", schema)
 ```
 
 The registry opens a SQLite database in WAL mode. The schema is hashed and stored on first open — reopening with a different schema raises `ValueError`, so you can't accidentally feed records to a registry that disagrees about identity.
 
+The `NORMALIZERS` dict is your contract with the schema. If you change it, you change what "same entity" means — and any registry built against the old normalizers will collide with the new ones. Treat it as part of the schema definition; version it alongside.
+
 ## Resolving Records
 
-`resolve()` is read-only. It returns a `ResolutionResult` you inspect before deciding to persist. `upsert()` writes the resolution to the registry.
+`resolve()` is read-only. It returns a `ResolutionResult` you inspect before deciding to persist. `upsert()` writes the resolution to the registry. Both expect a candidate that's **already been through your normalizers** — see [Normalize before you resolve](#normalize-before-you-resolve) for why.
 
 ```python
-candidate = {
+raw_candidate = {
     "last_name": "Martinez",
     "first_name": "Carlos",
     "dob": "1990-05-12",
@@ -71,20 +133,26 @@ candidate = {
     "gender": "M",
 }
 
+candidate = apply_normalizers(raw_candidate, NORMALIZERS)
+
 result = registry.resolve(candidate)
 result.tier            # ResolutionTier.NO_MATCH (first time)
 result.confidence      # 0.0
 result.canonical_id    # None
 result.field_matches   # {}
 
-# Persist as a new entity
+# Persist as a new entity. Pass the *original* raw record as `raw=`
+# so the surface form survives for audit even though we resolved on
+# the normalized version.
 cid = registry.upsert(
     candidate, result,
     source_name="lyon_county_jail",
     source_id="booking-2024-1234",
-    raw={"original_html": "..."},   # optional raw source for audit
+    raw=raw_candidate,
 )
 ```
+
+> **Note on the tier examples below.** They use raw candidate dicts to illustrate how the registry behaves *internally* — what `.strip().lower()` collapses, where the fuzzy fallback kicks in, when T3 fires instead of T2. Production callers should pre-normalize via `apply_normalizers()` first (see [Normalize before you resolve](#normalize-before-you-resolve)). With first-initial normalization in place, the "middle initial" case below becomes T1, not T3 — but you only get that collapsing by declaring the normalizer.
 
 ### T1: Same Person, Different Source
 

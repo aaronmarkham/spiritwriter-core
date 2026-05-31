@@ -15,6 +15,11 @@ from spiritwriter.fabric.canonicalize import (
     normalize_date,
     age_to_bucket,
     fuzzy_score,
+    # Pre-resolution normalization helpers
+    first_initial,
+    strip_punctuation,
+    apply_normalizers,
+    pipeline,
 )
 
 
@@ -607,3 +612,159 @@ class TestBearProblem:
         # Different entities
         assert cid1 != cid2
         assert registry.stats()["entities"] == 2
+
+
+# ── Pre-resolution normalization helpers ─────────────────────────────
+
+
+class TestFirstInitial:
+    def test_period_form(self):
+        assert first_initial("K.") == "K"
+
+    def test_full_form(self):
+        assert first_initial("Kazuhiko") == "K"
+
+    def test_lowercase_with_padding(self):
+        assert first_initial("  jane  ") == "J"
+
+    def test_empty(self):
+        assert first_initial("") == ""
+
+    def test_none(self):
+        assert first_initial(None) == ""
+
+    def test_just_a_period(self):
+        # Edge: "." after strip should yield empty, not crash
+        assert first_initial(".") == ""
+
+    def test_unicode(self):
+        # Non-ASCII first letter is preserved and uppercased
+        assert first_initial("ñorberto") == "Ñ"
+
+
+class TestStripPunctuation:
+    def test_trailing_period(self):
+        assert strip_punctuation("K.") == "K"
+
+    def test_apostrophe(self):
+        assert strip_punctuation("O'Brien") == "OBrien"
+
+    def test_hyphen_preserved(self):
+        # Hyphens are name-internal; do NOT strip
+        assert strip_punctuation("Smith-Jones") == "Smith-Jones"
+
+    def test_whitespace_preserved(self):
+        # strip_punctuation only touches punctuation; whitespace stays
+        assert strip_punctuation("  foo  ") == "  foo  "
+
+    def test_none(self):
+        assert strip_punctuation(None) == ""
+
+    def test_empty(self):
+        assert strip_punctuation("") == ""
+
+
+class TestApplyNormalizers:
+    def test_per_field_normalizer(self):
+        cand = {"first_name": "K.", "last_name": "Yamamoto", "id": 42}
+        result = apply_normalizers(cand, {
+            "first_name": first_initial,
+            "last_name": str.upper,
+        })
+        assert result == {"first_name": "K", "last_name": "YAMAMOTO", "id": 42}
+
+    def test_does_not_mutate_input(self):
+        cand = {"first_name": "K."}
+        _ = apply_normalizers(cand, {"first_name": first_initial})
+        assert cand == {"first_name": "K."}  # untouched
+
+    def test_unnormalized_fields_pass_through(self):
+        cand = {"a": "X", "b": "Y", "c": "Z"}
+        result = apply_normalizers(cand, {"a": str.lower})
+        assert result == {"a": "x", "b": "Y", "c": "Z"}
+
+    def test_empty_normalizers(self):
+        cand = {"x": 1, "y": 2}
+        assert apply_normalizers(cand, {}) == cand
+
+    def test_normalizer_receives_none(self):
+        # Normalizer is responsible for handling None; our helpers do.
+        cand = {"first_name": None, "last_name": "Smith"}
+        result = apply_normalizers(cand, {"first_name": first_initial})
+        assert result == {"first_name": "", "last_name": "Smith"}
+
+
+class TestPipeline:
+    def test_left_to_right_composition(self):
+        norm = pipeline(str.strip, str.upper, strip_punctuation)
+        assert norm("  o'brien.  ") == "OBRIEN"
+
+    def test_single_fn(self):
+        norm = pipeline(str.upper)
+        assert norm("foo") == "FOO"
+
+    def test_empty_pipeline(self):
+        # No functions = identity
+        norm = pipeline()
+        assert norm("xyz") == "xyz"
+
+
+class TestNormalizationIntegration:
+    """End-to-end: with normalization, the same person under different
+    surface forms collapses to a single canonical entity. Without it,
+    they sprawl. This is the bug the helpers + docs aim to prevent."""
+
+    SCHEMA = CanonicalSchema(
+        name="author",
+        ess_fields=["last_name", "first_name"],
+        fuzzy_fields={"last_name": 0.90, "first_name": 0.50},
+    )
+
+    def test_without_normalization_creates_two_entities(self, tmp_path):
+        """Document the failure mode the helpers exist to fix.
+
+        K. Yamamoto and Kazuhiko Yamamoto resolve as DIFFERENT entities
+        when fed raw — ESS's built-in .strip().lower() can't collapse
+        K vs Kazuhiko."""
+        with CanonicalRegistry(tmp_path / "raw.db", self.SCHEMA) as registry:
+            short = {"first_name": "K.", "last_name": "Yamamoto"}
+            long = {"first_name": "Kazuhiko", "last_name": "Yamamoto"}
+
+            r1 = registry.resolve(short)
+            cid1 = registry.upsert(short, r1, "byline", "0")
+
+            r2 = registry.resolve(long)
+            # Without normalization, this is NOT T1_EXACT — bug condition
+            assert r2.tier != ResolutionTier.T1_EXACT
+            cid2 = registry.upsert(long, r2, "affiliation", "0")
+
+            # Two canonical entities for the same person → misattribution
+            assert cid1 != cid2
+            assert registry.stats()["entities"] == 2
+
+    def test_with_normalization_collapses_to_one(self, tmp_path):
+        """The fix: apply_normalizers + first_initial before resolve.
+
+        Both K. Yamamoto and Kazuhiko Yamamoto reduce to ('K',
+        'YAMAMOTO'); ESS digest is identical; T1_EXACT match; one
+        canonical entity. This is what the docstring callouts + new
+        entity-resolution.md section steer callers toward."""
+        normalizers = {
+            "first_name": first_initial,
+            "last_name": pipeline(str.upper, strip_punctuation),
+        }
+        with CanonicalRegistry(tmp_path / "normalized.db", self.SCHEMA) as registry:
+            short = apply_normalizers(
+                {"first_name": "K.", "last_name": "Yamamoto"}, normalizers)
+            long = apply_normalizers(
+                {"first_name": "Kazuhiko", "last_name": "Yamamoto"}, normalizers)
+
+            r1 = registry.resolve(short)
+            cid1 = registry.upsert(short, r1, "byline", "0")
+
+            r2 = registry.resolve(long)
+            assert r2.tier == ResolutionTier.T1_EXACT  # collapsed
+            cid2 = registry.upsert(long, r2, "affiliation", "0")
+
+            assert cid1 == cid2
+            assert registry.stats()["entities"] == 1
