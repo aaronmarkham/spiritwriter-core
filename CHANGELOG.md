@@ -4,6 +4,16 @@ All notable changes to `spiritwriter-core` are documented here. The format follo
 
 Entries before 0.8.0 are not backfilled; consult `git log` for earlier history.
 
+## [0.8.3] — 2026-05-31
+
+### Fixed
+- `spiritwriter.fabric.entitlement.is_expired()` no longer crashes on the canonical `Z`-suffixed UTC timestamps that `_now_iso()` actually produces. `datetime.fromisoformat()` rejects the `Z` suffix on Python 3.9/3.10 (`ValueError`), and a naive timestamp raised `TypeError` against an aware `now()` — either crash, if swallowed upstream, silently disabled expiry enforcement (an access-control bypass). Now normalizes the `Z` suffix and coerces naive timestamps to UTC. Regression tests added for both cases (the prior tests used `isoformat()`'s `+00:00` form and never exercised the real token format). ([PR #70](https://github.com/aaronmarkham/spiritwriter-core/pull/70))
+- `spiritwriter.fabric.backends.ipfs.publish_public()` now enforces the encrypted/sealed precondition its docstring documented (raises `ValueError`) instead of only logging a warning, preventing accidental plaintext publication to public IPFS. ([PR #70](https://github.com/aaronmarkham/spiritwriter-core/pull/70))
+
+### Changed
+- `click` and `rich` promoted from the `[cli]` optional extra into core `dependencies`. The `spiritwriter` console script imports `click` at module top, so a bare `pip install spiritwriter-core` followed by `spiritwriter ...` previously failed with `ModuleNotFoundError`. ([PR #70](https://github.com/aaronmarkham/spiritwriter-core/pull/70))
+- `LICENSE` replaced the short notice with the full Apache-2.0 text so GitHub detects the license and the grant is complete. Personal absolute paths / machine context scrubbed from `examples/` demo shard data ahead of the public release. ([PR #70](https://github.com/aaronmarkham/spiritwriter-core/pull/70))
+
 ## [0.8.2] — 2026-05-30
 
 ### Added
