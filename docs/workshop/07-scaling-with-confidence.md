@@ -30,6 +30,8 @@ At fleet scale — hundreds of runs a day, unattended — those signals don't su
 
 Scaling shifts the unit of attention from the run to the **fleet**. The patterns below are about preserving the trust signals — not abandoning per-run rigor, but augmenting it with fleet-level instrumentation so trust survives the volume.
 
+> **Note on event names.** The trace event names called out in the patterns below (`rollout_stage_started`, `ensemble_member`, `review_decision`, etc.) are **application-defined**, not primitives in `spiritwriter.fabric.emitter` — `TraceEmitter.emit()` accepts any string as the event type. The lesson uses concrete names so the patterns are copy-pasteable; grep your own codebase for the names *you* choose.
+
 ## Pattern 1: Representative-sample pilots, not convenient ones
 
 **Scenario.** Your pilot ran 10 inputs through the pipeline. Eight passed clean, two flagged for review — about what you'd expect. You scale to 1000. Now 600 flag for review. The pilot didn't predict production because the 10 pilot inputs were the ones you happened to have on disk — the easy ones.
@@ -52,13 +54,15 @@ Scaling shifts the unit of attention from the run to the **fleet**. The patterns
 
 **Pattern.**
 
-1. **Stages of 10% → 50% → 100%** (or 1 region → 3 regions → all). Hold at each stage long enough to see at least one batch run complete and one human review cycle. "Hold" means new runs go to the new methodology, while older runs continue on the previous one — so divergence is observable.
+1. **Stages of 10% → 50% → 100%** (or 1 region → 3 regions → all). The percentages are the easy part; what makes the rollout meaningful is what you do *at* each stage — see step 2.
 
-2. **Define abort criteria before the stage starts.** Concretely: "abort the 50% stage if false-positive rate exceeds 2× the pilot rate, OR per-run cost exceeds 1.5× pilot, OR any single run hits the budget cap." Pre-committed thresholds beat in-flight judgment calls every time — the latter drift toward whatever decision feels least disruptive in the moment.
+2. **Hold at each stage long enough to learn something.** "Long enough" has a concrete definition: at least one full batch run completes under the new methodology AND at least one human review cycle has looked at the output. Without both, you haven't actually tested the stage — you've just turned a dial. "Hold" means new runs go to the new methodology while older runs continue on the previous one, so divergence between them is observable.
 
-3. **Emit a `rollout_stage_started` trace event** at each transition with the stage's percentage, the abort thresholds, and the prior-stage measured baseline. When the post-mortem asks "what did we think we were testing?" the event answers.
+3. **Define abort criteria before the stage starts.** Concretely: "abort the 50% stage if false-positive rate exceeds 2× the pilot rate, OR per-run cost exceeds 1.5× pilot, OR any single run hits the budget cap." Pre-committed thresholds beat in-flight judgment calls every time — the latter drift toward whatever decision feels least disruptive in the moment.
 
-4. **Plan the abort.** "We stopped the rollout" only matters if there's a defined backstop — restore the previous methodology version, mark already-emitted reports under the new methodology as `superseded_by` (lesson 6) the re-run under the previous one, communicate to downstream consumers. If you can't list the backstop in advance, you don't actually have an abort.
+4. **Emit a `rollout_stage_started` trace event** at each transition with the stage's percentage, the abort thresholds, and the prior-stage measured baseline. When the post-mortem asks "what did we think we were testing?" the event answers.
+
+5. **Plan the abort.** "We stopped the rollout" only matters if there's a defined backstop — restore the previous methodology version, mark already-emitted reports under the new methodology as `superseded_by` (lesson 6) the re-run under the previous one, communicate to downstream consumers. If you can't list the backstop in advance, you don't actually have an abort.
 
 ## Pattern 3: Ensemble verification — disagreement as a signal
 
@@ -96,6 +100,8 @@ Scaling shifts the unit of attention from the run to the **fleet**. The patterns
 
 These five live in the dashboard layer, not the spiritwriter primitive layer — but they're computed from the trace JSONL the runs produce. The primitives feed the dashboard; the dashboard is where the fleet-health story is told.
 
+**Concretely, how to compute them.** The traces are line-delimited JSON, one event per line, with a known set of event-type strings. The lightest-weight option is `DuckDB` reading the JSONL files directly (`SELECT date_trunc('day', timestamp), count(*) FROM read_json_auto('traces/*.jsonl') WHERE type = 'finding_emitted' GROUP BY 1`). A more durable option is a daily cron job that aggregates each batch's JSONL into a small SQLite/Postgres table — `(batch_date, source, finding_count, mean_tier, cost_per_input)` — then a Grafana/Metabase dashboard on top. Either way, the pipeline is `JSONL → group-by-batch → chart`, and the slope changes are what you alert on.
+
 ## Pattern 5: Triage sampling for human review
 
 **Scenario.** You can't read 1000 traces a day. You also can't trust the fleet without *anyone* reading them. So you sample — but if the sampling is uniformly random, you mostly read boring runs and miss the interesting ones.
@@ -108,7 +114,7 @@ These five live in the dashboard layer, not the spiritwriter primitive layer —
 
 2. **Surface the triage reason on the review surface.** "Sampled because: ensemble disagreement (member 1 found 3, member 2 found 5)" tells the reviewer where to look. Without the reason, the reviewer reads the report cold and the triage signal's information is wasted.
 
-3. **Close the loop.** Every reviewed run produces a `meta_audit_decision` trace event (lesson 6 pattern 5). Aggregate those decisions to compute precision per triage signal — "the 'ensemble disagreement' triage caught a real issue 40% of the time; 'high cost' caught one 12% of the time." Re-tune the sampling weights to favor signals with better hit rates.
+3. **Close the loop.** Every reviewed run produces a `review_decision` trace event (see [Lesson 6 failure mode 5](06-audit-failure-modes.md#failure-mode-5-audit-of-audit-gaps)). Aggregate those decisions to compute precision per triage signal — "the 'ensemble disagreement' triage caught a real issue 40% of the time; 'high cost' caught one 12% of the time." Re-tune the sampling weights to favor signals with better hit rates.
 
 4. **Keep the random slice.** It's small (5–10% of the sample) but load-bearing. Without it your review pipeline only sees what your triage signals think is interesting — and you can't detect when the triage signals themselves go wrong.
 
@@ -138,11 +144,11 @@ Trace events feed all five. The primitives from lessons 1–5 don't change at sc
 - [ ] Compute and chart fleet-health aggregates per batch: findings-per-input rate, tier distribution, cost per input, per-source faceting, trace events per finding
 - [ ] Sample for human review by triage signal (high cost, low confidence, ensemble disagreement, new source) plus a small random slice
 - [ ] Surface the triage reason on the review surface
-- [ ] Emit `meta_audit_decision` events from reviews; re-tune sampling weights from precision-per-triage-signal
+- [ ] Emit `review_decision` events from reviews; re-tune sampling weights from precision-per-triage-signal
 
 ## Where this leaves you
 
-You started this workshop with "run agent and hope" and got to "audit a few inputs and trust the report" by Lesson 5. Lesson 6 added the patterns to detect when the audit is wrong even when the pipeline ran clean. Lesson 7 turned the trust signals into ones that survive volume.
+You started this workshop with "run agent and hope" and got to "audit a few inputs and trust the report" by the end of the first five lessons. Lesson 6 added the patterns to detect when the audit is wrong even when the pipeline ran clean. Lesson 7 turned the trust signals into ones that survive volume.
 
 The pieces that hold the whole thing together haven't changed: hash-chained trace events, structured findings, content-addressed inputs, pinned methodology. The discipline is the same; the surfaces you watch grow with the work.
 
