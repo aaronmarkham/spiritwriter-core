@@ -627,14 +627,14 @@
     "source_file": "2026-02-09.md"
   },
   {
-    "text": "The GitHub repository aaronmarkham/claude-studio-producer is located at /Users/aaron/Documents/GitHub/claude-studio-producer.",
+    "text": "The GitHub repository aaronmarkham/claude-studio-producer is located at ~/projects/claude-studio-producer.",
     "kind": "fact",
     "confidence": 1.0,
     "slots": [
       {
         "key": "local_repo_path",
         "key_definition": "Path to local clone of repository",
-        "value": "/Users/aaron/Documents/GitHub/claude-studio-producer",
+        "value": "~/projects/claude-studio-producer",
         "slot_type": "attribute",
         "sense_type": "place",
         "scoped_to": "claude-studio-producer",
@@ -705,14 +705,14 @@
     "source_file": "2026-02-09.md"
   },
   {
-    "text": "The paper 'Hallucination Stations: On Some Basic Limitations of Transformer-Based Language Models', authored by Varin Sikka and Vishal Sikka, analyzes the computational limitations of LLMs and is stored as /Users/aaron/Documents/papers/2507.07505v3.pdf.",
+    "text": "The paper 'Hallucination Stations: On Some Basic Limitations of Transformer-Based Language Models', authored by Varin Sikka and Vishal Sikka, analyzes the computational limitations of LLMs and is stored as ~/papers/2507.07505v3.pdf.",
     "kind": "fact",
     "confidence": 1.0,
     "slots": [
       {
         "key": "paper_file_path",
         "key_definition": "Filesystem location of the paper PDF",
-        "value": "/Users/aaron/Documents/papers/2507.07505v3.pdf",
+        "value": "~/papers/2507.07505v3.pdf",
         "slot_type": "attribute",
         "sense_type": "place",
         "scoped_to": "Hallucination Stations Paper",
@@ -1645,7 +1645,7 @@
     "source_file": "2026-02-14-b.md"
   },
   {
-    "text": "The claude-studio-producer repository located at /Users/aaron/Documents/GitHub/claude-studio-producer has had two features committed and pushed to main: a TTS provider fallback (ElevenLabs to OpenAI TTS, selectable by TTS_PROVIDER environment variable) and a youtube-update command for post-upload metadata edits.",
+    "text": "The claude-studio-producer repository located at ~/projects/claude-studio-producer has had two features committed and pushed to main: a TTS provider fallback (ElevenLabs to OpenAI TTS, selectable by TTS_PROVIDER environment variable) and a youtube-update command for post-upload metadata edits.",
     "kind": "fact",
     "confidence": 1.0,
     "slots": [
@@ -1974,7 +1974,7 @@
     "source_file": "2026-02-16.md"
   },
   {
-    "text": "The Spiritwriter Core project is scaffolded at /Users/aaron/Documents/GitHub/spiritwriter-core/ with an initial commit by Lilit (commit d06bb4b) and is currently local only.",
+    "text": "The Spiritwriter Core project is scaffolded at ~/projects/spiritwriter-core/ with an initial commit by Lilit (commit d06bb4b) and is currently local only.",
     "kind": "entity",
     "confidence": 1.0,
     "slots": [
@@ -1990,7 +1990,7 @@
       {
         "key": "filesystem_path",
         "key_definition": "Local path to the project folder",
-        "value": "/Users/aaron/Documents/GitHub/spiritwriter-core/",
+        "value": "~/projects/spiritwriter-core/",
         "slot_type": "attribute",
         "sense_type": "common_noun",
         "scoped_to": "Spiritwriter Core",

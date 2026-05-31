@@ -87,8 +87,9 @@ loc = backend.publish_encrypted(encrypted_shard)
 # Publish sealed (NaCl sealed box)
 loc = backend.publish_sealed(sealed_shard)
 
-# Explicit public publish (bypasses private swarm, logs warning)
-loc = backend.publish_public(shard)
+# Explicit public publish of PLAINTEXT (bypasses private swarm).
+# Requires confirm_public=True — the content is permanently world-readable.
+loc = backend.publish_public(shard, confirm_public=True)
 ```
 
 ### Resolve a shard

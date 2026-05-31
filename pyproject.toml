@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "spiritwriter-core"
-version = "0.8.2"
+version = "0.8.3"
 description = "Shared foundation for AI content pipelines — knowledge base, document ingestion, secrets, LLM abstraction"
 readme = "README.md"
 license = {text = "Apache-2.0"}
@@ -18,18 +18,19 @@ dependencies = [
     "cryptography>=41.0.0",
     "keyring>=25.0.0",
     "pymupdf>=1.24.0",
+    "click>=8.1.0",
+    "rich>=13.0.0",
 ]
 
 [project.scripts]
 spiritwriter = "spiritwriter.secrets.cli:main"
 
 [project.optional-dependencies]
-cli = ["click>=8.1.0", "rich>=13.0.0"]
 sealed = ["PyNaCl>=1.5.0"]
 network = ["requests>=2.28"]
 strands = ["strands-agents>=0.1.0"]
 mempalace = ["mempalace>=3.0.0"]
-dev = ["pytest>=8.0", "pytest-asyncio>=0.23", "click>=8.1.0", "rich>=13.0.0"]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.23"]
 
 [tool.setuptools.packages.find]
 include = ["spiritwriter*"]

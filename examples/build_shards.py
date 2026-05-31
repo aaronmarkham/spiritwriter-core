@@ -29,11 +29,11 @@ def build_csp_shard() -> MemoryShard:
         atoms=[
             # Facts
             ShardAtom(
-                text="CSP repo at /Users/aaron/Documents/GitHub/claude-studio-producer",
+                text="CSP repo at ~/projects/claude-studio-producer",
                 kind=AtomKind.FACT,
                 entity="csp",
                 key="repo_path",
-                value="/Users/aaron/Documents/GitHub/claude-studio-producer",
+                value="~/projects/claude-studio-producer",
             ),
             ShardAtom(
                 text="CSP entry point: cs or claude-studio (not csp)",
@@ -147,11 +147,11 @@ def build_spiritwriter_shard() -> MemoryShard:
     return MemoryShard(
         atoms=[
             ShardAtom(
-                text="spiritwriter-core repo at /Users/aaron/Documents/GitHub/spiritwriter-core",
+                text="spiritwriter-core repo at ~/projects/spiritwriter-core",
                 kind=AtomKind.FACT,
                 entity="spiritwriter",
                 key="repo_path",
-                value="/Users/aaron/Documents/GitHub/spiritwriter-core",
+                value="~/projects/spiritwriter-core",
             ),
             ShardAtom(
                 text="spiritwriter-core is private, Apache 2.0, GitHub: aaronmarkham/spiritwriter-core",

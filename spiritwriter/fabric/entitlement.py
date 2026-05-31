@@ -345,7 +345,13 @@ def validate_budget(token: EntitlementToken, spent: float) -> bool:
 def is_expired(token: EntitlementToken) -> bool:
     if token.expires_at is None:
         return False
-    expires = datetime.fromisoformat(token.expires_at)
+    # Tokens are stamped in canonical Z-suffixed UTC (see _now_iso). Python
+    # 3.9/3.10's fromisoformat() rejects the 'Z' suffix, so normalize it first.
+    expires = datetime.fromisoformat(token.expires_at.replace("Z", "+00:00"))
+    # A naive timestamp (no tz) can't be compared to an aware now() — treat
+    # naive values as UTC so expiry always evaluates rather than raising.
+    if expires.tzinfo is None:
+        expires = expires.replace(tzinfo=timezone.utc)
     return datetime.now(timezone.utc) >= expires
 
 
