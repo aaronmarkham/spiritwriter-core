@@ -1,7 +1,7 @@
 # Network Resolver Spec — IPFS-Backed Shard Distribution
 
 **Status**: Draft
-**Scope**: spiritwriter-core (generic, not Frio-specific)
+**Scope**: spiritwriter (generic, not Frio-specific)
 **Depends on**: `spiritwriter.fabric.store.ShardStore`, `spiritwriter.fabric.shard.MemoryShard`
 
 ## Problem
@@ -137,13 +137,13 @@ First (and for now, only) implementation of `NetworkResolver`.
 
 ### Dependencies
 
-- `requests` (already a spiritwriter-core dependency via Frio, but should be optional)
+- `requests` (already a spiritwriter dependency via Frio, but should be optional)
 - No IPFS-specific libraries — just HTTP calls to Kubo's REST API
 
 ### Installation
 
 ```
-pip install 'spiritwriter-core[network]'
+pip install 'spiritwriter[network]'
 ```
 
 Optional extra in `pyproject.toml`:
@@ -304,7 +304,7 @@ Mark integration tests with `@pytest.mark.ipfs` so they can be skipped in CI wit
 
 - **IPNS**: Mutable names for manifest CIDs. Useful but adds complexity. Can be a follow-up.
 - **Peer discovery / DHT bootstrapping**: Handled by Kubo itself when nodes are configured with bootstrap peers.
-- **Replication policies**: Which shards to replicate where. Project-specific logic (Frio decides, not spiritwriter-core).
+- **Replication policies**: Which shards to replicate where. Project-specific logic (Frio decides, not spiritwriter).
 - **Pubsub**: Real-time shard update notifications. Future feature.
 - **Non-IPFS backends**: The Protocol allows them but we only build IPFSBackend now.
 

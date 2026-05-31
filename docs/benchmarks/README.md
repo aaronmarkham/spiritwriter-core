@@ -4,7 +4,7 @@ What lives here, and what lives next to the code.
 
 ## Two kinds of measurement, two homes
 
-spiritwriter-core measures itself in two distinct ways. Both live under
+spiritwriter measures itself in two distinct ways. Both live under
 the project's `benchmarks/` tree, but the docs split them by audience:
 
 | Question you're asking | Where to look |
@@ -55,7 +55,7 @@ here (spec + runs-log) cover *why the harness exists*, *what claims it
 defends*, and *what we actually measured*. Code-adjacent docs tell you
 *what to type*; these tell you *what to cite*.
 
-## Related docs in spiritwriter-core
+## Related docs in spiritwriter
 
 - [`docs/entity-resolution.md`](../entity-resolution.md) — the deep-dive
   for Phalanx (the entity-resolution system the ESS-accuracy harness

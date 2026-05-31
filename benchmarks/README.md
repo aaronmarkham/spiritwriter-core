@@ -1,4 +1,4 @@
-# spiritwriter-core Benchmarks
+# spiritwriter Benchmarks
 
 This directory has **two kinds of benchmarks**:
 

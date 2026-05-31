@@ -629,11 +629,11 @@ These were initially open questions. Resolved 2026-03-21 during spec review.
 
 ### 10.1 Graph Storage: Local JSON-LD Atoms (RESOLVED)
 
-**Decision:** Stay with local JSON-LD storage, consistent with CSP's KB tooling and spiritwriter-core/CMC-Lite. No graph database.
+**Decision:** Stay with local JSON-LD storage, consistent with CSP's KB tooling and spiritwriter/CMC-Lite. No graph database.
 
-**Rationale:** CSP and spiritwriter-core have converged on the same pattern — JSON-LD atoms stored locally as content-addressed shards. GraphDB was deliberately avoided because the target KBs (scientific papers, FSM chapters, forum threads) are small enough that graph queries resolve in-memory. A 482-page FSM is larger than a typical 30-page paper, but not by enough to justify a new storage layer. The KB Expert is a **surface**, not a new system — it consumes the same atoms through the same shard protocol.
+**Rationale:** CSP and spiritwriter have converged on the same pattern — JSON-LD atoms stored locally as content-addressed shards. GraphDB was deliberately avoided because the target KBs (scientific papers, FSM chapters, forum threads) are small enough that graph queries resolve in-memory. A 482-page FSM is larger than a typical 30-page paper, but not by enough to justify a new storage layer. The KB Expert is a **surface**, not a new system — it consumes the same atoms through the same shard protocol.
 
-**Action:** Verify CSP's current KB atom schema and confirm compatibility with spiritwriter-core's shard addressing. If they've drifted, reconcile before building the ingest pipeline. The FSM ingestor should produce atoms in the existing format, not a new one.
+**Action:** Verify CSP's current KB atom schema and confirm compatibility with spiritwriter's shard addressing. If they've drifted, reconcile before building the ingest pipeline. The FSM ingestor should produce atoms in the existing format, not a new one.
 
 ### 10.2 KB Chunking: Chapter-First, Then Cross-Chapter Use-Case Shards (RESOLVED)
 
@@ -727,7 +727,7 @@ The most important outcome of this spec review is recognizing that the KB Expert
 
 | KB Expert Component | Already Exists In |
 |--------------------|--------------------|
-| Graph storage | spiritwriter-core JSON-LD atoms |
+| Graph storage | spiritwriter JSON-LD atoms |
 | Shard lifecycle | Spiritwriter decay classes (CHECKPOINT/ACTIVE/STABLE/PERMANENT) |
 | KB ingest | CSP's KB tooling (paper → atoms) |
 | Video alignment | CSP's manifest + EDL pipeline |

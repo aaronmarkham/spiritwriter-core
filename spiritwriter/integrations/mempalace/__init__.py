@@ -1,17 +1,17 @@
-"""MemPalace integration for spiritwriter-core.
+"""MemPalace integration for spiritwriter.
 
 Bridges MemPalace's semantic retrieval with spiritwriter's trust layer
 (content addressing, encryption, entity resolution, provenance).
 
 Works regardless of install order:
-- If only spiritwriter-core is installed: this module exists but
+- If only spiritwriter is installed: this module exists but
   MemPalaceProvider.is_available() returns False
 - If only mempalace is installed: spiritwriter isn't imported
 - If both are installed: full integration activates automatically
 
 Install:
-    pip install spiritwriter-core[mempalace]
-    # or just: pip install spiritwriter-core mempalace
+    pip install spiritwriter[mempalace]
+    # or just: pip install spiritwriter mempalace
 
 Three integration surfaces:
 1. MemPalaceProvider — use MemPalace as a retrieval backend for spiritwriter

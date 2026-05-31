@@ -1,4 +1,4 @@
-"""Shared fixtures for spiritwriter-core benchmarks."""
+"""Shared fixtures for spiritwriter benchmarks."""
 
 import os
 import shutil

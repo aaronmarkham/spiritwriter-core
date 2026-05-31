@@ -13,7 +13,7 @@ IPFS-backed shard distribution with private swarm enforcement.
 
 ```bash
 pip install -e /path/to/spiritwriter-core
-pip install 'spiritwriter-core[network]'  # adds requests
+pip install 'spiritwriter[network]'  # adds requests
 ```
 
 ## Concepts

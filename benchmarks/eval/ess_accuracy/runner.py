@@ -35,7 +35,7 @@ _DEFAULT_RESULTS_ROOT = Path(__file__).parent / "results"
 
 def _spiritwriter_version() -> str:
     try:
-        return importlib.metadata.version("spiritwriter-core")
+        return importlib.metadata.version("spiritwriter")
     except importlib.metadata.PackageNotFoundError:
         return "unknown"
 

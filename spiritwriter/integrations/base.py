@@ -1,7 +1,7 @@
 """Abstract protocols for pluggable memory providers.
 
 Any memory system (MemPalace, Mem0, Zep, Mastra, etc.) can implement
-these protocols to integrate with spiritwriter-core. The protocols are
+these protocols to integrate with spiritwriter. The protocols are
 designed so each side contributes what it's best at:
 
 - Memory providers contribute: semantic search, retrieval ranking,

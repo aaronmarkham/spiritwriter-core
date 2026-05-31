@@ -116,7 +116,7 @@ See [shard-store.md](shard-store.md#encrypted-shards) for the lifecycle of encry
 
 Sealed-box uses an ephemeral Curve25519 key per message, encrypted with the owner's public key via XSalsa20-Poly1305. The operator stores the public key, can encrypt *to* the owner, and **cannot read what was sealed** — not even what they sealed themselves, since the ephemeral sender key is discarded.
 
-Requires PyNaCl: `pip install 'spiritwriter-core[sealed]'`.
+Requires PyNaCl: `pip install 'spiritwriter[sealed]'`.
 
 ### When to Use Sealed-Box
 

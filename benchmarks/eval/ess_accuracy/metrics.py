@@ -322,7 +322,7 @@ def render_markdown(report: AccuracyReport) -> str:
                  f"entities: {report.n_entities} · "
                  f"pairs: {report.n_pairs} ({report.n_same} same, {report.n_different} different)")
     if report.spiritwriter_version:
-        lines.append(f"spiritwriter-core {report.spiritwriter_version}")
+        lines.append(f"spiritwriter {report.spiritwriter_version}")
     if report.jaccard_fields:
         lines.append(f"baseline tokenization fields: `{report.jaccard_fields}`")
     lines.append("")

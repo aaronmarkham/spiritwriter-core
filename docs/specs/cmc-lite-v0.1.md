@@ -17,7 +17,7 @@ Take the three best ideas from the full CMC spec and apply them to our existing 
 2. **Entity Sense Signatures** (from the Bear Problem analysis)
 3. **Multi-pass consensus** (from our overlapping-window / shingled-extraction pattern)
 
-No new infrastructure. SQLite + vec0 + GPT-4.1-mini. Everything lives in spiritwriter-core's `trace/` module.
+No new infrastructure. SQLite + vec0 + GPT-4.1-mini. Everything lives in spiritwriter's `trace/` module.
 
 ---
 

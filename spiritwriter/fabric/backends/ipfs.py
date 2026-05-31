@@ -8,7 +8,7 @@ stored in spiritwriter secrets). This prevents accidental publication of
 shards to the public IPFS network.
 
 Requires: requests (optional dependency)
-    pip install 'spiritwriter-core[network]'
+    pip install 'spiritwriter[network]'
 """
 
 from __future__ import annotations
@@ -53,7 +53,7 @@ def _require_requests() -> None:
     if not HAS_REQUESTS:
         raise ImportError(
             "IPFS backend requires requests. "
-            "Install with: pip install 'spiritwriter-core[network]'"
+            "Install with: pip install 'spiritwriter[network]'"
         )
 
 

@@ -229,7 +229,7 @@ LLM-driven ingestion.
 
 - **csp** = [`claude-studio-producer`](https://github.com/aaronmarkham/claude-studio-producer),
   the multi-agent video-production project in the spiritwriter
-  ecosystem. csp uses spiritwriter-core for KB, ingestion, secrets, and
+  ecosystem. csp uses spiritwriter for KB, ingestion, secrets, and
   shards.
 - **`cs kb`** = the `claude-studio` (alias `cs`) CLI's knowledge-base
   subcommand. `cs kb create / add / show / inspect / produce` builds
@@ -250,7 +250,7 @@ LLM-driven ingestion.
   [`benchmarks/eval/ess_accuracy/csp_kb_trial.py`](../../benchmarks/eval/ess_accuracy/csp_kb_trial.py).
 
 The bridge: csp's `cs kb add` does the LLM-driven entity extraction;
-the spiritwriter-core harness then measures how well CMC-Lite resolves
+the spiritwriter harness then measures how well CMC-Lite resolves
 the resulting entities under their actual real-world surface variation.
 No synthetic mutations; just whatever the LLM produced and however the
 underlying PDFs phrased things.
