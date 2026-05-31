@@ -12,7 +12,7 @@ The lessons build on each other: environment setup → tool verification → pro
 4. [Trace as a Verification Layer](04-trace-as-verification-layer.md) — automated verification with spiritwriter provenance chains
 5. [Self-Improving Pipelines](05-self-improving-pipelines.md) — A/B testing prompts with trace-based scoring
 6. [Audit Failure Modes](06-audit-failure-modes.md) — when the pipeline runs clean but the audit is still wrong: false negatives, evidence drift, findings rot, trust calibration drift, audit-of-audit gaps
-7. *Scaling with Confidence* — coming next: pilot → production gates, ensemble verification, detecting silent fleet degradation
+7. [Scaling with Confidence](07-scaling-with-confidence.md) — going from "one well-instrumented pipeline you watch" to "a fleet running unattended" without losing trust: representative-sample pilots, staged rollout with abort criteria, ensemble verification, fleet-health signals, triage sampling
 
 ## Prerequisites
 
