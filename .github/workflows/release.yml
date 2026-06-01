@@ -1,0 +1,91 @@
+name: Publish to PyPI
+
+# Publishes to PyPI via Trusted Publishing (OIDC) — no API tokens stored.
+# The PyPI publisher must match: owner aaronmarkham, repo spiritwriter-core,
+# workflow release.yml, environment pypi.
+#
+# Trigger: pushing a version tag, e.g.
+#   git tag v0.9.0 && git push origin v0.9.0
+# The tag drives the release; the build job fails if it disagrees with the
+# pyproject version. PyPI uploads are immutable, so the build job also runs
+# the test suite and a clean-venv smoke test before anything is published.
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Test + build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      # Guard 1 — never ship a red commit. Mirrors CI (which only runs on PRs,
+      # not on tags, so a tag on an untested commit would otherwise slip through).
+      - name: Install + run test suite
+        run: |
+          pip install -e ".[dev,sealed,network]"
+          python -m pytest tests/ -q
+
+      # Guard 2 — tag must match the packaged version. Read from pyproject via
+      # tomllib (robust to PEP 625 sdist-name normalization; no filename parsing).
+      - name: Verify tag matches pyproject version
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          echo "tag=$TAG pyproject=$PKG"
+          if [ "$TAG" != "$PKG" ]; then
+            echo "::error::Tag v$TAG does not match pyproject version $PKG. Sync them before tagging."
+            exit 1
+          fi
+
+      - name: Build sdist + wheel
+        run: |
+          pip install --upgrade build twine
+          python -m build
+          python -m twine check dist/*
+
+      # Guard 3 — the built wheel actually works: installed clean, outside the
+      # source tree, with its bundled data files. Catches packaging regressions
+      # (e.g. missing package-data) that editable/source installs hide.
+      - name: Smoke-test built wheel in a clean venv
+        run: |
+          python -m venv /tmp/relcheck
+          /tmp/relcheck/bin/python -m pip install --quiet dist/*.whl
+          cd /tmp && /tmp/relcheck/bin/python -c "import spiritwriter, os; assert 'site-packages' in spiritwriter.__file__, spiritwriter.__file__; from spiritwriter.audit.seed import bundled_findings; from spiritwriter.sw_vocab.seed import bundled_terms; assert bundled_findings() and bundled_terms(); print('wheel smoke OK', spiritwriter.__version__)"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    name: Publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/spiritwriter/
+    permissions:
+      id-token: write   # required for Trusted Publishing (OIDC)
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      # Pinned to a commit SHA, not a floating tag: this step handles the OIDC
+      # token and uploads the artifacts, so a hijacked tag here would compromise
+      # releases. Bump the SHA + comment together when upgrading.
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b  # v1.14.0
