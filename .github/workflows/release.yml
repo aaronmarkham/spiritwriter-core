@@ -1,0 +1,68 @@
+name: Publish to PyPI
+
+# Publishes to PyPI via Trusted Publishing (OIDC) — no API tokens stored.
+# The PyPI "pending publisher" must match: owner aaronmarkham, repo
+# spiritwriter-core, workflow release.yml, environment pypi.
+#
+# Trigger: pushing a version tag, e.g.
+#   git tag v0.9.0 && git push origin v0.9.0
+# The tag is the source of truth for the version; this workflow does not
+# bump pyproject — keep the tag and pyproject `version` in sync.
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build sdist + wheel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build distributions
+        run: |
+          python -m pip install --upgrade build twine
+          python -m build
+          python -m twine check dist/*
+
+      - name: Verify tag matches package version
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG=$(ls dist/*.tar.gz | sed -E 's/.*spiritwriter-(.*)\.tar\.gz/\1/')
+          echo "tag=$TAG package=$PKG"
+          if [ "$TAG" != "$PKG" ]; then
+            echo "::error::Tag v$TAG does not match packaged version $PKG. Sync pyproject [project].version with the tag."
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    name: Publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/spiritwriter/
+    permissions:
+      id-token: write   # required for Trusted Publishing (OIDC)
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
