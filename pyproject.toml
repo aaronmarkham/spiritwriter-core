@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "spiritwriter"
 version = "0.9.0"
-description = "Shared foundation for AI content pipelines — knowledge base, document ingestion, secrets, LLM abstraction"
+description = "Agent memory you own — content-addressed memory shards, provable traces, scoped delegation, and entity resolution, local-first"
 readme = "README.md"
 license = {text = "Apache-2.0"}
 requires-python = ">=3.9"
@@ -19,12 +19,11 @@ classifiers = [
     "Intended Audience :: Developers",
     "License :: OSI Approved :: Apache Software License",
     "Operating System :: OS Independent",
+    # CI tests 3.12 only; requires-python (>=3.9) is the install-surface
+    # guarantee. Classifiers list the generic 3 + the tested version rather
+    # than advertise specific versions no CI matrix backs (see .github/workflows/ci.yml).
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [

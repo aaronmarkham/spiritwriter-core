@@ -11,7 +11,8 @@ Entries before 0.8.0 are not backfilled; consult `git log` for earlier history. 
 
 ### Packaging
 - Bundled JSON data is now shipped in the sdist and wheel via `[tool.setuptools.package-data]` (`spiritwriter/audit/data/canonical_findings.json`, `spiritwriter/sw_vocab/data/canonical_terms.json`). These are loaded at runtime relative to `__file__`, so a wheel built without them would `FileNotFoundError` in the audit-seed and sw-vocab-seed paths on a fresh `pip install`. Verified by installing the wheel into a clean venv and loading both files.
-- Added `[project.urls]` (Homepage / Repository / Changelog / Issues) and trove `classifiers` (license, supported Python versions, audience) so the PyPI project page renders complete metadata.
+- Added `[project.urls]` (Homepage / Repository / Changelog / Issues) and trove `classifiers` (Apache-2.0, audience, topic, generic Python 3 + the CI-tested 3.12) so the PyPI project page renders complete metadata. Per-version classifiers are scoped to what CI actually tests; `requires-python = ">=3.9"` remains the install-surface guarantee.
+- Refreshed the package `description` to match the README identity ("Agent memory you own…") instead of the stale "Shared foundation for AI content pipelines" — this string is baked immutably into the release and renders under the name on PyPI.
 
 ## [0.8.3] — 2026-05-31
 
