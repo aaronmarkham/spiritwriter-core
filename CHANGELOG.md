@@ -9,6 +9,10 @@ Entries before 0.8.0 are not backfilled; consult `git log` for earlier history. 
 ### Changed
 - **BREAKING (distribution rename):** the PyPI distribution is now `spiritwriter` (was `spiritwriter-core`). Install with `pip install spiritwriter` and the extras `spiritwriter[network]` / `spiritwriter[sealed]` / `spiritwriter[mempalace]`. The **import name is unchanged** — code still does `import spiritwriter` / `from spiritwriter.fabric import ...`, so no source changes are required in consumers beyond their dependency declaration. The `-core` suffix implied an open-core split that no longer reflects the project (the whole library is open source). `importlib.metadata` lookups, the `spiritwriter --version` option, the benchmark version reporter, and all `pip install` instructions in docs/skills were updated to the new name. The GitHub repository remains `aaronmarkham/spiritwriter-core`; repo-relative paths (CI checkout, editable-install paths, homepage links) are unchanged.
 
+### Packaging
+- Bundled JSON data is now shipped in the sdist and wheel via `[tool.setuptools.package-data]` (`spiritwriter/audit/data/canonical_findings.json`, `spiritwriter/sw_vocab/data/canonical_terms.json`). These are loaded at runtime relative to `__file__`, so a wheel built without them would `FileNotFoundError` in the audit-seed and sw-vocab-seed paths on a fresh `pip install`. Verified by installing the wheel into a clean venv and loading both files.
+- Added `[project.urls]` (Homepage / Repository / Changelog / Issues) and trove `classifiers` (license, supported Python versions, audience) so the PyPI project page renders complete metadata.
+
 ## [0.8.3] — 2026-05-31
 
 ### Fixed

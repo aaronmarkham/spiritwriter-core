@@ -13,6 +13,20 @@ authors = [
     {name = "Aaron Markham"},
     {name = "Lilit (AI)"},
 ]
+keywords = ["agent-memory", "content-addressed", "knowledge-base", "llm", "shards", "provenance"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
 dependencies = [
     "anthropic>=0.40.0",
     "cryptography>=41.0.0",
@@ -21,6 +35,12 @@ dependencies = [
     "click>=8.1.0",
     "rich>=13.0.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/aaronmarkham/spiritwriter-core"
+Repository = "https://github.com/aaronmarkham/spiritwriter-core"
+Changelog = "https://github.com/aaronmarkham/spiritwriter-core/blob/main/CHANGELOG.md"
+Issues = "https://github.com/aaronmarkham/spiritwriter-core/issues"
 
 [project.scripts]
 spiritwriter = "spiritwriter.secrets.cli:main"
@@ -34,3 +54,7 @@ dev = ["pytest>=8.0", "pytest-asyncio>=0.23"]
 
 [tool.setuptools.packages.find]
 include = ["spiritwriter*"]
+
+[tool.setuptools.package-data]
+"spiritwriter.audit" = ["data/*.json"]
+"spiritwriter.sw_vocab" = ["data/*.json"]
