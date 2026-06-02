@@ -1101,6 +1101,23 @@ class TestExtractAtomsLLM:
         assert len(atoms) == 1
         assert atoms[0].kind == AtomKind.CONTEXT
 
+    def test_coerces_nonstring_fields(self):
+        """Real models don't always honor the schema: a `value` may come
+        back as a list, an `entity` padded with whitespace. Coerce rather
+        than crash (regression: a live frio run returned value=[...])."""
+        import asyncio
+        import json
+        from spiritwriter.fabric.familiarize import extract_atoms_llm
+        from spiritwriter.llm import MockLLMProvider
+
+        provider = MockLLMProvider(json.dumps({"atoms": [
+            {"kind": "fact", "entity": "  Frio ", "key": "channels",
+             "value": ["Discord", "Signal"], "text": "Frio supports channels."}]}))
+        atoms = asyncio.run(extract_atoms_llm("d", provider))
+        assert len(atoms) == 1
+        assert atoms[0].entity == "Frio"                # stripped
+        assert atoms[0].value == "Discord, Signal"      # list → comma-joined
+
     def test_model_override_passes_through(self):
         """A `model=` override is forwarded to the provider without error."""
         import asyncio

@@ -112,9 +112,26 @@ def _sense_from_obj(obj: Any) -> Optional[EntitySense]:
     )
 
 
+def _clean_field(v: Any) -> Optional[str]:
+    """Coerce an LLM-emitted field to a clean string (or None).
+
+    Real models don't always honor the schema — a ``value`` may come back
+    as a list or a number. Coerce defensively (lists → comma-joined) and
+    strip identity-poisoning whitespace, rather than assuming ``str``.
+    """
+    if v is None:
+        return None
+    if isinstance(v, list):
+        v = ", ".join(str(x).strip() for x in v if str(x).strip())
+    elif not isinstance(v, str):
+        v = str(v)
+    v = v.strip()
+    return v or None
+
+
 def _atom_from_obj(obj: Dict[str, Any], source_ref: Optional[str]) -> Optional[ShardAtom]:
     """Map one LLM JSON object to a ShardAtom. Returns None if unusable."""
-    text = (obj.get("text") or "").strip()
+    text = _clean_field(obj.get("text"))
     if not text:
         return None
     raw_kind = str(obj.get("kind", "context")).strip().lower()
@@ -126,18 +143,18 @@ def _atom_from_obj(obj: Dict[str, Any], source_ref: Optional[str]) -> Optional[S
         confidence = float(obj.get("confidence", 1.0))
     except (TypeError, ValueError):
         confidence = 1.0
-    # Strip identity-bearing fields: stray whitespace on entity/key would
-    # otherwise poison exact (entity, key, kind) dedup and the canonical
-    # display name (a single mention with a trailing space could win).
+    # Clean identity-bearing fields: stray whitespace (or a non-string the
+    # model emitted) on entity/key would poison exact (entity, key, kind)
+    # dedup and the canonical display name.
     return ShardAtom(
         text=text,
         kind=kind,
-        entity=((obj.get("entity") or "").strip() or None),
-        key=((obj.get("key") or "").strip() or None),
-        value=((obj.get("value") or "").strip() or None),
+        entity=_clean_field(obj.get("entity")),
+        key=_clean_field(obj.get("key")),
+        value=_clean_field(obj.get("value")),
         confidence=max(0.0, min(1.0, confidence)),
         source_ref=source_ref,
-        key_definition=(obj.get("key_definition") or None),
+        key_definition=_clean_field(obj.get("key_definition")),
         sense=_sense_from_obj(obj.get("sense")),
     )
 
