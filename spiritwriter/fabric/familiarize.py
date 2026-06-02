@@ -126,12 +126,15 @@ def _atom_from_obj(obj: Dict[str, Any], source_ref: Optional[str]) -> Optional[S
         confidence = float(obj.get("confidence", 1.0))
     except (TypeError, ValueError):
         confidence = 1.0
+    # Strip identity-bearing fields: stray whitespace on entity/key would
+    # otherwise poison exact (entity, key, kind) dedup and the canonical
+    # display name (a single mention with a trailing space could win).
     return ShardAtom(
         text=text,
         kind=kind,
-        entity=(obj.get("entity") or None),
-        key=(obj.get("key") or None),
-        value=(obj.get("value") or None),
+        entity=((obj.get("entity") or "").strip() or None),
+        key=((obj.get("key") or "").strip() or None),
+        value=((obj.get("value") or "").strip() or None),
         confidence=max(0.0, min(1.0, confidence)),
         source_ref=source_ref,
         key_definition=(obj.get("key_definition") or None),
@@ -181,7 +184,9 @@ _COMPATIBLE_SENSE_PAIRS = {
 
 # Function/filler words dropped before comparing definitions, so blocking
 # keys off content tokens — not "the/rule/where" — keeping LLM calls to
-# genuinely related pairs.
+# genuinely related pairs. Deliberately NOT spiritwriter.stopwords: that
+# list is tuned for theme/topic classification; this one is a tiny
+# definition-blocking filter with different members (e.g. "rule", "value").
 _STOP = {
     "the", "a", "an", "of", "to", "and", "or", "for", "in", "on", "is", "are",
     "be", "this", "that", "it", "its", "where", "when", "what", "which", "may",
@@ -397,6 +402,12 @@ async def _canonicalize_entities(
     # Tier 2 — LLM adjudication across DIFFERENT normalized clusters that
     # are lexically related and sense-compatible.
     if provider is not None and adjudicate:
+        # Known v0.1 trade-off: one representative atom per cluster. If a
+        # cluster's rep isn't its lexically-closest member to another
+        # cluster (e.g. {"PG","Postgres"} repped by "PG" vs {"PostgreSQL"}),
+        # _lex_related can miss a merge that "Postgres"↔"PostgreSQL" would
+        # have made. Acceptable for now; revisit with all-pairs blocking if
+        # recall matters more than the extra adjudication calls.
         roots: Dict[int, int] = {}
         for i in ent_idx:
             roots.setdefault(dsu.find(i), i)  # one representative atom per cluster
@@ -424,13 +435,18 @@ async def _canonicalize_entities(
                     review.append({"kind": "entity", "a": ea, "b": eb,
                                    "verdict": verdict, "confidence": round(conf, 3)})
 
-    # Canonical display per cluster: longest surface form (tie → alpha).
+    # Canonical display per cluster: longest surface form (tie → alpha),
+    # ranked and emitted on the STRIPPED form so a stray-whitespace mention
+    # can't win the name or carry padding into storage.
     members_by_root: Dict[int, List[int]] = defaultdict(list)
     for i in ent_idx:
         members_by_root[dsu.find(i)].append(i)
     idx_display: Dict[int, str] = {}
     for members in members_by_root.values():
-        disp = sorted({atoms[m].entity for m in members}, key=lambda s: (-len(s), s))[0]
+        disp = sorted(
+            {atoms[m].entity.strip() for m in members},
+            key=lambda s: (-len(s), s),
+        )[0]
         for m in members:
             idx_display[m] = disp
     return idx_display, llm_calls, merged_by_llm, review
@@ -450,6 +466,10 @@ async def align_atoms(
     equivalence. With a provider, ambiguous residual pairs are
     adjudicated by the LLM; the sense gate keeps homonyms apart cheaply
     before any call is made.
+
+    Mutates the atoms in ``atoms`` in place — entity fields are rewritten
+    to their canonical display form and surviving atoms' ``source_ref``s
+    are unioned. Pass copies if you need the originals intact.
     """
     input_count = len(atoms)
 

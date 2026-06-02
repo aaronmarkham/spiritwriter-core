@@ -12,6 +12,7 @@ from spiritwriter.fabric.shard import (
     ShardRef,
     AtomKind,
     DecayClass,
+    EntitySense,
     generate_signing_keypair,
     pubkey_thumbprint,
 )
@@ -56,6 +57,31 @@ class TestShardAtom:
         atom1 = ShardAtom(text="test1", kind=AtomKind.FACT)
         atom2 = ShardAtom(text="test2", kind=AtomKind.FACT)
         assert atom1.content_hash != atom2.content_hash
+
+    def test_content_hash_ignores_cmc_enrichment(self):
+        """The load-bearing identity promise: adding key_definition/sense
+        must NOT change an atom's content address (enriching ≠ forking)."""
+        plain = ShardAtom(text="DB is Postgres", kind=AtomKind.FACT,
+                          entity="App", key="database", value="Postgres")
+        enriched = ShardAtom(text="DB is Postgres", kind=AtomKind.FACT,
+                             entity="App", key="database", value="Postgres",
+                             key_definition="The primary datastore.",
+                             sense=EntitySense(sense_type="organization",
+                                               domain="datastore"))
+        assert plain.content_hash == enriched.content_hash
+
+    def test_enrichment_roundtrips_through_dict(self):
+        atom = ShardAtom(text="x", kind=AtomKind.FACT, entity="App", key="db",
+                         value="PG", key_definition="The datastore.",
+                         sense=EntitySense(sense_type="organization",
+                                           scoped_to=None, domain="datastore",
+                                           context=["sql"]))
+        restored = ShardAtom.from_dict(atom.to_dict())
+        assert restored.key_definition == "The datastore."
+        assert restored.sense is not None
+        assert restored.sense.sense_type == "organization"
+        assert restored.sense.domain == "datastore"
+        assert restored.sense.context == ["sql"]
 
     def test_roundtrip_dict(self):
         atom = ShardAtom(

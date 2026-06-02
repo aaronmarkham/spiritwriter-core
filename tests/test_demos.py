@@ -861,9 +861,10 @@ class TestAlignAtoms:
         from spiritwriter.fabric.familiarize import align_atoms
 
         res = asyncio.run(align_atoms(self._atoms()))
-        # 'App' and 'app ' fold to one canonical display form (exact-normalized).
+        # 'App' and 'app ' fold to ONE canonical display form — and the
+        # winner must be the clean 'App', not the whitespace-padded 'app '.
         entities = {a.entity for a in res.atoms}
-        assert len(entities) == 1, f"expected one canonical entity, got {entities}"
+        assert entities == {"App"}, f"expected clean canonical 'App', got {entities}"
 
     def test_freeform_atoms_dedup_on_text(self):
         import asyncio
