@@ -4,6 +4,18 @@ All notable changes to `spiritwriter` are documented here. The format follows [K
 
 Entries before 0.8.0 are not backfilled; consult `git log` for earlier history. Releases through 0.8.3 were published under the distribution name `spiritwriter-core`.
 
+## [0.9.1] — 2026-06-01
+
+### Added
+- **`spiritwriter.ingest.load_documents` / `extract_document_text`** — basic multi-format text ingestion (markdown, text, PDF via PyMuPDF) into a `{source_ref: text}` mapping. The lightweight, format-dispatching counterpart to `DocumentIngestor` (which stays the rich single-PDF structural analyzer). Unsupported formats raise `UnsupportedDocument`; PDFs without PyMuPDF raise a clear error rather than failing obscurely.
+- **`spiritwriter.llm.MockLLMProvider`** — deterministic scripted `LLMProvider` (string / list / dict / callable responses) for offline tests, demos, and CI. Previously referenced in docstrings but never shipped.
+
+### Changed
+- `spiritwriter.ingest.document.DocumentIngestor._extract_json` now delegates to the shared, more robust `spiritwriter.llm.anthropic.JSONExtractor` (handles code fences, truncation, stray prose), removing ~35 lines of duplicated hand-parsing while preserving the graceful `{}`-on-failure fallback.
+
+### Tests
+- New `tests/test_ingest.py` — first test coverage of the (claude-studio-producer-derived) ingest pipeline, which previously shipped untested: multi-format loaders, `normalize_atom_type`, `DocumentIngestor` in mock- and LLM-mode over generated PDFs, and figure extraction (rendered + embedded + Claude-Vision description) via synthetic image PDFs. Combined coverage of the ingest modules rose from ~15% to ~85%.
+
 ## [0.9.0] — 2026-05-31
 
 ### Changed
