@@ -743,3 +743,394 @@ class TestFlavorDocExamples:
             now_iso="2026-05-10T12:30:00Z",
         )
         computed["_produced"].verify(computed["_worker_pk_bytes"])
+
+
+# ── Demo 7: Familiarize (LLM extract → align → shard) ──────────────
+
+
+class TestDemo07Familiarize:
+    """docs folder → LLM-extracted atoms → Phalanx alignment → one named
+    shard the agent hydrates on startup. The demo drives a
+    MockLLMProvider so the extraction + alignment code runs for real
+    while staying offline and deterministic.
+
+    If this breaks, look at fabric/familiarize.py (extract_atoms_llm,
+    align_atoms, familiarize) or the MockLLMProvider contract — the demo
+    only uses public APIs.
+    """
+
+    @pytest.fixture(autouse=True, scope="class")
+    def run_demo(self, tmp_path_factory):
+        out = tmp_path_factory.mktemp("demo07")
+        demo = _load_demo("07_familiarize")
+        rc = demo.main(output_dir=out)
+        TestDemo07Familiarize._dir = out
+        TestDemo07Familiarize._rc = rc
+
+    def test_main_exits_zero(self):
+        # main() runs the demo's own in-flow assertions; exit 0 means they held.
+        assert self._rc == 0
+
+    def test_named_ref_resolves_to_brief(self):
+        from spiritwriter.fabric.store import ShardStore
+
+        store = ShardStore(self._dir / "shards")
+        brief = store.resolve_ref("project-familiarity")
+        assert brief is not None, "project-familiarity ref should resolve"
+        assert brief.atoms, "brief should contain atoms"
+
+    def test_restated_fact_merged_cites_both_docs(self):
+        """The database fact appears in README.md and BACKLOG.md; after
+        alignment it must be ONE atom citing both sources — the
+        anti-thrashing promise."""
+        from spiritwriter.fabric.store import ShardStore
+
+        store = ShardStore(self._dir / "shards")
+        brief = store.resolve_ref("project-familiarity")
+        db = [a for a in brief.atoms if a.entity == "TaskFlow" and a.key == "database"]
+        assert len(db) == 1, f"database fact should be deduped to one atom, got {len(db)}"
+        assert "doc:README.md" in db[0].source_ref
+        assert "doc:BACKLOG.md" in db[0].source_ref
+
+    def test_prose_task_captured(self):
+        """The LLM path captures the backlog's prose OAuth task the regex
+        extractor cannot see."""
+        from spiritwriter.fabric.store import ShardStore
+
+        store = ShardStore(self._dir / "shards")
+        brief = store.resolve_ref("project-familiarity")
+        assert any(a.key == "oauth_login" for a in brief.atoms)
+
+    def test_near_variant_entity_unified_by_llm(self):
+        """Tiered alignment UNIFIES 'Postgres' and 'PostgreSQL' via LLM
+        adjudication — the case bare string-matching could not merge."""
+        from spiritwriter.fabric.store import ShardStore
+
+        store = ShardStore(self._dir / "shards")
+        brief = store.resolve_ref("project-familiarity")
+        entities = {a.entity for a in brief.atoms}
+        assert "PostgreSQL" in entities and "Postgres" not in entities
+
+    def test_atoms_carry_cmc_enrichment(self):
+        """Stored atoms retain key_definition + entity sense (round-trips
+        through shard serialization)."""
+        from spiritwriter.fabric.store import ShardStore
+
+        store = ShardStore(self._dir / "shards")
+        brief = store.resolve_ref("project-familiarity")
+        assert any(a.key_definition for a in brief.atoms)
+        assert any(a.sense is not None for a in brief.atoms)
+
+
+# ── Unit tests: familiarize primitives ─────────────────────────────
+
+
+class TestAlignAtoms:
+    """align_atoms() — tiered: exact → sense-gate → LLM adjudication."""
+
+    def _atoms(self):
+        from spiritwriter.fabric.shard import ShardAtom, AtomKind
+        return [
+            ShardAtom(text="DB is Postgres.", kind=AtomKind.FACT,
+                      entity="App", key="database", value="Postgres",
+                      source_ref="doc:a.md"),
+            # exact restatement from another doc → should merge, cite both
+            ShardAtom(text="The database is Postgres.", kind=AtomKind.FACT,
+                      entity="App", key="database", value="Postgres",
+                      confidence=0.8, source_ref="doc:b.md"),
+            # case/whitespace variant of entity → exact-normalized fold
+            ShardAtom(text="Framework is FastAPI.", kind=AtomKind.FACT,
+                      entity="app ", key="framework", value="FastAPI",
+                      source_ref="doc:a.md"),
+        ]
+
+    def test_exact_tier_runs_without_provider(self):
+        """provider=None → deterministic exact tier only, no LLM needed."""
+        import asyncio
+        from spiritwriter.fabric.familiarize import align_atoms
+
+        res = asyncio.run(align_atoms(self._atoms()))  # no provider
+        assert res.llm_calls == 0
+        assert res.exact_merges == 1
+        db = [a for a in res.atoms if a.key == "database"]
+        assert len(db) == 1
+        assert "doc:a.md" in db[0].source_ref and "doc:b.md" in db[0].source_ref
+
+    def test_entity_surface_forms_canonicalized(self):
+        import asyncio
+        from spiritwriter.fabric.familiarize import align_atoms
+
+        res = asyncio.run(align_atoms(self._atoms()))
+        # 'App' and 'app ' fold to one canonical display form (exact-normalized).
+        entities = {a.entity for a in res.atoms}
+        assert len(entities) == 1, f"expected one canonical entity, got {entities}"
+
+    def test_freeform_atoms_dedup_on_text(self):
+        import asyncio
+        from spiritwriter.fabric.familiarize import align_atoms
+        from spiritwriter.fabric.shard import ShardAtom, AtomKind
+
+        atoms = [
+            ShardAtom(text="Same note.", kind=AtomKind.CONTEXT, source_ref="doc:a.md"),
+            ShardAtom(text="Same note.", kind=AtomKind.CONTEXT, source_ref="doc:b.md"),
+        ]
+        res = asyncio.run(align_atoms(atoms))
+        assert res.output_count == 1
+        assert "doc:a.md" in res.atoms[0].source_ref
+        assert "doc:b.md" in res.atoms[0].source_ref
+
+    def test_llm_unifies_near_variant_entities(self):
+        """With a provider that says SAME, 'Postgres' and 'PostgreSQL'
+        collapse to one canonical entity."""
+        import asyncio
+        import json
+        from spiritwriter.fabric.familiarize import align_atoms
+        from spiritwriter.fabric.shard import ShardAtom, AtomKind, EntitySense
+        from spiritwriter.llm import MockLLMProvider
+
+        sense = EntitySense(sense_type="organization", domain="datastore")
+        atoms = [
+            ShardAtom(text="PostgreSQL 15 is the target.", kind=AtomKind.FACT,
+                      entity="PostgreSQL", key="version", value="15",
+                      key_definition="The datastore major version.",
+                      sense=sense, source_ref="doc:a.md"),
+            ShardAtom(text="Postgres uses pgvector.", kind=AtomKind.FACT,
+                      entity="Postgres", key="extension", value="pgvector",
+                      key_definition="A datastore extension in use.",
+                      sense=sense, source_ref="doc:b.md"),
+        ]
+        provider = MockLLMProvider(json.dumps({"verdict": "SAME", "confidence": 0.95}))
+        res = asyncio.run(align_atoms(atoms, provider))
+        assert res.entities_merged_by_llm == 1
+        entities = {a.entity for a in res.atoms}
+        assert entities == {"PostgreSQL"}, entities
+
+    def test_sense_gate_blocks_incompatible_before_llm(self):
+        """Incompatible senses (different scoped_to) are hard-gated — no
+        LLM call, entities stay separate."""
+        import asyncio
+        from spiritwriter.fabric.familiarize import align_atoms
+        from spiritwriter.fabric.shard import ShardAtom, AtomKind, EntitySense
+        from spiritwriter.llm import MockLLMProvider
+
+        atoms = [
+            ShardAtom(text="Bear the dog naps.", kind=AtomKind.FACT,
+                      entity="Bear", key="activity", value="naps",
+                      sense=EntitySense(sense_type="proper_name", scoped_to="Aaron",
+                                        domain="personal_pet"),
+                      source_ref="doc:a.md"),
+            ShardAtom(text="A bear weighs 200kg.", kind=AtomKind.FACT,
+                      entity="bear", key="weight", value="200kg",
+                      sense=EntitySense(sense_type="proper_name", scoped_to="Yellowstone",
+                                        domain="wildlife"),
+                      source_ref="doc:b.md"),
+        ]
+        # Provider would say SAME if asked — but the gate must prevent the call.
+        provider = MockLLMProvider('{"verdict": "SAME", "confidence": 0.99}')
+        res = asyncio.run(align_atoms(atoms, provider))
+        assert res.llm_calls == 0, "sense gate should block the adjudication call"
+        assert res.entities_merged_by_llm == 0
+        assert {a.entity for a in res.atoms} == {"Bear", "bear"}
+
+    def _granularity_pair(self):
+        """Same entity+kind, different keys whose definitions are related —
+        the candidate shape for LLM granularity adjudication."""
+        from spiritwriter.fabric.shard import ShardAtom, AtomKind
+        return [
+            ShardAtom(text="DB is PG.", kind=AtomKind.FACT, entity="App",
+                      key="database", value="PG",
+                      key_definition="The persistent datastore the service uses.",
+                      source_ref="doc:a.md"),
+            ShardAtom(text="Datastore is PG.", kind=AtomKind.FACT, entity="App",
+                      key="datastore", value="PG", confidence=0.8,
+                      key_definition="The persistent data store the service uses.",
+                      source_ref="doc:b.md"),
+        ]
+
+    def test_llm_merges_same_fact_by_definition(self):
+        import asyncio
+        import json
+        from spiritwriter.fabric.familiarize import align_atoms
+        from spiritwriter.llm import MockLLMProvider
+
+        provider = MockLLMProvider(
+            json.dumps({"verdict": "SAME", "more_specific": None, "confidence": 0.9}))
+        res = asyncio.run(align_atoms(self._granularity_pair(), provider))
+        assert res.facts_merged_by_llm == 1
+        assert res.output_count == 1
+        kept = res.atoms[0]
+        assert "doc:a.md" in kept.source_ref and "doc:b.md" in kept.source_ref
+
+    def test_subsumes_merges_pair(self):
+        import asyncio
+        import json
+        from spiritwriter.fabric.familiarize import align_atoms
+        from spiritwriter.llm import MockLLMProvider
+
+        provider = MockLLMProvider(
+            json.dumps({"verdict": "SUBSUMES", "more_specific": "A", "confidence": 0.9}))
+        res = asyncio.run(align_atoms(self._granularity_pair(), provider))
+        assert res.facts_merged_by_llm == 1
+        assert res.output_count == 1
+
+    def test_malformed_adjudication_keeps_atoms_separate(self):
+        """A non-JSON adjudication reply → DIFFERENT fallback → no merge,
+        but the call still counts (covers the except-ValueError branch)."""
+        import asyncio
+        from spiritwriter.fabric.familiarize import align_atoms
+        from spiritwriter.llm import MockLLMProvider
+
+        res = asyncio.run(align_atoms(self._granularity_pair(),
+                                      MockLLMProvider("definitely not json")))
+        assert res.facts_merged_by_llm == 0
+        assert res.output_count == 2
+        assert res.llm_calls == 1
+
+
+class TestLoadDocuments:
+    """ingest.load_documents() — multi-format basic ingestion."""
+
+    def test_dir_loads_text_formats_and_skips_unsupported(self, tmp_path):
+        from spiritwriter.ingest import load_documents
+
+        (tmp_path / "a.md").write_text("# A\nalpha", encoding="utf-8")
+        (tmp_path / "b.txt").write_text("beta", encoding="utf-8")
+        (tmp_path / "c.rst").write_text("gamma", encoding="utf-8")
+        (tmp_path / "skip.bin").write_bytes(b"\x00\x01")  # unsupported → skipped
+
+        docs = load_documents(tmp_path)
+        assert set(docs) == {"doc:a.md", "doc:b.txt", "doc:c.rst"}
+        assert docs["doc:b.txt"] == "beta"
+
+    def test_dict_passes_through(self):
+        from spiritwriter.ingest import load_documents
+
+        d = {"doc:x": "hello"}
+        assert load_documents(d) is d
+
+    def test_single_unsupported_file_raises(self, tmp_path):
+        from spiritwriter.ingest import load_documents, UnsupportedDocument
+
+        f = tmp_path / "data.bin"
+        f.write_bytes(b"\x00")
+        with pytest.raises(UnsupportedDocument):
+            load_documents(f)
+
+    def test_pdf_without_pymupdf_raises_clearly(self, tmp_path, monkeypatch):
+        """A .pdf with PyMuPDF unavailable must raise UnsupportedDocument,
+        not an obscure ImportError mid-pipeline."""
+        import builtins
+        from spiritwriter.ingest import extract_document_text, UnsupportedDocument
+
+        pdf = tmp_path / "paper.pdf"
+        pdf.write_bytes(b"%PDF-1.4 fake")
+        real_import = builtins.__import__
+
+        def _no_fitz(name, *args, **kwargs):
+            if name == "fitz":
+                raise ImportError("no fitz")
+            return real_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", _no_fitz)
+        with pytest.raises(UnsupportedDocument):
+            extract_document_text(pdf)
+
+    def test_familiarize_consumes_loader_over_mixed_dir(self, tmp_path):
+        """familiarize() ingests .md AND .txt through load_documents."""
+        import asyncio
+        import json
+        from spiritwriter.fabric.familiarize import familiarize
+        from spiritwriter.fabric.store import ShardStore
+        from spiritwriter.llm import MockLLMProvider
+
+        (tmp_path / "a.md").write_text("alpha doc", encoding="utf-8")
+        (tmp_path / "b.txt").write_text("beta doc", encoding="utf-8")
+        reply = json.dumps({"atoms": [
+            {"kind": "fact", "entity": "E", "key": "k", "value": "v",
+             "text": "E k is v."}]})
+        store = ShardStore(tmp_path / "shards")
+        res = asyncio.run(familiarize(
+            tmp_path, MockLLMProvider(reply), store, "fam", scope="t:demo"))
+        # Two source docs were each extracted from → atoms reference both.
+        srcs = {a.source_ref for a in res.shard.atoms}
+        assert srcs == {"doc:a.md, doc:b.txt"} or {"doc:a.md", "doc:b.txt"} <= {
+            s for ref in srcs if ref for s in ref.split(", ")}
+
+
+class TestExtractAtomsLLM:
+    """extract_atoms_llm() with a scripted MockLLMProvider."""
+
+    def test_parses_atoms_with_cmc_enrichment(self):
+        import asyncio
+        from spiritwriter.fabric.familiarize import extract_atoms_llm
+        from spiritwriter.fabric.shard import AtomKind
+        from spiritwriter.llm import MockLLMProvider
+
+        provider = MockLLMProvider(
+            '{"atoms": [{"kind": "fact", "entity": "X", "key": "y", "value": "z", '
+            '"key_definition": "The y of X.", "text": "X y is z.", "confidence": 0.9, '
+            '"sense": {"sense_type": "organization", "domain": "software_project"}}]}'
+        )
+        atoms = asyncio.run(extract_atoms_llm("doc text", provider, source_ref="doc:x.md"))
+        assert len(atoms) == 1
+        a = atoms[0]
+        assert a.kind == AtomKind.FACT and a.entity == "X" and a.source_ref == "doc:x.md"
+        assert a.key_definition == "The y of X."
+        assert a.sense is not None and a.sense.domain == "software_project"
+
+    def test_unparseable_response_yields_no_atoms(self):
+        import asyncio
+        from spiritwriter.fabric.familiarize import extract_atoms_llm
+        from spiritwriter.llm import MockLLMProvider
+
+        provider = MockLLMProvider("sorry, I can't do that")
+        atoms = asyncio.run(extract_atoms_llm("doc text", provider))
+        assert atoms == []
+
+    def test_unknown_kind_falls_back_to_context(self):
+        import asyncio
+        from spiritwriter.fabric.familiarize import extract_atoms_llm
+        from spiritwriter.fabric.shard import AtomKind
+        from spiritwriter.llm import MockLLMProvider
+
+        provider = MockLLMProvider(
+            '{"atoms": [{"kind": "wat", "text": "freeform thing"}]}'
+        )
+        atoms = asyncio.run(extract_atoms_llm("doc", provider))
+        assert len(atoms) == 1
+        assert atoms[0].kind == AtomKind.CONTEXT
+
+    def test_model_override_passes_through(self):
+        """A `model=` override is forwarded to the provider without error."""
+        import asyncio
+        from spiritwriter.fabric.familiarize import extract_atoms_llm
+        from spiritwriter.llm import MockLLMProvider
+
+        provider = MockLLMProvider('{"atoms": [{"kind": "fact", "text": "x."}]}')
+        atoms = asyncio.run(
+            extract_atoms_llm("doc", provider, model="claude-haiku-4-5"))
+        assert len(atoms) == 1
+
+
+class TestFamiliarizeFlags:
+    """familiarize() orchestration flags."""
+
+    def test_align_false_skips_dedup(self, tmp_path):
+        """align=False → no AlignmentResult and no cross-doc merge: the
+        same fact in two docs stays as two atoms."""
+        import asyncio
+        import json
+        from spiritwriter.fabric.familiarize import familiarize
+        from spiritwriter.fabric.store import ShardStore
+        from spiritwriter.llm import MockLLMProvider
+
+        (tmp_path / "a.md").write_text("alpha", encoding="utf-8")
+        (tmp_path / "b.md").write_text("beta", encoding="utf-8")
+        reply = json.dumps({"atoms": [
+            {"kind": "fact", "entity": "E", "key": "k", "value": "v", "text": "E k is v."}]})
+        store = ShardStore(tmp_path / "shards")
+        res = asyncio.run(familiarize(
+            tmp_path, MockLLMProvider(reply), store, "fam",
+            scope="t:demo", align=False))
+        assert res.alignment is None
+        assert len(res.shard.atoms) == 2  # one per doc, un-merged

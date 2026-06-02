@@ -4,6 +4,22 @@ All notable changes to `spiritwriter` are documented here. The format follows [K
 
 Entries before 0.8.0 are not backfilled; consult `git log` for earlier history. Releases through 0.8.3 were published under the distribution name `spiritwriter-core`.
 
+## [0.9.1] — 2026-06-01
+
+### Added
+- **`spiritwriter.fabric.familiarize`** — the "get familiar with my app" path: turn a folder of project docs into one aligned, deduplicated knowledge shard an agent hydrates on startup instead of re-reading and re-deriving every session. `familiarize(sources, provider, store, ref_name, ...)` orchestrates extract → align → store; `extract_atoms_llm()` and `align_atoms()` are usable standalone. Built to the CMC spec (`docs/specs/cmc-spec-v0.1.md`): LLM extraction enriched with `key_definition` (EDC "Define" step) + entity `sense`, then **tiered alignment** — deterministic exact-merge → sense gate → LLM adjudication of the ambiguous residual (`SAME`/`DIFFERENT`/`SUBSUMES`). No embedding stack; LLM fires only on the hard pairs. Worked example in `examples/07_familiarize/` (offline/deterministic via a mocked provider).
+- **`spiritwriter.ingest.load_documents` / `extract_document_text`** — basic multi-format text ingestion (markdown, text, PDF via PyMuPDF), the front-end that feeds `familiarize`. `DocumentIngestor` remains the rich single-PDF structural analyzer. Raises `UnsupportedDocument` for formats without a loader.
+- **`spiritwriter.llm.MockLLMProvider`** — deterministic scripted `LLMProvider` (string / list / dict / callable responses) for offline tests, demos, and CI. Previously referenced in docstrings but never shipped.
+- `ShardAtom` gains two optional CMC enrichment fields — `key_definition` and `sense` (an `EntitySense`) — excluded from `content_hash`, so enriching an atom does not fork its content address. `EntitySense` exported from `spiritwriter.fabric`.
+- `sw_vocab` canonical registry: added `ShardAtom`/`AtomKind` (knowledge) vs `DocumentAtom`/`AtomType` (document layout) as distinct cross-referencing terms, plus `EntitySense` and `key_definition`, and cross-linked the existing `Entity Sense Signature` (ESS) entry against `EntitySense` so the long-standing acronym collision can't silently recur.
+
+### Changed
+- `familiarize` ingests through `spiritwriter.ingest.load_documents` (markdown/text/PDF) rather than its own markdown-only globbing — `ingest` is the multi-format front-end, `familiarize` the alignment-into-common-KB back-end.
+- `spiritwriter.ingest.document.DocumentIngestor._extract_json` now delegates to the shared, more robust `spiritwriter.llm.anthropic.JSONExtractor` (handles code fences, truncation, stray prose), removing ~35 lines of duplicated parsing while preserving the graceful `{}`-on-failure fallback.
+
+### Tests
+- New `tests/test_ingest.py` — first coverage of the (CSP-derived) ingest pipeline: multi-format loaders, `DocumentIngestor` mock- and LLM-mode over generated PDFs, and figure extraction (rendered + embedded + vision) via synthetic image PDFs. Added familiarize edge tests (LLM merge/subsumes, sense gate, malformed-adjudication fallback, `align=False`). Combined coverage of the familiarize + ingest flows rose from ~45% to ~89%.
+
 ## [0.9.0] — 2026-05-31
 
 ### Changed

@@ -18,6 +18,7 @@ from spiritwriter.fabric.shard import (
     MemoryShard,
     ShardAtom,
     ShardRef,
+    EntitySense,
     generate_signing_keypair,
     pubkey_thumbprint,
 )
@@ -80,6 +81,7 @@ from spiritwriter.fabric.canonicalize import (
 __all__ = [
     "MemoryShard",
     "ShardAtom",
+    "EntitySense",
     "ShardRef",
     "generate_signing_keypair",
     "pubkey_thumbprint",

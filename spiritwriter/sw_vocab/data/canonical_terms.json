@@ -2,7 +2,7 @@
   {
     "term": "Entity Sense Signature",
     "category": "primitive",
-    "definition": "Content-addressed identity anchor — SHA-256 over a sorted list of (field, normalized_value) pairs from a schema's ess_fields. Two records with the same ESS digest are the same entity by construction (T1 match).",
+    "definition": "Content-addressed identity anchor — SHA-256 over a sorted list of (field, normalized_value) pairs from a schema's ess_fields. Two records with the same ESS digest are the same entity by construction (T1 match). NOT the same as EntitySense (spiritwriter/fabric/shard.py), the CMC homonym sense-disambiguator on a ShardAtom — different concept, dangerously similar name; do not conflate.",
     "abbreviation": "ESS",
     "defined_in": "spiritwriter/fabric/canonicalize.py",
     "aliases": [
@@ -78,9 +78,56 @@
   {
     "term": "ShardAtom",
     "category": "primitive",
-    "definition": "Single knowledge unit inside a MemoryShard. Has text, kind (fact|decision|convention|preference|entity|context|checkpoint|instruction), optional entity/key/value/confidence/source_ref.",
+    "definition": "Single knowledge unit inside a MemoryShard — a distilled fact/decision/convention for prompt hydration. Has text, kind (an AtomKind), optional entity/key/value/confidence/source_ref, plus optional CMC enrichment key_definition + sense (an EntitySense). DISTINCT from DocumentAtom: a ShardAtom is knowledge, a DocumentAtom is document structure. They are different models in different files and do not share fields.",
     "defined_in": "spiritwriter/fabric/shard.py",
-    "aliases": []
+    "aliases": [
+      "shard atom"
+    ]
+  },
+  {
+    "term": "AtomKind",
+    "category": "primitive",
+    "definition": "Enum of the KIND of knowledge a ShardAtom carries: fact | decision | convention | preference | entity | context | checkpoint | instruction. DISTINCT from AtomType, which classifies a DocumentAtom by document-layout role. 'kind' = what the knowledge is, not a layout role.",
+    "defined_in": "spiritwriter/fabric/shard.py",
+    "aliases": [
+      "atom kind"
+    ]
+  },
+  {
+    "term": "DocumentAtom",
+    "category": "primitive",
+    "definition": "Smallest unit of extracted document STRUCTURE produced by DocumentIngestor (rich PDF analysis): content + page/bbox location + topics/entities + importance + caption/figure metadata, typed by AtomType. DISTINCT from ShardAtom — a DocumentAtom represents a chunk of a document's layout; a ShardAtom is distilled knowledge. A DocumentAtom has no key/value/sense and is never aligned into a MemoryShard directly.",
+    "defined_in": "spiritwriter/models/document.py",
+    "aliases": [
+      "document atom"
+    ]
+  },
+  {
+    "term": "AtomType",
+    "category": "primitive",
+    "definition": "Enum of a DocumentAtom's document-layout ROLE: title | abstract | section_header | paragraph | quote | citation | figure | chart | table | equation | diagram | author | date | keyword. DISTINCT from AtomKind, which classifies a ShardAtom by knowledge kind. 'type' = layout role, not a knowledge kind.",
+    "defined_in": "spiritwriter/models/document.py",
+    "aliases": [
+      "atom type"
+    ]
+  },
+  {
+    "term": "EntitySense",
+    "category": "primitive",
+    "definition": "Optional sense disambiguator on a ShardAtom's entity (the CMC 'Bear Problem', cmc-spec-v0.1.md §5.5): sense_type | scoped_to | domain | gloss | context. Powers the familiarize alignment sense-gate — keeps homonyms apart (Bear the dog vs bear the animal) before any LLM adjudication. DISTINCT from Entity Sense Signature (ESS), the Phalanx content-addressed identity anchor over ess_fields — different concept, dangerously similar name; do not conflate.",
+    "defined_in": "spiritwriter/fabric/shard.py",
+    "aliases": [
+      "entity sense"
+    ]
+  },
+  {
+    "term": "key_definition",
+    "category": "field",
+    "definition": "Optional ShardAtom field — a one-sentence natural-language definition of the atom's key (the EDC 'Define' step from CMC). Lets familiarize alignment match concepts by meaning (database approx datastore) instead of by key spelling. Excluded from the atom's content_hash.",
+    "defined_in": "spiritwriter/fabric/shard.py",
+    "aliases": [
+      "key definition"
+    ]
   },
   {
     "term": "TraceEmitter",

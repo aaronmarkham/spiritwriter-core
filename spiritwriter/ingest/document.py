@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import List, Optional, Dict, Any
 
 from spiritwriter.llm import LLMProvider
+from spiritwriter.llm.anthropic import JSONExtractor
 from spiritwriter.models.document import AtomType, DocumentAtom, DocumentGraph, ContentProfile
 from spiritwriter.classify import ContentClassifier, is_theme_candidate
 
@@ -278,40 +279,15 @@ class DocumentIngestor:
                 pass
 
     def _extract_json(self, response: str) -> Dict[str, Any]:
-        """Extract JSON from LLM response"""
-        import json
+        """Extract JSON from an LLM response.
 
-        # Try to find JSON in response
-        response = response.strip()
-
-        # Look for JSON code blocks
-        if "```json" in response:
-            start = response.find("```json") + 7
-            end = response.find("```", start)
-            if end != -1:
-                json_str = response[start:end].strip()
-            else:
-                json_str = response[start:].strip()
-        elif "```" in response:
-            start = response.find("```") + 3
-            end = response.find("```", start)
-            if end != -1:
-                json_str = response[start:end].strip()
-            else:
-                json_str = response[start:].strip()
-        else:
-            json_str = response
-
+        Delegates to the shared, more robust ``JSONExtractor`` (handles
+        code fences, truncated output, stray prose), preserving this
+        method's graceful ``{}`` fallback on failure.
+        """
         try:
-            return json.loads(json_str)
-        except json.JSONDecodeError:
-            # Try to find just the JSON object
-            start = json_str.find("{")
-            if start != -1:
-                try:
-                    return json.loads(json_str[start:])
-                except json.JSONDecodeError:
-                    pass
+            return JSONExtractor.extract(response)
+        except ValueError:
             return {}
 
 

@@ -23,3 +23,7 @@ examples/*/traces/
 
 # Claude Code
 .claude/
+
+# Coverage artifacts
+.coverage
+htmlcov/

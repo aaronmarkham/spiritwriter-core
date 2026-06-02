@@ -100,12 +100,58 @@ def pubkey_thumbprint(pubkey_bytes: bytes) -> str:
 
 
 @dataclass
+class EntitySense:
+    """Sense disambiguator for an atom's entity — the CMC "Bear Problem".
+
+    Lets alignment tell ``Bear`` the dog from ``bear`` the animal (or
+    ``Postgres`` the datastore from ``Postgres`` a brand) without an
+    embedding stack: same ``scoped_to``/``domain`` ⇒ candidate same
+    entity; an explicit mismatch ⇒ hard-gated apart. Carried as
+    enrichment — NOT part of the atom's content address. See
+    ``docs/specs/cmc-spec-v0.1.md`` §5.5.
+    """
+    sense_type: str                       # proper_name | common_noun | brand | organization | place
+    scoped_to: str | None = None          # parent entity that "owns" this name
+    domain: str | None = None             # e.g. software_project, personal_pet, person
+    gloss: str | None = None              # one-line natural-language sense
+    context: list[str] = field(default_factory=list)  # distinguishing tokens
+
+    def to_dict(self) -> dict[str, Any]:
+        d: dict[str, Any] = {"sense_type": self.sense_type}
+        if self.scoped_to is not None:
+            d["scoped_to"] = self.scoped_to
+        if self.domain is not None:
+            d["domain"] = self.domain
+        if self.gloss is not None:
+            d["gloss"] = self.gloss
+        if self.context:
+            d["context"] = list(self.context)
+        return d
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> EntitySense:
+        return cls(
+            sense_type=d.get("sense_type", "proper_name"),
+            scoped_to=d.get("scoped_to"),
+            domain=d.get("domain"),
+            gloss=d.get("gloss"),
+            context=list(d.get("context", [])),
+        )
+
+
+@dataclass
 class ShardAtom:
     """A single knowledge atom within a shard.
 
     Atoms are the smallest unit of retrievable knowledge.
     Structured atoms have entity/key/value for exact lookup.
     All atoms have text for embedding/FTS.
+
+    ``key_definition`` and ``sense`` are optional CMC enrichments (the
+    EDC "Define" step and the Bear-Problem sense tag). They power
+    definition-/sense-based alignment and are deliberately excluded from
+    ``content_hash`` so enriching an atom doesn't change its identity —
+    see ``docs/specs/cmc-lite-v0.1.md``.
     """
     text: str
     kind: AtomKind = AtomKind.CONTEXT
@@ -114,10 +160,16 @@ class ShardAtom:
     value: str | None = None
     confidence: float = 1.0
     source_ref: str | None = None  # trace event_id or doc reference
+    key_definition: str | None = None   # NL definition of `key` (EDC Define step)
+    sense: EntitySense | None = None     # entity sense disambiguator
 
     @property
     def content_hash(self) -> str:
-        """Content address of this atom."""
+        """Content address of this atom.
+
+        Excludes ``key_definition``/``sense``: they're enrichment over
+        the same underlying fact, so adding them must not fork identity.
+        """
         return _sha256(_canonical_json({
             "text": self.text,
             "kind": self.kind.value,
@@ -141,10 +193,15 @@ class ShardAtom:
             d["confidence"] = self.confidence
         if self.source_ref is not None:
             d["source_ref"] = self.source_ref
+        if self.key_definition is not None:
+            d["key_definition"] = self.key_definition
+        if self.sense is not None:
+            d["sense"] = self.sense.to_dict()
         return d
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> ShardAtom:
+        sense = d.get("sense")
         return cls(
             text=d["text"],
             kind=AtomKind(d.get("kind", "context")),
@@ -153,6 +210,8 @@ class ShardAtom:
             value=d.get("value"),
             confidence=d.get("confidence", 1.0),
             source_ref=d.get("source_ref"),
+            key_definition=d.get("key_definition"),
+            sense=EntitySense.from_dict(sense) if isinstance(sense, dict) else None,
         )
 
 
