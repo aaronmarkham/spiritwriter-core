@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from spiritwriter.llm import AnthropicProvider, DEFAULT_ANTHROPIC_MODEL
+from spiritwriter.llm.anthropic import JSONExtractor
 
 
 class TestModelConfiguration:
@@ -163,3 +164,42 @@ class TestAgentSDKPathModelThreading:
             await provider.query("hello", model="override-model")
 
         fake_options_cls.assert_called_once_with(model="override-model")
+
+
+class TestJSONExtractor:
+    """JSONExtractor.extract — the LLM-JSON parser shared with CSP.
+
+    This is the guarding test neither repo had before the consolidation
+    (spiritwriter-core#76 / claude-studio-producer#15, port step 2).
+    """
+
+    def test_fenced_json_block(self):
+        assert JSONExtractor.extract('```json\n{"a": 1}\n```') == {"a": 1}
+
+    def test_fenced_block_without_language(self):
+        assert JSONExtractor.extract('```\n{"a": 2}\n```') == {"a": 2}
+
+    def test_bare_object(self):
+        assert JSONExtractor.extract('{"a": 3}') == {"a": 3}
+
+    def test_object_embedded_in_prose(self):
+        assert JSONExtractor.extract('Here is the result: {"a": 4} — done.') == {"a": 4}
+
+    def test_truncated_fenced_json_is_repaired(self):
+        # Unclosed array + missing closing brace/fence (LLM output cut off).
+        out = JSONExtractor.extract('```json\n{"a": 5, "b": [1, 2')
+        assert out == {"a": 5, "b": [1, 2]}
+
+    def test_invalid_backslash_escape_is_fixed(self):
+        # A lone backslash (e.g. a Windows path) isn't valid JSON; the
+        # extractor's escape-fix pass should still parse it.
+        out = JSONExtractor.extract(r'```json' + '\n' + r'{"path": "C:\Users\x"}' + '\n```')
+        assert out["path"].startswith("C:")
+
+    def test_empty_response_raises(self):
+        with pytest.raises(ValueError):
+            JSONExtractor.extract("")
+
+    def test_no_json_raises(self):
+        with pytest.raises(ValueError):
+            JSONExtractor.extract("just some prose, no JSON here")
