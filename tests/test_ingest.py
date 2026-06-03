@@ -88,6 +88,15 @@ class TestLoaders:
         with pytest.raises(FileNotFoundError):
             load_documents(tmp_path / "does-not-exist")
 
+    def test_non_utf8_file_skipped_in_dir(self, tmp_path):
+        """A single non-UTF-8 .txt must not abort the whole directory load —
+        it's skipped, the rest still load."""
+        (tmp_path / "good.md").write_text("clean text", encoding="utf-8")
+        (tmp_path / "bad.txt").write_bytes(b"\xff\xfe bad bytes \x80\x81")
+        docs = load_documents(tmp_path)
+        assert set(docs) == {"doc:good.md"}
+        assert docs["doc:good.md"] == "clean text"
+
     def test_unsupported_single_file_raises(self, tmp_path):
         f = tmp_path / "data.bin"
         f.write_bytes(b"\x00\x01")

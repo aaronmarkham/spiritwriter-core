@@ -59,7 +59,7 @@ def load_documents(source: Union[str, Path, Dict[str, str]]) -> Dict[str, str]:
 
     - ``dict``: returned as-is (already-loaded text passes straight through).
     - directory: every supported file at the top level, sorted by name;
-      unsupported files are skipped silently.
+      unsupported or non-decodable files are skipped silently.
     - file: that single document (unsupported format raises).
     """
     if isinstance(source, dict):
@@ -71,7 +71,10 @@ def load_documents(source: Union[str, Path, Dict[str, str]]) -> Dict[str, str]:
             if f.is_file() and f.suffix.lower() in SUPPORTED_SUFFIXES:
                 try:
                     out[f"doc:{f.name}"] = extract_document_text(f)
-                except UnsupportedDocument:
+                except (UnsupportedDocument, UnicodeDecodeError):
+                    # A single non-UTF-8 (or otherwise unreadable) file must
+                    # not abort the whole directory load — skip it, matching
+                    # the skip-unsupported-and-keep-going behavior.
                     continue
         return out
     if path.is_file():
