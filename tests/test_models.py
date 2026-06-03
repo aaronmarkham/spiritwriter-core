@@ -1,21 +1,15 @@
-"""Tests for spiritwriter.models — data models."""
+"""Tests for spiritwriter.models.document — document data models.
+
+Knowledge-model coverage (SourceType, KnowledgeSource, KnowledgeGraph,
+KnowledgeProject, CrossSourceLink, Note, Connection, generate_id) lives in
+test_knowledge_models.py — add new knowledge-model assertions there, not
+here, so the two files don't drift.
+"""
 
 from spiritwriter.models.document import (
     AtomType,
     DocumentAtom,
     DocumentType,
-    ZoneRole,
-    DocumentZone,
-    ContentProfile,
-    DocumentGraph,
-)
-from spiritwriter.models.knowledge import (
-    KnowledgeProject,
-    KnowledgeSource,
-    SourceType,
-    KnowledgeGraph,
-    Note,
-    Connection,
 )
 
 
@@ -54,34 +48,3 @@ class TestDocumentAtom:
 class TestDocumentType:
     def test_enum(self):
         assert DocumentType.SCIENTIFIC_PAPER.value
-
-
-class TestKnowledgeProject:
-    def test_creation(self):
-        proj = KnowledgeProject(project_id="p1", name="test-project")
-        assert proj.name == "test-project"
-        assert proj.sources == {}
-
-    def test_add_source(self):
-        proj = KnowledgeProject(project_id="p1", name="test")
-        src = KnowledgeSource(
-            source_id="s1",
-            source_type=SourceType.PAPER,
-        )
-        proj.sources["s1"] = src
-        assert len(proj.sources) == 1
-
-
-class TestKnowledgeGraph:
-    def test_creation(self):
-        graph = KnowledgeGraph(project_id="p1")
-        assert graph.atoms == {}
-
-
-class TestSourceType:
-    def test_paper(self):
-        assert SourceType.PAPER.value == "paper"
-
-    def test_all_types(self):
-        for t in SourceType:
-            assert isinstance(t.value, str)
