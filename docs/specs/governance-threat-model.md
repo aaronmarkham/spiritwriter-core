@@ -124,7 +124,7 @@ At the Spiritwriter layer, this maps to:
 This is a stronger guarantee than integrity alone. ProofTrail proves you *didn't*
 tamper. Sealed boxes ensure you *can't* — because you can't read the content.
 
-**Source:** `spiritwriter/fabric/crypto.py`, ToorCamp CFP (`docs/specs/toorcamp-2026-cfp.md:22-23`).
+**Source:** `spiritwriter/fabric/crypto.py`, ToorCamp 2026 CFP.
 
 ---
 
@@ -185,7 +185,7 @@ are forced to contribute real value while learning nothing useful."
 - IPFS + Tailscale split transport ensures contributors see only the DHT layer,
   not the operator mesh
 
-**Source:** ToorCamp CFP (`docs/specs/toorcamp-2026-cfp.md:29, 36`).
+**Source:** ToorCamp 2026 CFP.
 
 ---
 
