@@ -15,6 +15,62 @@ from .base import LLMProvider
 DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-6"
 
 
+_SUFFIX_MEDIA_TYPE = {
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+}
+
+
+def _media_type_from_bytes(data: bytes) -> str:
+    """Sniff an image's media type from its magic bytes (defaults to jpeg)."""
+    if data.startswith(b"\xFF\xD8"):
+        return "image/jpeg"
+    if data.startswith(b"\x89PNG"):
+        return "image/png"
+    if data.startswith(b"GIF"):
+        return "image/gif"
+    if data.startswith(b"RIFF") and b"WEBP" in data[:20]:
+        return "image/webp"
+    return "image/jpeg"
+
+
+def _image_source_block(image) -> Dict[str, Any]:
+    """Build an Anthropic image content block from raw bytes, a file path
+    (str/Path), or a pre-formatted ``{"data": base64, "media_type": ...}`` dict."""
+    if isinstance(image, dict):
+        return {
+            "type": "image",
+            "source": {
+                "type": "base64",
+                "media_type": image.get("media_type", "image/jpeg"),
+                "data": image["data"],
+            },
+        }
+    if isinstance(image, (str, Path)):
+        path = Path(image)
+        if not path.exists():
+            raise FileNotFoundError(f"Image not found: {path}")
+        raw = path.read_bytes()
+        media_type = _SUFFIX_MEDIA_TYPE.get(path.suffix.lower()) or _media_type_from_bytes(raw)
+    elif isinstance(image, (bytes, bytearray)):
+        raw = bytes(image)
+        media_type = _media_type_from_bytes(raw)
+    else:
+        raise ValueError(f"unsupported image input: {type(image).__name__}")
+    return {
+        "type": "image",
+        "source": {
+            "type": "base64",
+            "media_type": media_type,
+            "data": base64.standard_b64encode(raw).decode("utf-8"),
+        },
+    }
+
+
+
 class AnthropicProvider(LLMProvider):
     """
     Anthropic Claude LLM provider that implements the LLMProvider interface
@@ -121,7 +177,7 @@ class AnthropicProvider(LLMProvider):
             print(f"[DEBUG] Received response ({len(response_text)} chars)")
             if usage:
                 print(f"[DEBUG] Usage: {usage['input_tokens']} in + {usage['output_tokens']} out = {usage['total_tokens']} total")
-            print(f"[DEBUG] First 500 chars:")
+            print("[DEBUG] First 500 chars:")
             print(response_text[:500])
             print("[DEBUG] ---")
 
@@ -134,53 +190,75 @@ class AnthropicProvider(LLMProvider):
     async def query_with_image(
         self,
         prompt: str,
-        image_data: bytes,
+        image_data: Union[bytes, str, Path, None] = None,
+        system_prompt: Optional[str] = None,
+        return_usage: bool = False,
+        *,
+        image_path: Union[str, Path, None] = None,
+        **kwargs
+    ) -> Union[str, tuple[str, Optional[Dict[str, int]]]]:
+        """Send a query to Claude with one image for vision analysis.
+
+        Args:
+            prompt: The user prompt.
+            image_data: Raw image bytes, OR a file path (str/Path) to an image.
+            system_prompt: Optional system prompt.
+            return_usage: If True, return (response, usage_dict).
+            image_path: Kwarg-only alias for passing a file path — equivalent to
+                passing the path as ``image_data`` (eases callers that named it).
+            **kwargs: Recognized: ``model`` (str) — override the instance model.
+
+        Returns:
+            Response text, or (text, usage_dict) when ``return_usage`` is True.
+
+        Raises:
+            FileNotFoundError: If a path is given and the file does not exist.
+            ValueError: If no image is supplied or the input type is unsupported.
+            ImportError: If the Anthropic SDK is not available.
+        """
+        source = image_path if image_path is not None else image_data
+        if source is None:
+            raise ValueError("query_with_image requires image bytes or a path")
+        return await self._vision_query(
+            prompt, [source], system_prompt, return_usage, kwargs.get("model")
+        )
+
+    async def query_with_images(
+        self,
+        prompt: str,
+        images: list,
         system_prompt: Optional[str] = None,
         return_usage: bool = False,
         **kwargs
     ) -> Union[str, tuple[str, Optional[Dict[str, int]]]]:
+        """Send a query to Claude with multiple images for vision analysis.
+
+        Each item in ``images`` may be raw bytes, a file path (str/Path), or a
+        pre-formatted ``{"data": base64, "media_type": ...}`` dict.
         """
-        Send a query to Claude with an image for vision analysis
+        return await self._vision_query(
+            prompt, list(images), system_prompt, return_usage, kwargs.get("model")
+        )
 
-        Args:
-            prompt: The user prompt
-            image_data: Raw image bytes
-            system_prompt: Optional system prompt
-            return_usage: If True, return (response, usage_dict)
-            **kwargs: Additional provider-specific options. Recognized:
-                - model (str): Override the instance's default model for this call.
+    async def _vision_query(
+        self,
+        prompt: str,
+        images: list,
+        system_prompt: Optional[str],
+        return_usage: bool,
+        model: Optional[str],
+    ) -> Union[str, tuple[str, Optional[Dict[str, int]]]]:
+        """Shared vision path: build image blocks, then call the Anthropic SDK.
 
-        Returns:
-            If return_usage=False: Clean text response from Claude
-            If return_usage=True: Tuple of (response_text, usage_dict or None)
-
-        Raises:
-            ValueError: If image format is not supported
-            ImportError: If Anthropic SDK is not available
+        Image blocks are built before the SDK import, so a missing-file path
+        raises FileNotFoundError regardless of whether the SDK is installed.
         """
-        # Encode image to base64
-        image_b64 = base64.standard_b64encode(image_data).decode("utf-8")
-
-        # Try to determine media type from image bytes (simple detection)
-        if image_data.startswith(b'\xFF\xD8'):
-            media_type = "image/jpeg"
-        elif image_data.startswith(b'\x89PNG'):
-            media_type = "image/png"
-        elif image_data.startswith(b'GIF'):
-            media_type = "image/gif"
-        elif image_data.startswith(b'RIFF') and b'WEBP' in image_data[:20]:
-            media_type = "image/webp"
-        else:
-            # Default to JPEG
-            media_type = "image/jpeg"
+        message_content = [_image_source_block(img) for img in images]
+        message_content.append({"type": "text", "text": prompt})
 
         if self.debug:
-            print(f"\n[DEBUG] Sending vision query")
-            print(f"[DEBUG] Image size: {len(image_data)} bytes")
+            print(f"\n[DEBUG] Sending vision query with {len(images)} image(s)")
 
-        usage = None
-
-        # Vision queries require direct Anthropic SDK
         try:
             import anthropic
 
@@ -192,53 +270,29 @@ class AnthropicProvider(LLMProvider):
                 )
 
             client = anthropic.Anthropic(api_key=api_key)
-
-            # Build message content with image
-            message_content = [
-                {
-                    "type": "image",
-                    "source": {
-                        "type": "base64",
-                        "media_type": media_type,
-                        "data": image_b64,
-                    },
-                },
-                {
-                    "type": "text",
-                    "text": prompt
-                }
-            ]
-
-            # Create message with vision
             create_kwargs = {
-                "model": kwargs.get("model") or self.model,
+                "model": model or self.model,
                 "max_tokens": 4096,
                 "messages": [{"role": "user", "content": message_content}],
             }
-            # Only add system if provided (API doesn't accept None)
             if system_prompt:
                 create_kwargs["system"] = system_prompt
 
             response = client.messages.create(**create_kwargs)
+            response_text = response.content[0].text.strip()
 
-            response_text = response.content[0].text
-
-            # Extract usage from Anthropic SDK response
-            if hasattr(response, 'usage'):
+            usage = None
+            if hasattr(response, "usage"):
                 usage = {
-                    'input_tokens': response.usage.input_tokens,
-                    'output_tokens': response.usage.output_tokens,
-                    'total_tokens': response.usage.input_tokens + response.usage.output_tokens,
+                    "input_tokens": response.usage.input_tokens,
+                    "output_tokens": response.usage.output_tokens,
+                    "total_tokens": response.usage.input_tokens + response.usage.output_tokens,
                 }
 
             if self.debug:
                 print(f"[DEBUG] Received vision response ({len(response_text)} chars)")
 
-            # Return based on return_usage parameter
-            if return_usage:
-                return response_text.strip(), usage
-            else:
-                return response_text.strip()
+            return (response_text, usage) if return_usage else response_text
 
         except ImportError:
             raise ImportError(

@@ -203,3 +203,85 @@ class TestJSONExtractor:
     def test_no_json_raises(self):
         with pytest.raises(ValueError):
             JSONExtractor.extract("just some prose, no JSON here")
+
+
+class TestVisionInputForms:
+    """query_with_image accepts bytes OR a path; query_with_images is multi-image.
+
+    Backported from CSP's ClaudeClient during the consolidation (port step 4,
+    spiritwriter-core#76 / claude-studio-producer#15).
+    """
+
+    @staticmethod
+    def _png(tmp_path):
+        p = tmp_path / "img.png"
+        p.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 32)
+        return p
+
+    @staticmethod
+    def _image_blocks(fake_client):
+        content = fake_client.messages.create.call_args.kwargs["messages"][0]["content"]
+        return [b for b in content if b["type"] == "image"]
+
+    @pytest.mark.asyncio
+    async def test_query_with_image_accepts_path(self, tmp_path):
+        provider = AnthropicProvider(model="m")
+        fake_anthropic, fake_client = _make_fake_anthropic("desc")
+        with patch.dict("sys.modules", {"anthropic": fake_anthropic}), \
+             patch("spiritwriter.llm.anthropic.get_api_key", return_value="k"):
+            out = await provider.query_with_image("p", self._png(tmp_path))
+        assert out == "desc"
+        blocks = self._image_blocks(fake_client)
+        assert len(blocks) == 1
+        assert blocks[0]["source"]["media_type"] == "image/png"
+
+    @pytest.mark.asyncio
+    async def test_query_with_image_path_kwarg_alias(self, tmp_path):
+        provider = AnthropicProvider(model="m")
+        fake_anthropic, fake_client = _make_fake_anthropic("desc")
+        with patch.dict("sys.modules", {"anthropic": fake_anthropic}), \
+             patch("spiritwriter.llm.anthropic.get_api_key", return_value="k"):
+            out = await provider.query_with_image("p", image_path=self._png(tmp_path))
+        assert out == "desc"
+        assert len(self._image_blocks(fake_client)) == 1
+
+    @pytest.mark.asyncio
+    async def test_query_with_image_bytes_still_works(self):
+        provider = AnthropicProvider(model="m")
+        fake_anthropic, fake_client = _make_fake_anthropic("desc")
+        png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
+        with patch.dict("sys.modules", {"anthropic": fake_anthropic}), \
+             patch("spiritwriter.llm.anthropic.get_api_key", return_value="k"):
+            await provider.query_with_image("p", png)
+        blocks = self._image_blocks(fake_client)
+        assert len(blocks) == 1
+        assert blocks[0]["source"]["media_type"] == "image/png"
+
+    @pytest.mark.asyncio
+    async def test_query_with_images_multi_mixed(self, tmp_path):
+        provider = AnthropicProvider(model="m")
+        fake_anthropic, fake_client = _make_fake_anthropic("multi")
+        images = [
+            b"\xff\xd8\xff\x00jpeg-ish",                    # raw bytes
+            self._png(tmp_path),                            # path
+            {"data": "Zm9v", "media_type": "image/webp"},   # pre-formatted dict
+        ]
+        with patch.dict("sys.modules", {"anthropic": fake_anthropic}), \
+             patch("spiritwriter.llm.anthropic.get_api_key", return_value="k"):
+            out = await provider.query_with_images("p", images)
+        assert out == "multi"
+        blocks = self._image_blocks(fake_client)
+        assert len(blocks) == 3
+        assert blocks[2]["source"]["media_type"] == "image/webp"
+
+    @pytest.mark.asyncio
+    async def test_query_with_image_missing_path_raises(self, tmp_path):
+        provider = AnthropicProvider(model="m")
+        with pytest.raises(FileNotFoundError):
+            await provider.query_with_image("p", tmp_path / "nope.png")
+
+    @pytest.mark.asyncio
+    async def test_query_with_image_no_image_raises(self):
+        provider = AnthropicProvider(model="m")
+        with pytest.raises(ValueError):
+            await provider.query_with_image("p")
