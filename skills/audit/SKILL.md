@@ -195,6 +195,26 @@ python -m spiritwriter.audit.verify audits/MyCity \
     --extraction /tmp/audit_workspace/com.example.app_extracted
 ```
 
+### Step 6 — Redact (before publishing)
+
+Keep the full, unredacted audit private. Produce a clean PUBLIC copy where
+every embedded secret is replaced by a deterministic
+`<REDACTED:class fp:sha256[:12]>` token. The same value maps to the same
+token across apps (so a "reused key, N apps" finding survives), evidence
+hashes are preserved (L3 still verifies against the private APK), and the
+trace/witness are re-chained and regenerated.
+
+```bash
+python -m spiritwriter.audit.redact audits/MyCity audits_public/MyCity
+python -m spiritwriter.audit.redact audits/MyCity audits_public/MyCity --strict
+```
+
+A fail-closed gate re-scans the output: if any unhandled secret shape
+survives, the run prints `UNSAFE` and exits non-zero. This is best-effort
+pattern-based redaction of KNOWN shapes — always eyeball the output, scrub
+git history of the originals (BFG / git-filter-repo), and coordinate
+disclosure before publishing.
+
 ## Rizin reference
 
 Binary extraction uses **Rizin** (`rz-bin`). All commands assume `rz-bin`
