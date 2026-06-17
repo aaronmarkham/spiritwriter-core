@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from spiritwriter.llm import AnthropicProvider, DEFAULT_ANTHROPIC_MODEL
+from spiritwriter.llm import AnthropicProvider, DEFAULT_ANTHROPIC_MODEL, MockLLMProvider
 from spiritwriter.llm.anthropic import JSONExtractor
 
 
@@ -285,3 +285,53 @@ class TestVisionInputForms:
         provider = AnthropicProvider(model="m")
         with pytest.raises(ValueError):
             await provider.query_with_image("p")
+
+    @pytest.mark.asyncio
+    async def test_query_with_images_empty_raises(self):
+        provider = AnthropicProvider(model="m")
+        with pytest.raises(ValueError):
+            await provider.query_with_images("p", [])
+
+    @pytest.mark.asyncio
+    async def test_preformatted_dict_missing_data_raises(self):
+        provider = AnthropicProvider(model="m")
+        with pytest.raises(ValueError):
+            await provider.query_with_images("p", [{"media_type": "image/png"}])
+
+    @pytest.mark.asyncio
+    async def test_vision_return_usage_tuple(self):
+        provider = AnthropicProvider(model="m")
+        fake_anthropic, fake_client = _make_fake_anthropic("desc")
+        png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
+        with patch.dict("sys.modules", {"anthropic": fake_anthropic}), \
+             patch("spiritwriter.llm.anthropic.get_api_key", return_value="k"):
+            out = await provider.query_with_image("p", png, return_usage=True)
+        assert isinstance(out, tuple) and len(out) == 2
+        text, usage = out
+        assert text == "desc"
+        assert usage["total_tokens"] == 2
+
+    @pytest.mark.asyncio
+    async def test_system_prompt_reaches_create_kwargs(self):
+        provider = AnthropicProvider(model="m")
+        fake_anthropic, fake_client = _make_fake_anthropic("desc")
+        png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
+        with patch.dict("sys.modules", {"anthropic": fake_anthropic}), \
+             patch("spiritwriter.llm.anthropic.get_api_key", return_value="k"):
+            await provider.query_with_image("p", png, system_prompt="be terse")
+        assert fake_client.messages.create.call_args.kwargs["system"] == "be terse"
+
+
+class TestMockProviderVisionContract:
+    """The mock must honor the same vision contract as AnthropicProvider, so
+    CSP's mock-mode tests don't AttributeError/TypeError on the new forms."""
+
+    @pytest.mark.asyncio
+    async def test_mock_query_with_image_path_alias(self):
+        mock = MockLLMProvider("ok")
+        assert await mock.query_with_image("p", image_path="whatever.png") == "ok"
+
+    @pytest.mark.asyncio
+    async def test_mock_query_with_images(self):
+        mock = MockLLMProvider("ok")
+        assert await mock.query_with_images("p", [b"a", b"b"]) == "ok"

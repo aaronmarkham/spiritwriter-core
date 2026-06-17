@@ -37,10 +37,12 @@ def _media_type_from_bytes(data: bytes) -> str:
     return "image/jpeg"
 
 
-def _image_source_block(image) -> Dict[str, Any]:
+def _image_source_block(image: Union[bytes, bytearray, str, Path, dict]) -> Dict[str, Any]:
     """Build an Anthropic image content block from raw bytes, a file path
     (str/Path), or a pre-formatted ``{"data": base64, "media_type": ...}`` dict."""
     if isinstance(image, dict):
+        if "data" not in image:
+            raise ValueError("pre-formatted image dict must have a 'data' key")
         return {
             "type": "image",
             "source": {
@@ -68,7 +70,6 @@ def _image_source_block(image) -> Dict[str, Any]:
             "data": base64.standard_b64encode(raw).decode("utf-8"),
         },
     }
-
 
 
 class AnthropicProvider(LLMProvider):
@@ -204,8 +205,9 @@ class AnthropicProvider(LLMProvider):
             image_data: Raw image bytes, OR a file path (str/Path) to an image.
             system_prompt: Optional system prompt.
             return_usage: If True, return (response, usage_dict).
-            image_path: Kwarg-only alias for passing a file path — equivalent to
-                passing the path as ``image_data`` (eases callers that named it).
+            image_path: Kwarg-only alias for passing a file path. If both
+                ``image_data`` and ``image_path`` are given, ``image_path``
+                takes precedence.
             **kwargs: Recognized: ``model`` (str) — override the instance model.
 
         Returns:
@@ -226,7 +228,7 @@ class AnthropicProvider(LLMProvider):
     async def query_with_images(
         self,
         prompt: str,
-        images: list,
+        images: list[Union[bytes, bytearray, str, Path, dict]],
         system_prompt: Optional[str] = None,
         return_usage: bool = False,
         **kwargs
@@ -243,7 +245,7 @@ class AnthropicProvider(LLMProvider):
     async def _vision_query(
         self,
         prompt: str,
-        images: list,
+        images: list[Union[bytes, bytearray, str, Path, dict]],
         system_prompt: Optional[str],
         return_usage: bool,
         model: Optional[str],
@@ -253,6 +255,8 @@ class AnthropicProvider(LLMProvider):
         Image blocks are built before the SDK import, so a missing-file path
         raises FileNotFoundError regardless of whether the SDK is installed.
         """
+        if not images:
+            raise ValueError("at least one image is required")
         message_content = [_image_source_block(img) for img in images]
         message_content.append({"type": "text", "text": prompt})
 

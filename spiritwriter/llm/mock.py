@@ -46,9 +46,23 @@ class MockLLMProvider(LLMProvider):
         return (text, dict(_ZERO_USAGE)) if return_usage else text
 
     async def query_with_image(
-        self, prompt: str, image_data: bytes, *, return_usage: bool = False, **kwargs
+        self,
+        prompt: str,
+        image_data: Any = None,
+        *,
+        image_path: Any = None,
+        return_usage: bool = False,
+        **kwargs,
     ) -> Any:
-        # Mock ignores the image; same scripted resolution as text queries.
+        # Mock ignores the image (bytes or path); same scripted resolution.
+        # image_data=None default + image_path= kwarg mirror AnthropicProvider
+        # so callers using either form hit the same contract on the mock.
+        return await self.query(prompt, return_usage=return_usage, **kwargs)
+
+    async def query_with_images(
+        self, prompt: str, images: Any, *, return_usage: bool = False, **kwargs
+    ) -> Any:
+        # Mock ignores the images; same scripted resolution as text queries.
         return await self.query(prompt, return_usage=return_usage, **kwargs)
 
     def _resolve(self, prompt: str) -> str:
