@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from spiritwriter.llm import AnthropicProvider, DEFAULT_ANTHROPIC_MODEL
+from spiritwriter.llm import AnthropicProvider, DEFAULT_ANTHROPIC_MODEL, MockLLMProvider
 from spiritwriter.llm.anthropic import JSONExtractor
 
 
@@ -203,3 +203,135 @@ class TestJSONExtractor:
     def test_no_json_raises(self):
         with pytest.raises(ValueError):
             JSONExtractor.extract("just some prose, no JSON here")
+
+
+class TestVisionInputForms:
+    """query_with_image accepts bytes OR a path; query_with_images is multi-image.
+
+    Backported from CSP's ClaudeClient during the consolidation (port step 4,
+    spiritwriter-core#76 / claude-studio-producer#15).
+    """
+
+    @staticmethod
+    def _png(tmp_path):
+        p = tmp_path / "img.png"
+        p.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 32)
+        return p
+
+    @staticmethod
+    def _image_blocks(fake_client):
+        content = fake_client.messages.create.call_args.kwargs["messages"][0]["content"]
+        return [b for b in content if b["type"] == "image"]
+
+    @pytest.mark.asyncio
+    async def test_query_with_image_accepts_path(self, tmp_path):
+        provider = AnthropicProvider(model="m")
+        fake_anthropic, fake_client = _make_fake_anthropic("desc")
+        with patch.dict("sys.modules", {"anthropic": fake_anthropic}), \
+             patch("spiritwriter.llm.anthropic.get_api_key", return_value="k"):
+            out = await provider.query_with_image("p", self._png(tmp_path))
+        assert out == "desc"
+        blocks = self._image_blocks(fake_client)
+        assert len(blocks) == 1
+        assert blocks[0]["source"]["media_type"] == "image/png"
+
+    @pytest.mark.asyncio
+    async def test_query_with_image_path_kwarg_alias(self, tmp_path):
+        provider = AnthropicProvider(model="m")
+        fake_anthropic, fake_client = _make_fake_anthropic("desc")
+        with patch.dict("sys.modules", {"anthropic": fake_anthropic}), \
+             patch("spiritwriter.llm.anthropic.get_api_key", return_value="k"):
+            out = await provider.query_with_image("p", image_path=self._png(tmp_path))
+        assert out == "desc"
+        assert len(self._image_blocks(fake_client)) == 1
+
+    @pytest.mark.asyncio
+    async def test_query_with_image_bytes_still_works(self):
+        provider = AnthropicProvider(model="m")
+        fake_anthropic, fake_client = _make_fake_anthropic("desc")
+        png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
+        with patch.dict("sys.modules", {"anthropic": fake_anthropic}), \
+             patch("spiritwriter.llm.anthropic.get_api_key", return_value="k"):
+            await provider.query_with_image("p", png)
+        blocks = self._image_blocks(fake_client)
+        assert len(blocks) == 1
+        assert blocks[0]["source"]["media_type"] == "image/png"
+
+    @pytest.mark.asyncio
+    async def test_query_with_images_multi_mixed(self, tmp_path):
+        provider = AnthropicProvider(model="m")
+        fake_anthropic, fake_client = _make_fake_anthropic("multi")
+        images = [
+            b"\xff\xd8\xff\x00jpeg-ish",                    # raw bytes
+            self._png(tmp_path),                            # path
+            {"data": "Zm9v", "media_type": "image/webp"},   # pre-formatted dict
+        ]
+        with patch.dict("sys.modules", {"anthropic": fake_anthropic}), \
+             patch("spiritwriter.llm.anthropic.get_api_key", return_value="k"):
+            out = await provider.query_with_images("p", images)
+        assert out == "multi"
+        blocks = self._image_blocks(fake_client)
+        assert len(blocks) == 3
+        assert blocks[2]["source"]["media_type"] == "image/webp"
+
+    @pytest.mark.asyncio
+    async def test_query_with_image_missing_path_raises(self, tmp_path):
+        provider = AnthropicProvider(model="m")
+        with pytest.raises(FileNotFoundError):
+            await provider.query_with_image("p", tmp_path / "nope.png")
+
+    @pytest.mark.asyncio
+    async def test_query_with_image_no_image_raises(self):
+        provider = AnthropicProvider(model="m")
+        with pytest.raises(ValueError):
+            await provider.query_with_image("p")
+
+    @pytest.mark.asyncio
+    async def test_query_with_images_empty_raises(self):
+        provider = AnthropicProvider(model="m")
+        with pytest.raises(ValueError):
+            await provider.query_with_images("p", [])
+
+    @pytest.mark.asyncio
+    async def test_preformatted_dict_missing_data_raises(self):
+        provider = AnthropicProvider(model="m")
+        with pytest.raises(ValueError):
+            await provider.query_with_images("p", [{"media_type": "image/png"}])
+
+    @pytest.mark.asyncio
+    async def test_vision_return_usage_tuple(self):
+        provider = AnthropicProvider(model="m")
+        fake_anthropic, fake_client = _make_fake_anthropic("desc")
+        png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
+        with patch.dict("sys.modules", {"anthropic": fake_anthropic}), \
+             patch("spiritwriter.llm.anthropic.get_api_key", return_value="k"):
+            out = await provider.query_with_image("p", png, return_usage=True)
+        assert isinstance(out, tuple) and len(out) == 2
+        text, usage = out
+        assert text == "desc"
+        assert usage["total_tokens"] == 2
+
+    @pytest.mark.asyncio
+    async def test_system_prompt_reaches_create_kwargs(self):
+        provider = AnthropicProvider(model="m")
+        fake_anthropic, fake_client = _make_fake_anthropic("desc")
+        png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
+        with patch.dict("sys.modules", {"anthropic": fake_anthropic}), \
+             patch("spiritwriter.llm.anthropic.get_api_key", return_value="k"):
+            await provider.query_with_image("p", png, system_prompt="be terse")
+        assert fake_client.messages.create.call_args.kwargs["system"] == "be terse"
+
+
+class TestMockProviderVisionContract:
+    """The mock must honor the same vision contract as AnthropicProvider, so
+    CSP's mock-mode tests don't AttributeError/TypeError on the new forms."""
+
+    @pytest.mark.asyncio
+    async def test_mock_query_with_image_path_alias(self):
+        mock = MockLLMProvider("ok")
+        assert await mock.query_with_image("p", image_path="whatever.png") == "ok"
+
+    @pytest.mark.asyncio
+    async def test_mock_query_with_images(self):
+        mock = MockLLMProvider("ok")
+        assert await mock.query_with_images("p", [b"a", b"b"]) == "ok"
