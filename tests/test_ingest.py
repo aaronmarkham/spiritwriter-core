@@ -230,3 +230,72 @@ class TestFigureExtraction:
         figs = [a for a in graph.atoms.values() if a.atom_type == AtomType.FIGURE]
         assert figs, "expected a FIGURE atom"
         assert any(a.content == description for a in figs)
+
+
+# ── Extraction internals (carried from CSP's test_document_ingestor) ──
+
+
+@pytest.fixture
+def bold_pdf(tmp_path):
+    """A 1-page PDF with a bold heading + body, for bold/metadata extraction."""
+    fitz = pytest.importorskip("fitz")
+    path = tmp_path / "paper.pdf"
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_text((72, 80), "Machine Learning for Climate Analysis",
+                     fontsize=20, fontname="helv")
+    page.insert_text((72, 120), "1. Introduction", fontsize=14, fontname="hebo")  # bold
+    page.insert_text((72, 150),
+                     "Climate change poses challenges. Machine learning offers tools.",
+                     fontsize=11, fontname="helv")
+    doc.save(str(path))
+    doc.close()
+    return path
+
+
+class TestExtractionInternals:
+    """Free-function extraction internals — moved here when CSP's ingestor
+    consolidated onto spiritwriter (port step 5)."""
+
+    def test_blocks_carry_metadata(self, bold_pdf):
+        from spiritwriter.ingest.extraction import extract_with_pymupdf
+        ext = extract_with_pymupdf(bold_pdf)
+        assert ext.page_count == 1
+        assert ext.text_blocks
+        for block in ext.text_blocks:
+            assert {"text", "page", "bbox", "font_size", "is_bold"} <= block.keys()
+            assert isinstance(block["page"], int)
+            assert len(block["bbox"]) == 4
+
+    def test_detects_bold(self, bold_pdf):
+        from spiritwriter.ingest.extraction import extract_with_pymupdf
+        ext = extract_with_pymupdf(bold_pdf)
+        assert any(b["is_bold"] for b in ext.text_blocks)
+
+    def test_metadata_keys_present(self, bold_pdf):
+        from spiritwriter.ingest.extraction import extract_with_pymupdf
+        ext = extract_with_pymupdf(bold_pdf)
+        assert "title" in ext.metadata and "author" in ext.metadata
+
+    def test_find_caption_hit(self):
+        from spiritwriter.ingest.extraction import find_caption
+        img_info = {"page": 0, "bbox": (100, 100, 400, 300)}
+        text_blocks = [
+            {"page": 0, "text": "Some paragraph text", "bbox": (100, 50, 400, 90)},
+            {"page": 0, "text": "Figure 1: Temperature over time", "bbox": (100, 310, 400, 330)},
+            {"page": 0, "text": "Another paragraph", "bbox": (100, 400, 400, 450)},
+        ]
+        assert find_caption(img_info, text_blocks) == "Figure 1: Temperature over time"
+
+    def test_find_caption_no_match(self):
+        from spiritwriter.ingest.extraction import find_caption
+        img_info = {"page": 0, "bbox": (100, 100, 400, 300)}
+        text_blocks = [{"page": 0, "text": "Regular text", "bbox": (100, 310, 400, 330)}]
+        assert find_caption(img_info, text_blocks) is None
+
+    def test_extract_mock_topics(self):
+        from spiritwriter.ingest.mock import extract_mock_topics
+        topics = extract_mock_topics(
+            "Machine Learning for Climate Analysis using Deep Neural Networks")
+        assert 0 < len(topics) <= 3
+        assert any("machine" in t or "learning" in t or "climate" in t for t in topics)
