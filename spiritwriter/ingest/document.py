@@ -246,37 +246,20 @@ class DocumentIngestor:
         return graph
 
     async def _describe_image(self, img_info: Dict[str, Any]) -> str:
-        """Use LLM vision to describe an extracted image"""
-        import tempfile
-        import os
+        """Use LLM vision to describe an extracted image."""
+        prompt = (
+            "Describe this figure/image from an academic paper. "
+            "What does it show? Include key data points, axes labels, trends, or diagram elements. "
+            "Be concise but specific (2-3 sentences)."
+        )
 
-        img_bytes = img_info["image_bytes"]
-        ext = img_info.get("ext", "png")
-
-        # Save image bytes to temp file for LLM provider
-        with tempfile.NamedTemporaryFile(mode='wb', suffix=f'.{ext}', delete=False) as tmp:
-            tmp.write(img_bytes)
-            tmp_path = tmp.name
-
-        try:
-            prompt = (
-                "Describe this figure/image from an academic paper. "
-                "What does it show? Include key data points, axes labels, trends, or diagram elements. "
-                "Be concise but specific (2-3 sentences)."
-            )
-
-            # Use vision-capable query with file path
-            response = await self.llm_provider.query_with_image(
-                prompt=prompt,
-                image_data=img_bytes,
-            )
-            return response.strip()
-        finally:
-            # Clean up temp file
-            try:
-                os.unlink(tmp_path)
-            except Exception:
-                pass
+        # The provider's vision API accepts the raw image bytes directly, so
+        # there's no need to stage them through a temp file.
+        response = await self.llm_provider.query_with_image(
+            prompt=prompt,
+            image_data=img_info["image_bytes"],
+        )
+        return response.strip()
 
     def _extract_json(self, response: str) -> Dict[str, Any]:
         """Extract JSON from an LLM response.
