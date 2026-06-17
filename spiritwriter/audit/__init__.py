@@ -29,6 +29,12 @@ Typical flow:
 The audit module is platform-agnostic — any APK can be audited, and the
 canonical findings registry ships with common tracking SDKs (Firebase,
 AdMob, AWS Amplify, Appriss VINE, etc.) plus whatever new SDKs you seed.
+
+Lifecycle:  seed -> provenance -> verify -> redact. The redact stage
+(``spiritwriter.audit.redact``) produces an internally-consistent PUBLIC
+copy of an audit tree with embedded secrets replaced by deterministic
+``<REDACTED:class fp:...>`` tokens, evidence hashes preserved (L3 still
+verifies), and a fail-closed residual gate over the output.
 """
 
 from spiritwriter.audit.provenance import (

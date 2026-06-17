@@ -50,6 +50,7 @@ Usage::
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import json
 import math
@@ -68,10 +69,17 @@ __all__ = [
     "redact_dir",
     "redact_tree",
     "residual_scan",
+    "short_flagged_values",
     "_literal_patterns",
     "REDACT_PATTERNS",
     "DETECT_ONLY_PATTERNS",
 ]
+
+
+# Minimum length for a flagged value to be swept from free text. Shorter
+# values are too risky to sweep verbatim (they would rewrite common fragments
+# in prose); they are still tokenized in their structured field.
+_MIN_LITERAL_LEN = 8
 
 
 def _fp(value: str) -> str:
@@ -92,7 +100,10 @@ REDACT_PATTERNS: list[tuple[str, re.Pattern]] = [
     ("aws_cognito_user_pool", re.compile(r"\b[a-z]{2}-[a-z]+-\d_[A-Za-z0-9]{8,}\b")),
     # Host-based patterns accept an OPTIONAL scheme so a bare-host mention in
     # prose (e.g. "yiqvcldlxa.execute-api.us-east-1.amazonaws.com") is caught,
-    # not just the full https:// endpoint form.
+    # not just the full https:// endpoint form. The trailing ``[^\s"']*`` greedily
+    # consumes the path/query, so an endpoint not delimited by whitespace/quotes
+    # (e.g. "...amazonaws.com/dev,more") may swallow adjacent prose. This errs
+    # toward over-redaction, so it stays fail-safe.
     ("aws_api_gateway",
      re.compile(r"(?:https?://)?[a-z0-9]+\.execute-api\.[a-z0-9-]+\.amazonaws\.com[^\s\"']*")),
     ("firebase_app_id", re.compile(r"\b\d:\d{6,}:android:[0-9a-f]+\b")),
@@ -100,8 +111,11 @@ REDACT_PATTERNS: list[tuple[str, re.Pattern]] = [
     ("firebase_bucket",
      re.compile(r"\b[a-z0-9][a-z0-9._-]*\.(?:firebasestorage\.app|appspot\.com)\b")),
     ("oauth_client_id", re.compile(r"\b\d+-[a-z0-9]+\.apps\.googleusercontent\.com\b")),
-    ("cdn_endpoint", re.compile(r"(?:https?://)?cdn\.myocv\.com/[^\s\"']*")),
 ]
+# Target-specific endpoints (a single audit subject's CDN host, tenant domain,
+# etc.) are deliberately NOT baked in here — this module is platform-agnostic.
+# Such values are still removed everywhere they appear via the literal sweep
+# (``_literal_patterns``), driven by the audit's own ``hardcoded_secrets`` list.
 
 # Secret shapes we DETECT but do not auto-redact. Their presence in output
 # means a class this tool doesn't handle slipped through — fail closed.
@@ -115,7 +129,7 @@ DETECT_ONLY_PATTERNS: list[tuple[str, re.Pattern]] = [
 ]
 
 
-def scrub_text(s: str, literals: list[tuple[re.Pattern, str]] = ()) -> str:
+def scrub_text(s: str, literals: tuple[tuple[re.Pattern, str], ...] = ()) -> str:
     if not s:
         return s
     for cls, pat in REDACT_PATTERNS:
@@ -125,7 +139,7 @@ def scrub_text(s: str, literals: list[tuple[re.Pattern, str]] = ()) -> str:
     return s
 
 
-def _scrub_obj(obj, literals: list[tuple[re.Pattern, str]] = ()):
+def _scrub_obj(obj, literals: tuple[tuple[re.Pattern, str], ...] = ()):
     if isinstance(obj, dict):
         return {k: _scrub_obj(v, literals) for k, v in obj.items()}
     if isinstance(obj, list):
@@ -160,17 +174,43 @@ def _literal_patterns(report: dict) -> list[tuple[re.Pattern, str]]:
     non-alphanumeric neighborhood, so a value can never match inside a longer
     token — in particular it can never corrupt a preserved 64-hex evidence
     hash.
+
+    Values shorter than ``_MIN_LITERAL_LEN`` are skipped here as a guard
+    against catastrophic over-matching (a 2–3 char "secret" would rewrite
+    every occurrence of that fragment in prose). Such a value is still
+    tokenized in its structured ``value`` field by ``redact_report``, but it is
+    NOT swept from free text — so it can survive verbatim in evidence, the
+    narrative, or the trace. ``redact_dir`` surfaces any such values via its
+    ``short_unswept`` count so the human reviewer knows to check them by eye.
+    Use ``short_flagged_values`` to enumerate them.
     """
     pats: list[tuple[re.Pattern, str]] = []
     seen: set[str] = set()
     for s in report.get("hardcoded_secrets", []):
         v = s.get("value")
-        if isinstance(v, str) and len(v) >= 8 and v not in seen:
+        if isinstance(v, str) and len(v) >= _MIN_LITERAL_LEN and v not in seen:
             seen.add(v)
             token = _token(_class_for_value(v), v)
             pat = re.compile(r"(?<![0-9A-Za-z])" + re.escape(v) + r"(?![0-9A-Za-z])")
             pats.append((pat, token))
     return pats
+
+
+def short_flagged_values(report: dict) -> list[str]:
+    """Flagged secret values too short for the literal sweep (see ``_MIN_LITERAL_LEN``).
+
+    These are tokenized in their structured ``value`` field but not removed
+    from free text, so a reviewer should confirm they don't appear verbatim
+    elsewhere.
+    """
+    seen: set[str] = set()
+    short: list[str] = []
+    for s in report.get("hardcoded_secrets", []):
+        v = s.get("value")
+        if isinstance(v, str) and 0 < len(v) < _MIN_LITERAL_LEN and v not in seen:
+            seen.add(v)
+            short.append(v)
+    return short
 
 
 def redact_report(report: dict, literals: list[tuple[re.Pattern, str]] | None = None) -> dict:
@@ -179,9 +219,13 @@ def redact_report(report: dict, literals: list[tuple[re.Pattern, str]] | None = 
     ``literals`` (exact-value redactors) default to those derived from this
     report. ``redact_dir`` passes a shared set so the report and its trace
     tokenize identical values identically.
+
+    The input ``report`` is never mutated — it is deep-copied at entry, so a
+    caller reusing the original dict keeps its live values.
     """
     if literals is None:
         literals = _literal_patterns(report)
+    report = copy.deepcopy(report)
     for s in report.get("hardcoded_secrets", []):
         if isinstance(s.get("value"), str):
             s["value"] = _token(_class_for_value(s["value"]), s["value"])
@@ -195,7 +239,7 @@ def redact_report(report: dict, literals: list[tuple[re.Pattern, str]] | None = 
 
 
 def rechain(events: list[dict], new_report_sha: str | None,
-            literals: list[tuple[re.Pattern, str]] = ()) -> list[dict]:
+            literals: tuple[tuple[re.Pattern, str], ...] = ()) -> list[dict]:
     """Scrub event payloads and recompute the hash chain in order."""
     prev = None
     out = []
@@ -215,9 +259,20 @@ def rechain(events: list[dict], new_report_sha: str | None,
 
 
 def redact_dir(src: Path, dst: Path) -> dict:
-    """Redact one audit dir; returns {chain_ok, events, secrets}."""
+    """Redact one audit dir; returns {chain_ok, events, secrets, short_unswept}.
+
+    Requires both ``report.json`` and ``trace.jsonl`` in ``src``. Both are
+    checked up front so a dir missing its trace fails before any output is
+    written (no half-redacted bundle left behind).
+    """
+    src = Path(src)
+    report_src, trace_src = src / "report.json", src / "trace.jsonl"
+    if not report_src.exists():
+        raise FileNotFoundError(f"no report.json in {src}")
+    if not trace_src.exists():
+        raise FileNotFoundError(f"no trace.jsonl beside {report_src}")
     dst.mkdir(parents=True, exist_ok=True)
-    raw_report = json.loads((src / "report.json").read_text(encoding="utf-8"))
+    raw_report = json.loads(report_src.read_text(encoding="utf-8"))
     # Derive exact-value redactors from the audit's own secret list, then use
     # the SAME set for report and trace so every flagged value tokenizes
     # identically everywhere it appears.
@@ -229,7 +284,7 @@ def redact_dir(src: Path, dst: Path) -> dict:
 
     events = [
         json.loads(line)
-        for line in (src / "trace.jsonl").read_text(encoding="utf-8").splitlines()
+        for line in trace_src.read_text(encoding="utf-8").splitlines()
         if line.strip()
     ]
     events = rechain(events, new_report_sha, literals)
@@ -243,7 +298,8 @@ def redact_dir(src: Path, dst: Path) -> dict:
         json.dumps(witness, indent=2, ensure_ascii=False), encoding="utf-8"
     )
     return {"chain_ok": verify_chain(events), "events": len(events),
-            "secrets": len(report.get("hardcoded_secrets", []))}
+            "secrets": len(report.get("hardcoded_secrets", [])),
+            "short_unswept": short_flagged_values(raw_report)}
 
 
 def _shannon(s: str) -> float:
@@ -265,10 +321,15 @@ def residual_scan(root: Path, strict: bool = False) -> list[tuple[str, str, str]
     findings: list[tuple[str, str, str]] = []
     hexhash = re.compile(r"\b[0-9a-f]{32,64}\b")
     keyish = re.compile(r"\b[A-Za-z0-9_\-]{20,}\b")
+    # The redactor's own tokens (``<REDACTED:class fp:...>``) must never trip a
+    # gate. They don't today only because of the space before ``fp:``; strip the
+    # spans up front so the gate stays correct even if the token format changes.
+    redacted_span = re.compile(r"<REDACTED:[^>]*>")
     for fp in root.rglob("*"):
         if not fp.is_file():
             continue
-        text = fp.read_text(encoding="utf-8", errors="replace")
+        raw = fp.read_text(encoding="utf-8", errors="replace")
+        text = redacted_span.sub("", raw)
         rel = str(fp.relative_to(root))
         for cls, pat in REDACT_PATTERNS:
             for m in pat.finditer(text):
@@ -287,16 +348,26 @@ def residual_scan(root: Path, strict: bool = False) -> list[tuple[str, str, str]
 
 
 def redact_tree(src: Path, out: Path, strict: bool = False) -> dict:
-    """Redact every audit dir under ``src`` into ``out``; gate on residuals."""
+    """Redact every audit dir under ``src`` into ``out``; gate on residuals.
+
+    A ``report.json`` with no sibling ``trace.jsonl`` is skipped (recorded in
+    ``skipped``) rather than aborting the whole tree mid-run with a partial
+    bundle on disk.
+    """
     src, out = Path(src), Path(out)
     audit_dirs = sorted({p.parent for p in src.rglob("report.json")})
     results = {}
+    skipped = {}
     for d in audit_dirs:
-        rel = d.relative_to(src)
-        results[str(rel)] = redact_dir(d, out / rel)
+        rel = str(d.relative_to(src))
+        if not (d / "trace.jsonl").exists():
+            skipped[rel] = "no trace.jsonl beside report.json"
+            continue
+        results[rel] = redact_dir(d, out / rel)
     leaks = residual_scan(out, strict=strict)
     chain_ok = all(r["chain_ok"] for r in results.values())
-    return {"dirs": results, "leaks": leaks, "safe": chain_ok and not leaks}
+    return {"dirs": results, "skipped": skipped, "leaks": leaks,
+            "safe": chain_ok and not leaks}
 
 
 def main() -> None:
@@ -314,6 +385,12 @@ def main() -> None:
     for rel, r in summary["dirs"].items():
         flag = "OK " if r["chain_ok"] else "FAIL-CHAIN"
         print(f"  [{flag}] {rel}  ({r['events']} events, {r['secrets']} secrets fingerprinted)")
+        for v in r.get("short_unswept", []):
+            print(f"    [WARN] flagged value too short to sweep from free text "
+                  f"(<{_MIN_LITERAL_LEN} chars) — verify by eye: {v!r}")
+
+    for rel, why in summary.get("skipped", {}).items():
+        print(f"  [SKIP] {rel}  ({why})")
 
     if summary["leaks"]:
         print(f"\nUNSAFE — {len(summary['leaks'])} residual finding(s):")

@@ -4,12 +4,15 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from spiritwriter.audit.redact import (
     DETECT_ONLY_PATTERNS,
     redact_dir,
     redact_tree,
     residual_scan,
     scrub_text,
+    short_flagged_values,
 )
 from spiritwriter.audit.verify import verify_l1, verify_l2
 
@@ -158,3 +161,81 @@ def test_residual_gate_flags_unhandled_class(tmp_path: Path):
     leaky.write_text("aws_key=AKIAIOSFODNN7EXAMPLE\n", encoding="utf-8")
     findings = residual_scan(tmp_path)
     assert any(cls.startswith("unhandled:aws_access_key_id") for _, cls, _ in findings)
+
+
+def test_clean_redaction_tokens_never_trip_gate(tmp_path: Path):
+    # The redactor's own <REDACTED:...> tokens must never be reported as leaks,
+    # even in the colon-format that WOULD otherwise match generic_bearer
+    # (token:<12+ chars>). residual_scan strips the spans before scanning.
+    f = tmp_path / "report.json"
+    f.write_text(
+        '{"a": "<REDACTED:slack_token:abcdefghijkl>",'
+        ' "b": "<REDACTED:embedded_secret fp:1a2b3c4d5e6f>"}',
+        encoding="utf-8",
+    )
+    assert residual_scan(tmp_path) == []
+
+
+def test_strict_flags_high_entropy_string(tmp_path: Path):
+    # A key-like high-entropy run (not a hash, not a redaction token) is flagged
+    # only under --strict; the default pass leaves it alone.
+    f = tmp_path / "report.json"
+    f.write_text('{"k": "Zk9Q2mWp7xR4tLvN8sJ3cY6bF1dH0gA5eU2iO"}', encoding="utf-8")
+    assert residual_scan(tmp_path, strict=False) == []
+    strict = residual_scan(tmp_path, strict=True)
+    assert any(cls == "strict:high_entropy" for _, cls, _ in strict)
+
+
+def test_short_flagged_value_reported_and_not_swept(tmp_path: Path):
+    # A flagged value shorter than the literal-sweep floor is tokenized in its
+    # structured field but NOT removed from free text — and redact_dir surfaces
+    # it so a reviewer knows to check by eye.
+    src = tmp_path / "src" / "App"
+    src.mkdir(parents=True)
+    short = "abc123"  # 6 chars, below the 8-char sweep floor
+    report = {
+        "package_name": "com.test.app",
+        "hardcoded_secrets": [
+            {"type": "Short token", "value": short, "risk": "low", "notes": "short"},
+        ],
+        "summary": {"narrative": f"Mentions {short} in prose."},
+    }
+    (src / "report.json").write_text(json.dumps(report), encoding="utf-8")
+    (src / "trace.jsonl").write_text(
+        json.dumps({"type": "audit_input_registered", "run_id": "r", "event_id": "e1",
+                    "ts": "2026-01-01T00:00:00Z", "agent_id": "t", "prev_event_hash": None,
+                    "package_name": "com.test.app", "apk_sha256": "a" * 64,
+                    "apk_size_bytes": 1, "download_source": "test"}) + "\n",
+        encoding="utf-8",
+    )
+
+    res = redact_dir(src, tmp_path / "out" / "App")
+    assert short in res["short_unswept"]
+    assert short_flagged_values(report) == [short]
+    # Structured value field is still tokenized regardless of length.
+    out_report = json.loads((tmp_path / "out" / "App" / "report.json").read_text())
+    assert out_report["hardcoded_secrets"][0]["value"] != short
+    assert "<REDACTED:" in out_report["hardcoded_secrets"][0]["value"]
+
+
+def test_redact_dir_missing_trace_raises(tmp_path: Path):
+    # No trace.jsonl beside report.json => fail before writing any output.
+    src = tmp_path / "App"
+    src.mkdir()
+    (src / "report.json").write_text('{"package_name": "x"}', encoding="utf-8")
+    out = tmp_path / "out" / "App"
+    with pytest.raises(FileNotFoundError):
+        redact_dir(src, out)
+
+
+def test_redact_tree_skips_dir_missing_trace(tmp_path: Path):
+    # A report-only dir is skipped (not aborted) and leaves no partial output.
+    src = tmp_path / "src" / "App"
+    src.mkdir(parents=True)
+    (src / "report.json").write_text(
+        '{"package_name": "x", "hardcoded_secrets": []}', encoding="utf-8"
+    )
+    out = tmp_path / "out"
+    summary = redact_tree(tmp_path / "src", out)
+    assert "App" in summary["skipped"]
+    assert not (out / "App").exists()
