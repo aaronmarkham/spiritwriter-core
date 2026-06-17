@@ -22,12 +22,6 @@ Read the relevant skill for your task:
 | **audit** | Traced security audit of Android apps — findings + hash-chain + witness | `skills/audit/SKILL.md` |
 | **sw-vocab** | Validate spiritwriter's own terminology in docs/AI-drafts — catches drift, invented terms, deferred-but-claimed terms | `skills/sw-vocab/SKILL.md` |
 
-## Commands
-
-| Command | Purpose | Path |
-|---------|---------|------|
-| `/style` | Apply Aaron's writing voice — auto-detects content type (lesson, docs, blog, spec) | `.claude/commands/style.md` |
-
 ## Examples
 
 `examples/` has four self-contained fabric demos (no LLM, no network). Run any demo with `python examples/NN_xxx/run.py`. Tests: `python -m pytest tests/test_demos.py -v`.
