@@ -45,6 +45,110 @@ manager (`brew install rizin` / `apt install rizin`). Tested with
 | **Witness** | `witness.json` — self-hashing summary binding the APK hash, every extracted file's hash, every finding's evidence, and the final report hash. Tampering with any part invalidates the witness `sha256`. |
 | **4 verification levels** | L1 document integrity, L2 chain integrity, L3 evidence provenance (needs APK), L4 finding derivability (needs extraction). |
 
+## Quick Start — Workshop / Demo Mode
+
+Run these four checkpoints in order against any already-extracted APK. Each produces immediate visible output. The full traced audit (Steps 1–5 below) can run in the background while you walk through them.
+
+```bash
+PKG="com.example.app"                        # change to target package
+DIR="/tmp/audit_workspace/${PKG}_extracted"  # adjust path if needed
+RZ=$(python -c "import shutil; print(shutil.which('rz-bin') or 'rz-bin')")
+```
+
+---
+
+### Checkpoint 1 — "What's in this app?" (~2 min)
+
+Scan the first DEX file for known tracker fingerprints. Instant hits, no analysis needed.
+
+```bash
+"$RZ" -qq -zz -N 8:256 "$DIR"/classes.dex 2>/dev/null \
+  | grep -iE "firebase|admob|facebook|pinpoint|appriss|vine|offenderwatch|kochava|comscore|amplitude|pagead2|ca-app-pub-|TagAlong|AssetTracker|aws-iot" \
+  | sort -u
+```
+
+**What to say:** "This is a public-safety app — it should show you inmate names. Let's see what else it's doing."
+
+---
+
+### Checkpoint 2 — "Who is it calling home to?" (~3 min)
+
+Extract every URL from all DEX files and native libraries. The beacon and analytics domains are the story.
+
+```bash
+python -c "
+import subprocess, re, glob, sys
+
+RZ = '${RZ}'
+DIR = '${DIR}'
+NOISE = {'schemas.android.com', 'www.w3.org', 'www.apache.org', 'example.com'}
+
+urls = set()
+targets = glob.glob(DIR + '/classes*.dex')
+targets += glob.glob(DIR + '/lib/arm64-v8a/*.so') or glob.glob(DIR + '/lib/armeabi-v7a/*.so')
+
+for t in targets:
+    out = subprocess.run([RZ, '-qq', '-zz', '-N', '10:500', t],
+                         capture_output=True).stdout.decode('utf-8', errors='replace')
+    for url in re.findall(r'https?://[^\s\"\'<>]+', out):
+        if url.split('/')[2] not in NOISE:
+            urls.add(url)
+
+for u in sorted(urls):
+    print(u)
+"
+```
+
+**What to say:** "A jail roster app calling `pagead2.googlesyndication.com`. That's Google's ad network. Someone searching for a detained family member is being profiled for ad targeting."
+
+---
+
+### Checkpoint 3 — "What can it access on your phone?" (~2 min)
+
+Pull Android permissions directly from the binary manifest. No decompilation needed.
+
+```bash
+python -c "
+import subprocess, re
+
+RZ = '${RZ}'
+MANIFEST = '${DIR}/AndroidManifest.xml'
+
+DANGEROUS = {
+    'ACCESS_FINE_LOCATION', 'ACCESS_COARSE_LOCATION', 'ACCESS_BACKGROUND_LOCATION',
+    'READ_CONTACTS', 'READ_CALL_LOG', 'READ_SMS',
+    'RECORD_AUDIO', 'CAMERA',
+    'READ_PHONE_STATE', 'READ_PHONE_NUMBERS',
+    'PROCESS_OUTGOING_CALLS',
+}
+
+out = subprocess.run([RZ, '-qq', '-zz', MANIFEST],
+                     capture_output=True).stdout.decode('utf-8', errors='replace')
+perms = sorted(set(re.findall(r'android\.permission\.[A-Z_]+', out)))
+
+print('=== All permissions ===')
+for p in perms:
+    print(p)
+
+flagged = [p for p in perms if p.split('.')[-1] in DANGEROUS]
+if flagged:
+    print()
+    print('=== DANGEROUS ===')
+    for p in flagged:
+        print(p)
+"
+```
+
+**What to say:** "Fine location plus advertising ID collection. Someone visiting a jail, or searching for a detained family member, is being location-profiled."
+
+---
+
+### Checkpoint 4 — Full traced audit (background, ~10 min)
+
+Launch the full agent (Step 2 below) while presenting Checkpoints 1–3. By Q&A time the JSON report, trace chain, and witness document are ready to inspect.
+
+---
+
 ## Workflow
 
 ```
