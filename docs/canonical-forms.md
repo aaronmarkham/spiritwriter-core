@@ -55,9 +55,9 @@ interface, and getting it wrong is the only way to get a wrong answer.
 | Distinguished element — a root, a subject, an owner | rotate it to front | `anchor_cycle(members, anchor)` |
 | Co-equal members, no principal one | any permutation | `orbit_digest(members, generators)` |
 
-`reflect=False` is not a micro-optimization. A pipeline
+`reflect=False` changes what counts as the same structure. A pipeline
 `build → test → stage` and its mirror are different pipelines, and a
-system that merged them would be losing information it cannot recover.
+system that merged them would lose information it cannot recover.
 
 For `canonical_under` and `orbit_digest`, `perms` is a **generating
 set** — the symmetries you can name — and the library closes it under
@@ -103,12 +103,12 @@ No threshold separates the classes, and the per-relation means say why:
 
 The pairs that must stay apart score *higher* than every class that must
 merge. Rewriting a structure changes the text a great deal; altering the
-structure changes it hardly at all. Similarity here is not a weak signal
-to be tuned — it points the wrong way, and no cutoff repairs that.
+structure changes it hardly at all. Similarity points the wrong way
+here, and no cutoff repairs that.
 
 The rule's 100% is true by construction and carries no information on
-its own; canonicalization is exact, so anything less would be a bug
-rather than a tuning problem. The column that means something is wrong
+its own; canonicalization is exact, so anything less is a bug to fix in
+code. The column that means something is wrong
 merges, because a rule that collapsed distinct structures would also
 post perfect recall and be useless.
 
@@ -117,8 +117,7 @@ post perfect recall and be useless.
 **It reads no meaning.** It will never know that Twain and Clemens are
 one person. It collapses exactly the differences you can state in
 advance, and nothing else — everything past that still needs scoring, or
-judgment, or a person. This is a floor under the fuzzy layer, not a
-replacement for it.
+judgment, or a person. This is a floor under the fuzzy layer.
 
 **It runs one way.** Every rotation can be undone, but normalization in
 general cannot. Folding case or dropping a field discards something it
@@ -153,7 +152,7 @@ act: bump the domain tag, do not edit the constant.
 
 ## Prior art
 
-Computing one agreed form for a structure is not a new technique.
+Computing one agreed form for a structure is an old technique.
 Separate fields arrived at it independently over about fifty years:
 canonical SMILES and InChI in chemistry; canonical labelling in graph
 theory (nauty, Traces); RDF dataset canonicalization on the semantic
