@@ -602,3 +602,56 @@ def test_padded_width_changes_the_digest():
     assert cycle_digest([1, 2], key=padded(3)) != cycle_digest(
         [1, 2], key=padded(4)
     )
+
+
+# ── wire stability (golden vectors) ──────────────────────────────────
+#
+# The point of a computed form is that two systems that never
+# communicated agree. That holds only while the bytes are stable, so
+# these pin the whole chain: canonical algorithm, JSON encoding, domain
+# prefix, digest. A change here is a change to what other systems will
+# compute — it breaks agreement with anything already deployed, and is a
+# deliberate, versioned act rather than a refactor. If one of these
+# fails, bump the domain tag; do not update the constant in place.
+
+
+GOLDEN_CYCLE = {
+    ("Cartography", "Map projections", "Geodesy", "Surveying",
+     "Topographic mapping"):
+        "e9174786bb4202590cb11d239fa9b7e5edcfd19f0041c66f0ee4ad039f22e1f5",
+    (): "89f7ec402e6f7268c950335e77219d06ec670942336bdb8f115b4e61805d1991",
+}
+
+
+def test_golden_cycle_digests():
+    for members, expected in GOLDEN_CYCLE.items():
+        assert cycle_digest(list(members)) == expected, members
+
+
+def test_golden_directed_cycle_digest():
+    assert cycle_digest(
+        ["fetch", "parse", "normalize", "store", "index"], reflect=False
+    ) == "3932f33eb019f721478e1f64620eea3cfd3bf2fb6bd798283e34a63e2fbf1bdc"
+
+
+def test_golden_orbit_digest():
+    assert orbit_digest(
+        ["Vaswani", "Shazeer", "Parmar", "Uszkoreit"],
+        [[1, 0, 2, 3], [0, 2, 1, 3], [0, 1, 3, 2]],
+    ) == "4d0adac79e642382201973b7acde848758b8abeb218f91f58b10924bf5167b5a"
+
+
+def test_golden_mixed_type_digest():
+    """Heterogeneous elements hash stably too, not just strings."""
+    assert cycle_digest([1, "b", None, 2.5]) == (
+        "931f82c85beca0e311b0a681db7f3313fa8a69f8a3ff5369ce5d438372985cc2"
+    )
+
+
+def test_golden_digests_survive_the_symmetry():
+    """Every recording of a golden structure lands on its golden digest."""
+    members = list(next(iter(GOLDEN_CYCLE)))
+    expected = GOLDEN_CYCLE[tuple(members)]
+    for rot in _rotations(members):
+        assert cycle_digest(rot) == expected
+        assert cycle_digest(list(rot)[::-1]) == expected

@@ -1,0 +1,111 @@
+{
+  "corpus": "all",
+  "seed": 20260818,
+  "pairs": 200,
+  "positives": 114,
+  "negatives": 86,
+  "rule": {
+    "recall": 1.0,
+    "settled": 114,
+    "false_merges": 0
+  },
+  "score_sweep": [
+    {
+      "threshold": 0.5,
+      "recall": 0.8508771929824561,
+      "caught": 97,
+      "false_merges": 83,
+      "false_merge_rate": 0.9651162790697675
+    },
+    {
+      "threshold": 0.55,
+      "recall": 0.6578947368421053,
+      "caught": 75,
+      "false_merges": 82,
+      "false_merge_rate": 0.9534883720930233
+    },
+    {
+      "threshold": 0.6,
+      "recall": 0.5614035087719298,
+      "caught": 64,
+      "false_merges": 78,
+      "false_merge_rate": 0.9069767441860465
+    },
+    {
+      "threshold": 0.65,
+      "recall": 0.3508771929824561,
+      "caught": 40,
+      "false_merges": 64,
+      "false_merge_rate": 0.7441860465116279
+    },
+    {
+      "threshold": 0.7,
+      "recall": 0.2982456140350877,
+      "caught": 34,
+      "false_merges": 58,
+      "false_merge_rate": 0.6744186046511628
+    },
+    {
+      "threshold": 0.75,
+      "recall": 0.21052631578947367,
+      "caught": 24,
+      "false_merges": 37,
+      "false_merge_rate": 0.43023255813953487
+    },
+    {
+      "threshold": 0.8,
+      "recall": 0.09649122807017543,
+      "caught": 11,
+      "false_merges": 29,
+      "false_merge_rate": 0.3372093023255814
+    },
+    {
+      "threshold": 0.85,
+      "recall": 0.008771929824561403,
+      "caught": 1,
+      "false_merges": 6,
+      "false_merge_rate": 0.06976744186046512
+    },
+    {
+      "threshold": 0.9,
+      "recall": 0.0,
+      "caught": 0,
+      "false_merges": 1,
+      "false_merge_rate": 0.011627906976744186
+    },
+    {
+      "threshold": 0.95,
+      "recall": 0.0,
+      "caught": 0,
+      "false_merges": 0,
+      "false_merge_rate": 0.0
+    },
+    {
+      "threshold": 1.0,
+      "recall": 0.0,
+      "caught": 0,
+      "false_merges": 0,
+      "false_merge_rate": 0.0
+    }
+  ],
+  "best_threshold": {
+    "threshold": 0.95,
+    "recall": 0.0,
+    "caught": 0,
+    "false_merges": 0,
+    "false_merge_rate": 0.0
+  },
+  "best_clean_threshold": {
+    "threshold": 0.95,
+    "recall": 0.0,
+    "caught": 0,
+    "false_merges": 0,
+    "false_merge_rate": 0.0
+  },
+  "separation": {
+    "min_positive": 0.28125,
+    "max_negative": 0.9259259259259259,
+    "negatives_above_weakest_positive": 86,
+    "separable": false
+  }
+}

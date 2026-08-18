@@ -301,6 +301,9 @@ Content-addressed identity anchor.
 
 ## spiritwriter.fabric.orbit
 
+See [canonical-forms.md](canonical-forms.md) for the guide — when to reach for
+this, how to choose the symmetry, what it measures at, and where it stops.
+
 Exact canonical forms for structures that carry a **declared symmetry**. The
 counterpart to `canonicalize`: that module resolves entities by fuzzy
 similarity and confidence tiers, this one answers *"are these the same

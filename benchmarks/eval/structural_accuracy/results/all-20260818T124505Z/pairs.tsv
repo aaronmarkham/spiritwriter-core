@@ -1,0 +1,201 @@
+corpus	kind	relation	same	rule_same	score	left	right
+subject_rings	ring	reflection	True	True	0.4769	Cartography · Map projections · Geodesy · Surveying · Topographic mapping	Cartography · Topographic mapping · Surveying · Geodesy · Map projections
+subject_rings	ring	reflection	True	True	0.6308	Cartography · Map projections · Geodesy · Surveying · Topographic mapping	Geodesy · Map projections · Cartography · Topographic mapping · Surveying
+subject_rings	ring	rotation	True	True	0.5692	Cartography · Map projections · Geodesy · Surveying · Topographic mapping	Geodesy · Surveying · Topographic mapping · Cartography · Map projections
+subject_rings	ring	reflection	True	True	0.5846	Cartography · Map projections · Geodesy · Surveying · Topographic mapping	Map projections · Cartography · Topographic mapping · Surveying · Geodesy
+subject_rings	ring	rotation	True	True	0.8154	Cartography · Map projections · Geodesy · Surveying · Topographic mapping	Map projections · Geodesy · Surveying · Topographic mapping · Cartography
+subject_rings	ring	reflection	True	True	0.6462	Cartography · Map projections · Geodesy · Surveying · Topographic mapping	Surveying · Geodesy · Map projections · Cartography · Topographic mapping
+subject_rings	ring	rotation	True	True	0.5385	Cartography · Map projections · Geodesy · Surveying · Topographic mapping	Surveying · Topographic mapping · Cartography · Map projections · Geodesy
+subject_rings	ring	rotation	True	True	0.6923	Cartography · Map projections · Geodesy · Surveying · Topographic mapping	Topographic mapping · Cartography · Map projections · Geodesy · Surveying
+subject_rings	ring	reflection	True	True	0.2923	Cartography · Map projections · Geodesy · Surveying · Topographic mapping	Topographic mapping · Surveying · Geodesy · Map projections · Cartography
+subject_rings	ring	sibling	False	False	0.8462	Cartography · Map projections · Geodesy · Surveying · Topographic mapping	Cartography · Map projections · Geodesy · Topographic mapping · Surveying
+subject_rings	ring	sibling	False	False	0.7231	Cartography · Map projections · Geodesy · Surveying · Topographic mapping	Cartography · Geodesy · Map projections · Topographic mapping · Surveying
+subject_rings	ring	sibling	False	False	0.6000	Cartography · Map projections · Geodesy · Surveying · Topographic mapping	Cartography · Geodesy · Topographic mapping · Map projections · Surveying
+subject_rings	ring	sibling	False	False	0.8769	Cartography · Map projections · Geodesy · Surveying · Topographic mapping	Cartography · Map projections · Surveying · Topographic mapping · Geodesy
+subject_rings	ring	sibling	False	False	0.7231	Cartography · Map projections · Geodesy · Surveying · Topographic mapping	Cartography · Surveying · Geodesy · Map projections · Topographic mapping
+subject_rings	ring	sibling	False	False	0.7231	Cartography · Map projections · Geodesy · Surveying · Topographic mapping	Cartography · Map projections · Topographic mapping · Surveying · Geodesy
+subject_rings	ring	sibling	False	False	0.8462	Cartography · Map projections · Geodesy · Surveying · Topographic mapping	Cartography · Surveying · Map projections · Geodesy · Topographic mapping
+subject_rings	ring	sibling	False	False	0.7231	Cartography · Map projections · Geodesy · Surveying · Topographic mapping	Cartography · Map projections · Topographic mapping · Geodesy · Surveying
+subject_rings	ring	sibling	False	False	0.7538	Cartography · Map projections · Geodesy · Surveying · Topographic mapping	Cartography · Geodesy · Surveying · Map projections · Topographic mapping
+subject_rings	ring	sibling	False	False	0.8769	Cartography · Map projections · Geodesy · Surveying · Topographic mapping	Cartography · Map projections · Surveying · Geodesy · Topographic mapping
+subject_rings	ring	sibling	False	False	0.8769	Cartography · Map projections · Geodesy · Surveying · Topographic mapping	Cartography · Geodesy · Map projections · Surveying · Topographic mapping
+subject_rings	ring	rotation	True	True	0.5349	Printing · Typography · Bookbinding · Papermaking	Bookbinding · Papermaking · Printing · Typography
+subject_rings	ring	reflection	True	True	0.7907	Printing · Typography · Bookbinding · Papermaking	Bookbinding · Typography · Printing · Papermaking
+subject_rings	ring	reflection	True	True	0.5581	Printing · Typography · Bookbinding · Papermaking	Papermaking · Bookbinding · Typography · Printing
+subject_rings	ring	rotation	True	True	0.7209	Printing · Typography · Bookbinding · Papermaking	Papermaking · Printing · Typography · Bookbinding
+subject_rings	ring	reflection	True	True	0.4651	Printing · Typography · Bookbinding · Papermaking	Printing · Papermaking · Bookbinding · Typography
+subject_rings	ring	rotation	True	True	0.7907	Printing · Typography · Bookbinding · Papermaking	Typography · Bookbinding · Papermaking · Printing
+subject_rings	ring	reflection	True	True	0.6512	Printing · Typography · Bookbinding · Papermaking	Typography · Printing · Papermaking · Bookbinding
+subject_rings	ring	sibling	False	False	0.7209	Printing · Typography · Bookbinding · Papermaking	Printing · Typography · Papermaking · Bookbinding
+subject_rings	ring	sibling	False	False	0.7209	Printing · Typography · Bookbinding · Papermaking	Printing · Bookbinding · Typography · Papermaking
+subject_rings	ring	reflection	True	True	0.4182	Hydrology · Watersheds · Groundwater · Aquifers · Water quality	Aquifers · Groundwater · Watersheds · Hydrology · Water quality
+subject_rings	ring	rotation	True	True	0.5818	Hydrology · Watersheds · Groundwater · Aquifers · Water quality	Aquifers · Water quality · Hydrology · Watersheds · Groundwater
+subject_rings	ring	rotation	True	True	0.6182	Hydrology · Watersheds · Groundwater · Aquifers · Water quality	Groundwater · Aquifers · Water quality · Hydrology · Watersheds
+subject_rings	ring	reflection	True	True	0.5091	Hydrology · Watersheds · Groundwater · Aquifers · Water quality	Groundwater · Watersheds · Hydrology · Water quality · Aquifers
+subject_rings	ring	reflection	True	True	0.6364	Hydrology · Watersheds · Groundwater · Aquifers · Water quality	Hydrology · Water quality · Aquifers · Groundwater · Watersheds
+subject_rings	ring	reflection	True	True	0.5091	Hydrology · Watersheds · Groundwater · Aquifers · Water quality	Water quality · Aquifers · Groundwater · Watersheds · Hydrology
+subject_rings	ring	rotation	True	True	0.7455	Hydrology · Watersheds · Groundwater · Aquifers · Water quality	Water quality · Hydrology · Watersheds · Groundwater · Aquifers
+subject_rings	ring	rotation	True	True	0.8182	Hydrology · Watersheds · Groundwater · Aquifers · Water quality	Watersheds · Groundwater · Aquifers · Water quality · Hydrology
+subject_rings	ring	reflection	True	True	0.5273	Hydrology · Watersheds · Groundwater · Aquifers · Water quality	Watersheds · Hydrology · Water quality · Aquifers · Groundwater
+subject_rings	ring	sibling	False	False	0.8182	Hydrology · Watersheds · Groundwater · Aquifers · Water quality	Hydrology · Aquifers · Groundwater · Watersheds · Water quality
+subject_rings	ring	sibling	False	False	0.7273	Hydrology · Watersheds · Groundwater · Aquifers · Water quality	Hydrology · Groundwater · Watersheds · Water quality · Aquifers
+subject_rings	ring	sibling	False	False	0.7818	Hydrology · Watersheds · Groundwater · Aquifers · Water quality	Hydrology · Watersheds · Aquifers · Water quality · Groundwater
+subject_rings	ring	sibling	False	False	0.8000	Hydrology · Watersheds · Groundwater · Aquifers · Water quality	Hydrology · Groundwater · Watersheds · Aquifers · Water quality
+subject_rings	ring	sibling	False	False	0.8364	Hydrology · Watersheds · Groundwater · Aquifers · Water quality	Hydrology · Watersheds · Groundwater · Water quality · Aquifers
+subject_rings	ring	sibling	False	False	0.8000	Hydrology · Watersheds · Groundwater · Aquifers · Water quality	Hydrology · Groundwater · Aquifers · Watersheds · Water quality
+subject_rings	ring	sibling	False	False	0.8364	Hydrology · Watersheds · Groundwater · Aquifers · Water quality	Hydrology · Watersheds · Aquifers · Groundwater · Water quality
+subject_rings	ring	sibling	False	False	0.6182	Hydrology · Watersheds · Groundwater · Aquifers · Water quality	Hydrology · Watersheds · Water quality · Aquifers · Groundwater
+subject_rings	ring	sibling	False	False	0.6364	Hydrology · Watersheds · Groundwater · Aquifers · Water quality	Hydrology · Groundwater · Water quality · Watersheds · Aquifers
+subject_rings	ring	sibling	False	False	0.7455	Hydrology · Watersheds · Groundwater · Aquifers · Water quality	Hydrology · Watersheds · Water quality · Groundwater · Aquifers
+subject_rings	ring	sibling	False	False	0.8364	Hydrology · Watersheds · Groundwater · Aquifers · Water quality	Hydrology · Aquifers · Watersheds · Groundwater · Water quality
+subject_rings	ring	rotation	True	True	0.8429	Navigation · Celestial navigation · Dead reckoning · Nautical charts · Compass	Celestial navigation · Dead reckoning · Nautical charts · Compass · Navigation
+subject_rings	ring	reflection	True	True	0.6143	Navigation · Celestial navigation · Dead reckoning · Nautical charts · Compass	Celestial navigation · Navigation · Compass · Nautical charts · Dead reckoning
+subject_rings	ring	reflection	True	True	0.4429	Navigation · Celestial navigation · Dead reckoning · Nautical charts · Compass	Compass · Nautical charts · Dead reckoning · Celestial navigation · Navigation
+subject_rings	ring	rotation	True	True	0.8857	Navigation · Celestial navigation · Dead reckoning · Nautical charts · Compass	Compass · Navigation · Celestial navigation · Dead reckoning · Nautical charts
+subject_rings	ring	reflection	True	True	0.6286	Navigation · Celestial navigation · Dead reckoning · Nautical charts · Compass	Dead reckoning · Celestial navigation · Navigation · Compass · Nautical charts
+subject_rings	ring	rotation	True	True	0.5429	Navigation · Celestial navigation · Dead reckoning · Nautical charts · Compass	Dead reckoning · Nautical charts · Compass · Navigation · Celestial navigation
+subject_rings	ring	rotation	True	True	0.6571	Navigation · Celestial navigation · Dead reckoning · Nautical charts · Compass	Nautical charts · Compass · Navigation · Celestial navigation · Dead reckoning
+subject_rings	ring	reflection	True	True	0.5571	Navigation · Celestial navigation · Dead reckoning · Nautical charts · Compass	Nautical charts · Dead reckoning · Celestial navigation · Navigation · Compass
+subject_rings	ring	reflection	True	True	0.4429	Navigation · Celestial navigation · Dead reckoning · Nautical charts · Compass	Navigation · Compass · Nautical charts · Dead reckoning · Celestial navigation
+subject_rings	ring	sibling	False	False	0.7000	Navigation · Celestial navigation · Dead reckoning · Nautical charts · Compass	Navigation · Dead reckoning · Celestial navigation · Nautical charts · Compass
+subject_rings	ring	sibling	False	False	0.8857	Navigation · Celestial navigation · Dead reckoning · Nautical charts · Compass	Navigation · Celestial navigation · Dead reckoning · Compass · Nautical charts
+subject_rings	ring	sibling	False	False	0.5571	Navigation · Celestial navigation · Dead reckoning · Nautical charts · Compass	Navigation · Nautical charts · Dead reckoning · Celestial navigation · Compass
+subject_rings	ring	sibling	False	False	0.5857	Navigation · Celestial navigation · Dead reckoning · Nautical charts · Compass	Navigation · Dead reckoning · Celestial navigation · Compass · Nautical charts
+subject_rings	ring	sibling	False	False	0.7429	Navigation · Celestial navigation · Dead reckoning · Nautical charts · Compass	Navigation · Celestial navigation · Compass · Nautical charts · Dead reckoning
+subject_rings	ring	sibling	False	False	0.5857	Navigation · Celestial navigation · Dead reckoning · Nautical charts · Compass	Navigation · Dead reckoning · Compass · Celestial navigation · Nautical charts
+subject_rings	ring	sibling	False	False	0.8857	Navigation · Celestial navigation · Dead reckoning · Nautical charts · Compass	Navigation · Celestial navigation · Compass · Dead reckoning · Nautical charts
+subject_rings	ring	sibling	False	False	0.7857	Navigation · Celestial navigation · Dead reckoning · Nautical charts · Compass	Navigation · Celestial navigation · Nautical charts · Compass · Dead reckoning
+subject_rings	ring	sibling	False	False	0.7714	Navigation · Celestial navigation · Dead reckoning · Nautical charts · Compass	Navigation · Nautical charts · Celestial navigation · Dead reckoning · Compass
+subject_rings	ring	sibling	False	False	0.7857	Navigation · Celestial navigation · Dead reckoning · Nautical charts · Compass	Navigation · Celestial navigation · Nautical charts · Dead reckoning · Compass
+subject_rings	ring	sibling	False	False	0.7000	Navigation · Celestial navigation · Dead reckoning · Nautical charts · Compass	Navigation · Dead reckoning · Nautical charts · Celestial navigation · Compass
+pipelines	directed_ring	rotation	True	True	0.8182	fetch · parse · normalize · store · index	index · fetch · parse · normalize · store
+pipelines	directed_ring	rotation	True	True	0.6364	fetch · parse · normalize · store · index	normalize · store · index · fetch · parse
+pipelines	directed_ring	rotation	True	True	0.8182	fetch · parse · normalize · store · index	parse · normalize · store · index · fetch
+pipelines	directed_ring	rotation	True	True	0.6364	fetch · parse · normalize · store · index	store · index · fetch · parse · normalize
+pipelines	directed_ring	sibling	False	False	0.8182	fetch · parse · normalize · store · index	fetch · normalize · store · index · parse
+pipelines	directed_ring	sibling	False	False	0.8182	fetch · parse · normalize · store · index	fetch · index · parse · normalize · store
+pipelines	directed_ring	sibling	False	False	0.6970	fetch · parse · normalize · store · index	fetch · parse · store · index · normalize
+pipelines	directed_ring	sibling	False	False	0.7576	fetch · parse · normalize · store · index	fetch · index · normalize · store · parse
+pipelines	directed_ring	sibling	False	False	0.8182	fetch · parse · normalize · store · index	fetch · parse · normalize · index · store
+pipelines	directed_ring	sibling	False	False	0.8182	fetch · parse · normalize · store · index	fetch · store · parse · normalize · index
+pipelines	directed_ring	sibling	False	False	0.8182	fetch · parse · normalize · store · index	fetch · parse · store · normalize · index
+pipelines	directed_ring	sibling	False	False	0.6364	fetch · parse · normalize · store · index	fetch · parse · index · store · normalize
+pipelines	directed_ring	sibling	False	False	0.6364	fetch · parse · normalize · store · index	fetch · index · store · parse · normalize
+pipelines	directed_ring	sibling	False	False	0.8182	fetch · parse · normalize · store · index	fetch · store · normalize · parse · index
+pipelines	directed_ring	sibling	False	False	0.8182	fetch · parse · normalize · store · index	fetch · normalize · parse · store · index
+pipelines	directed_ring	sibling	False	False	0.6364	fetch · parse · normalize · store · index	fetch · index · parse · store · normalize
+pipelines	directed_ring	sibling	False	False	0.6364	fetch · parse · normalize · store · index	fetch · store · parse · index · normalize
+pipelines	directed_ring	sibling	False	False	0.6364	fetch · parse · normalize · store · index	fetch · store · index · parse · normalize
+pipelines	directed_ring	sibling	False	False	0.6364	fetch · parse · normalize · store · index	fetch · index · store · normalize · parse
+pipelines	directed_ring	sibling	False	False	0.6364	fetch · parse · normalize · store · index	fetch · normalize · index · parse · store
+pipelines	directed_ring	sibling	False	False	0.5152	fetch · parse · normalize · store · index	fetch · store · index · normalize · parse
+pipelines	directed_ring	sibling	False	False	0.7273	fetch · parse · normalize · store · index	fetch · normalize · parse · index · store
+pipelines	directed_ring	sibling	False	False	0.8182	fetch · parse · normalize · store · index	fetch · normalize · store · parse · index
+pipelines	directed_ring	sibling	False	False	0.7273	fetch · parse · normalize · store · index	fetch · store · normalize · index · parse
+pipelines	directed_ring	sibling	False	False	0.6970	fetch · parse · normalize · store · index	fetch · index · normalize · parse · store
+pipelines	directed_ring	sibling	False	False	0.8182	fetch · parse · normalize · store · index	fetch · parse · index · normalize · store
+pipelines	directed_ring	sibling	False	False	0.6970	fetch · parse · normalize · store · index	fetch · normalize · index · store · parse
+pipelines	directed_ring	rotation	True	True	0.7037	draft · review · revise · approve	approve · draft · review · revise
+pipelines	directed_ring	rotation	True	True	0.7778	draft · review · revise · approve	review · revise · approve · draft
+pipelines	directed_ring	rotation	True	True	0.5185	draft · review · revise · approve	revise · approve · draft · review
+pipelines	directed_ring	sibling	False	False	0.9259	draft · review · revise · approve	draft · revise · review · approve
+pipelines	directed_ring	sibling	False	False	0.7037	draft · review · revise · approve	draft · approve · revise · review
+pipelines	directed_ring	sibling	False	False	0.7407	draft · review · revise · approve	draft · revise · approve · review
+pipelines	directed_ring	sibling	False	False	0.7407	draft · review · revise · approve	draft · review · approve · revise
+pipelines	directed_ring	sibling	False	False	0.7037	draft · review · revise · approve	draft · approve · review · revise
+pipelines	directed_ring	rotation	True	True	0.7241	build · test · stage · sign · publish	publish · build · test · stage · sign
+pipelines	directed_ring	rotation	True	True	0.5517	build · test · stage · sign · publish	sign · publish · build · test · stage
+pipelines	directed_ring	rotation	True	True	0.6207	build · test · stage · sign · publish	stage · sign · publish · build · test
+pipelines	directed_ring	rotation	True	True	0.7931	build · test · stage · sign · publish	test · stage · sign · publish · build
+pipelines	directed_ring	sibling	False	False	0.4483	build · test · stage · sign · publish	build · publish · sign · stage · test
+pipelines	directed_ring	sibling	False	False	0.6207	build · test · stage · sign · publish	build · test · publish · sign · stage
+pipelines	directed_ring	sibling	False	False	0.7241	build · test · stage · sign · publish	build · publish · test · stage · sign
+pipelines	directed_ring	sibling	False	False	0.8276	build · test · stage · sign · publish	build · test · sign · stage · publish
+pipelines	directed_ring	sibling	False	False	0.8276	build · test · stage · sign · publish	build · stage · sign · test · publish
+pipelines	directed_ring	sibling	False	False	0.6552	build · test · stage · sign · publish	build · stage · publish · test · sign
+pipelines	directed_ring	sibling	False	False	0.8276	build · test · stage · sign · publish	build · stage · sign · publish · test
+pipelines	directed_ring	sibling	False	False	0.7931	build · test · stage · sign · publish	build · test · sign · publish · stage
+pipelines	directed_ring	sibling	False	False	0.8276	build · test · stage · sign · publish	build · sign · test · stage · publish
+pipelines	directed_ring	sibling	False	False	0.6207	build · test · stage · sign · publish	build · sign · publish · stage · test
+pipelines	directed_ring	sibling	False	False	0.6207	build · test · stage · sign · publish	build · sign · test · publish · stage
+pipelines	directed_ring	sibling	False	False	0.4483	build · test · stage · sign · publish	build · publish · test · sign · stage
+pipelines	directed_ring	sibling	False	False	0.7241	build · test · stage · sign · publish	build · test · publish · stage · sign
+pipelines	directed_ring	sibling	False	False	0.8276	build · test · stage · sign · publish	build · test · stage · publish · sign
+pipelines	directed_ring	sibling	False	False	0.6552	build · test · stage · sign · publish	build · stage · publish · sign · test
+pipelines	directed_ring	sibling	False	False	0.6207	build · test · stage · sign · publish	build · sign · publish · test · stage
+pipelines	directed_ring	sibling	False	False	0.5517	build · test · stage · sign · publish	build · publish · sign · test · stage
+pipelines	directed_ring	sibling	False	False	0.6897	build · test · stage · sign · publish	build · publish · stage · sign · test
+pipelines	directed_ring	sibling	False	False	0.7241	build · test · stage · sign · publish	build · sign · stage · publish · test
+pipelines	directed_ring	sibling	False	False	0.4483	build · test · stage · sign · publish	build · publish · stage · test · sign
+pipelines	directed_ring	sibling	False	False	0.7241	build · test · stage · sign · publish	build · stage · test · publish · sign
+pipelines	directed_ring	sibling	False	False	0.7931	build · test · stage · sign · publish	build · sign · stage · test · publish
+pipelines	directed_ring	sibling	False	False	0.8276	build · test · stage · sign · publish	build · stage · test · sign · publish
+coauthors	grouping	permutation	True	True	0.6250	Vaswani · Shazeer · Parmar · Uszkoreit	Parmar · Shazeer · Uszkoreit · Vaswani
+coauthors	grouping	permutation	True	True	0.7188	Vaswani · Shazeer · Parmar · Uszkoreit	Parmar · Shazeer · Vaswani · Uszkoreit
+coauthors	grouping	permutation	True	True	0.5000	Vaswani · Shazeer · Parmar · Uszkoreit	Parmar · Uszkoreit · Shazeer · Vaswani
+coauthors	grouping	permutation	True	True	0.5000	Vaswani · Shazeer · Parmar · Uszkoreit	Parmar · Uszkoreit · Vaswani · Shazeer
+coauthors	grouping	permutation	True	True	0.7812	Vaswani · Shazeer · Parmar · Uszkoreit	Parmar · Vaswani · Shazeer · Uszkoreit
+coauthors	grouping	permutation	True	True	0.5312	Vaswani · Shazeer · Parmar · Uszkoreit	Parmar · Vaswani · Uszkoreit · Shazeer
+coauthors	grouping	permutation	True	True	0.7500	Vaswani · Shazeer · Parmar · Uszkoreit	Shazeer · Parmar · Uszkoreit · Vaswani
+coauthors	grouping	permutation	True	True	0.7500	Vaswani · Shazeer · Parmar · Uszkoreit	Shazeer · Parmar · Vaswani · Uszkoreit
+coauthors	grouping	permutation	True	True	0.5312	Vaswani · Shazeer · Parmar · Uszkoreit	Shazeer · Uszkoreit · Parmar · Vaswani
+coauthors	grouping	permutation	True	True	0.5312	Vaswani · Shazeer · Parmar · Uszkoreit	Shazeer · Uszkoreit · Vaswani · Parmar
+coauthors	grouping	permutation	True	True	0.7500	Vaswani · Shazeer · Parmar · Uszkoreit	Shazeer · Vaswani · Parmar · Uszkoreit
+coauthors	grouping	permutation	True	True	0.6250	Vaswani · Shazeer · Parmar · Uszkoreit	Shazeer · Vaswani · Uszkoreit · Parmar
+coauthors	grouping	permutation	True	True	0.4375	Vaswani · Shazeer · Parmar · Uszkoreit	Uszkoreit · Parmar · Shazeer · Vaswani
+coauthors	grouping	permutation	True	True	0.4688	Vaswani · Shazeer · Parmar · Uszkoreit	Uszkoreit · Parmar · Vaswani · Shazeer
+coauthors	grouping	permutation	True	True	0.6250	Vaswani · Shazeer · Parmar · Uszkoreit	Uszkoreit · Shazeer · Parmar · Vaswani
+coauthors	grouping	permutation	True	True	0.5312	Vaswani · Shazeer · Parmar · Uszkoreit	Uszkoreit · Shazeer · Vaswani · Parmar
+coauthors	grouping	permutation	True	True	0.2812	Vaswani · Shazeer · Parmar · Uszkoreit	Uszkoreit · Vaswani · Parmar · Shazeer
+coauthors	grouping	permutation	True	True	0.6875	Vaswani · Shazeer · Parmar · Uszkoreit	Uszkoreit · Vaswani · Shazeer · Parmar
+coauthors	grouping	permutation	True	True	0.7812	Vaswani · Shazeer · Parmar · Uszkoreit	Vaswani · Parmar · Shazeer · Uszkoreit
+coauthors	grouping	permutation	True	True	0.7500	Vaswani · Shazeer · Parmar · Uszkoreit	Vaswani · Parmar · Uszkoreit · Shazeer
+coauthors	grouping	permutation	True	True	0.7812	Vaswani · Shazeer · Parmar · Uszkoreit	Vaswani · Shazeer · Uszkoreit · Parmar
+coauthors	grouping	permutation	True	True	0.5312	Vaswani · Shazeer · Parmar · Uszkoreit	Vaswani · Uszkoreit · Parmar · Shazeer
+coauthors	grouping	permutation	True	True	0.6875	Vaswani · Shazeer · Parmar · Uszkoreit	Vaswani · Uszkoreit · Shazeer · Parmar
+coauthors	grouping	permutation	True	True	0.7692	Devlin · Chang · Lee · Toutanova	Chang · Devlin · Lee · Toutanova
+coauthors	grouping	permutation	True	True	0.6154	Devlin · Chang · Lee · Toutanova	Chang · Devlin · Toutanova · Lee
+coauthors	grouping	permutation	True	True	0.7308	Devlin · Chang · Lee · Toutanova	Chang · Lee · Devlin · Toutanova
+coauthors	grouping	permutation	True	True	0.7308	Devlin · Chang · Lee · Toutanova	Chang · Lee · Toutanova · Devlin
+coauthors	grouping	permutation	True	True	0.5769	Devlin · Chang · Lee · Toutanova	Chang · Toutanova · Devlin · Lee
+coauthors	grouping	permutation	True	True	0.5769	Devlin · Chang · Lee · Toutanova	Chang · Toutanova · Lee · Devlin
+coauthors	grouping	permutation	True	True	0.8462	Devlin · Chang · Lee · Toutanova	Devlin · Chang · Toutanova · Lee
+coauthors	grouping	permutation	True	True	0.8462	Devlin · Chang · Lee · Toutanova	Devlin · Lee · Chang · Toutanova
+coauthors	grouping	permutation	True	True	0.7692	Devlin · Chang · Lee · Toutanova	Devlin · Lee · Toutanova · Chang
+coauthors	grouping	permutation	True	True	0.6154	Devlin · Chang · Lee · Toutanova	Devlin · Toutanova · Chang · Lee
+coauthors	grouping	permutation	True	True	0.6154	Devlin · Chang · Lee · Toutanova	Devlin · Toutanova · Lee · Chang
+coauthors	grouping	permutation	True	True	0.7308	Devlin · Chang · Lee · Toutanova	Lee · Chang · Devlin · Toutanova
+coauthors	grouping	permutation	True	True	0.6538	Devlin · Chang · Lee · Toutanova	Lee · Chang · Toutanova · Devlin
+coauthors	grouping	permutation	True	True	0.8462	Devlin · Chang · Lee · Toutanova	Lee · Devlin · Chang · Toutanova
+coauthors	grouping	permutation	True	True	0.6154	Devlin · Chang · Lee · Toutanova	Lee · Devlin · Toutanova · Chang
+coauthors	grouping	permutation	True	True	0.5000	Devlin · Chang · Lee · Toutanova	Lee · Toutanova · Chang · Devlin
+coauthors	grouping	permutation	True	True	0.5000	Devlin · Chang · Lee · Toutanova	Lee · Toutanova · Devlin · Chang
+coauthors	grouping	permutation	True	True	0.3462	Devlin · Chang · Lee · Toutanova	Toutanova · Chang · Devlin · Lee
+coauthors	grouping	permutation	True	True	0.5000	Devlin · Chang · Lee · Toutanova	Toutanova · Chang · Lee · Devlin
+coauthors	grouping	permutation	True	True	0.6154	Devlin · Chang · Lee · Toutanova	Toutanova · Devlin · Chang · Lee
+coauthors	grouping	permutation	True	True	0.3462	Devlin · Chang · Lee · Toutanova	Toutanova · Devlin · Lee · Chang
+coauthors	grouping	permutation	True	True	0.3462	Devlin · Chang · Lee · Toutanova	Toutanova · Lee · Chang · Devlin
+coauthors	grouping	permutation	True	True	0.4615	Devlin · Chang · Lee · Toutanova	Toutanova · Lee · Devlin · Chang
+coauthors	grouping	permutation	True	True	0.4194	Brown · Mann · Ryder · Subbiah · Kaplan	Kaplan · Subbiah · Brown · Ryder · Mann
+coauthors	grouping	permutation	True	True	0.6129	Brown · Mann · Ryder · Subbiah · Kaplan	Brown · Ryder · Mann · Kaplan · Subbiah
+coauthors	grouping	permutation	True	True	0.5161	Brown · Mann · Ryder · Subbiah · Kaplan	Ryder · Kaplan · Brown · Subbiah · Mann
+coauthors	grouping	permutation	True	True	0.4839	Brown · Mann · Ryder · Subbiah · Kaplan	Mann · Kaplan · Subbiah · Brown · Ryder
+coauthors	grouping	permutation	True	True	0.6452	Brown · Mann · Ryder · Subbiah · Kaplan	Kaplan · Mann · Brown · Ryder · Subbiah
+coauthors	grouping	permutation	True	True	0.5161	Brown · Mann · Ryder · Subbiah · Kaplan	Kaplan · Brown · Subbiah · Mann · Ryder
+coauthors	grouping	permutation	True	True	0.6452	Brown · Mann · Ryder · Subbiah · Kaplan	Ryder · Brown · Subbiah · Mann · Kaplan
+coauthors	grouping	permutation	True	True	0.8065	Brown · Mann · Ryder · Subbiah · Kaplan	Mann · Ryder · Subbiah · Kaplan · Brown
+coauthors	grouping	permutation	True	True	0.5161	Brown · Mann · Ryder · Subbiah · Kaplan	Ryder · Mann · Kaplan · Brown · Subbiah
+coauthors	grouping	permutation	True	True	0.6129	Brown · Mann · Ryder · Subbiah · Kaplan	Kaplan · Ryder · Subbiah · Brown · Mann
+coauthors	grouping	permutation	True	True	0.7419	Brown · Mann · Ryder · Subbiah · Kaplan	Ryder · Mann · Brown · Subbiah · Kaplan
+coauthors	grouping	permutation	True	True	0.4516	Brown · Mann · Ryder · Subbiah · Kaplan	Subbiah · Ryder · Kaplan · Mann · Brown
+coauthors	grouping	permutation	True	True	0.6452	Brown · Mann · Ryder · Subbiah · Kaplan	Subbiah · Brown · Ryder · Mann · Kaplan
+coauthors	grouping	permutation	True	True	0.8065	Brown · Mann · Ryder · Subbiah · Kaplan	Mann · Ryder · Subbiah · Brown · Kaplan
+coauthors	grouping	permutation	True	True	0.6452	Brown · Mann · Ryder · Subbiah · Kaplan	Ryder · Subbiah · Kaplan · Brown · Mann
+coauthors	grouping	permutation	True	True	0.7419	Brown · Mann · Ryder · Subbiah · Kaplan	Subbiah · Brown · Mann · Ryder · Kaplan
+coauthors	grouping	permutation	True	True	0.4839	Brown · Mann · Ryder · Subbiah · Kaplan	Kaplan · Subbiah · Mann · Ryder · Brown
+coauthors	grouping	permutation	True	True	0.5484	Brown · Mann · Ryder · Subbiah · Kaplan	Ryder · Kaplan · Mann · Brown · Subbiah
+coauthors	grouping	permutation	True	True	0.5806	Brown · Mann · Ryder · Subbiah · Kaplan	Subbiah · Brown · Ryder · Kaplan · Mann
+coauthors	grouping	permutation	True	True	0.5484	Brown · Mann · Ryder · Subbiah · Kaplan	Subbiah · Ryder · Brown · Mann · Kaplan
+coauthors	grouping	permutation	True	True	0.5806	Brown · Mann · Ryder · Subbiah · Kaplan	Ryder · Brown · Kaplan · Mann · Subbiah
+coauthors	grouping	permutation	True	True	0.5806	Brown · Mann · Ryder · Subbiah · Kaplan	Kaplan · Ryder · Brown · Mann · Subbiah
+coauthors	grouping	permutation	True	True	0.6452	Brown · Mann · Ryder · Subbiah · Kaplan	Kaplan · Mann · Ryder · Brown · Subbiah
