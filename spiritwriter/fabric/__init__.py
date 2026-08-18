@@ -76,6 +76,15 @@ from spiritwriter.fabric.canonicalize import (
     apply_normalizers,
     pipeline,
 )
+from spiritwriter.fabric.orbit import (
+    least_rotation,
+    canonical_cycle,
+    anchor_cycle,
+    cycle_digest,
+    apply_permutation,
+    canonical_under,
+    orbit_digest,
+)
 
 __all__ = [
     "MemoryShard",
@@ -140,6 +149,16 @@ __all__ = [
     "strip_punctuation",
     "apply_normalizers",
     "pipeline",
+    # Exact canonical forms under declared symmetry (orbit). The
+    # counterpart to the fuzzy, confidence-tiered canonicalize path
+    # above: here the symmetry is declared and the answer is exact.
+    "least_rotation",
+    "canonical_cycle",
+    "anchor_cycle",
+    "cycle_digest",
+    "apply_permutation",
+    "canonical_under",
+    "orbit_digest",
     "verify_chain",
     "verify_trace_chain",
     "events_by_cap",

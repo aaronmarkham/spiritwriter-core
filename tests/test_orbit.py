@@ -272,3 +272,23 @@ def test_orbit_digest_agrees_with_canonical_under():
         orbit_digest(apply_permutation(items, g), group) for g in group
     }
     assert len(digests) == 1
+
+
+# ── package surface ──────────────────────────────────────────────────
+
+
+def test_exported_from_fabric_package():
+    """Every fabric submodule re-exports through the package root."""
+    import spiritwriter.fabric as fabric
+
+    for name in (
+        "least_rotation",
+        "canonical_cycle",
+        "anchor_cycle",
+        "cycle_digest",
+        "apply_permutation",
+        "canonical_under",
+        "orbit_digest",
+    ):
+        assert hasattr(fabric, name), name
+        assert name in fabric.__all__, name
