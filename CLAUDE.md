@@ -48,6 +48,7 @@ spiritwriter/
 - File-based, no external databases. DHT-ready.
 - Namespace packages (`from spiritwriter.fabric import ShardStore`).
 - Apache 2.0 license.
+- File discovery: use the Glob and Grep tools, not shell `find`/`grep`. Only the tool-based versions are auto-approved — `find -exec`, `find | xargs grep`, and out-of-tree searches trigger permission prompts, and shell `find` is fragile cross-platform. Applies to subagents too (e.g. the audit skill's scan agent): have them discover with Glob/Grep/Read rather than shelling out.
 
 ## Tests
 
