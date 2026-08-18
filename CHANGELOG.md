@@ -4,6 +4,14 @@ All notable changes to `spiritwriter` are documented here. The format follows [K
 
 Entries before 0.8.0 are not backfilled; consult `git log` for earlier history. Releases through 0.8.3 were published under the distribution name `spiritwriter-core`.
 
+## [Unreleased]
+
+### Added
+- **`spiritwriter.fabric.orbit`** — exact canonical forms for structures that carry a declared symmetry, so equivalence is a byte comparison rather than a threshold decision. `canonical_cycle` / `cycle_digest` give the dihedral (rotation + optional reflection) form of a ring, `anchor_cycle` rotates to a distinguished element without losing traversal direction, and `canonical_under` / `orbit_digest` generalize both to any caller-supplied permutation group. `least_rotation` is Booth's algorithm, O(n) and correct under repeated elements. The exact counterpart to `fabric.canonicalize`, which resolves entities by fuzzy similarity: here the symmetry is declared and the answer has no confidence score attached. (spiritwriter-core#89)
+  - `perms` is treated as a **generating set** and closed under composition (`permutation_closure`) before a representative is chosen — passing generators to a canonicalizer that only scans the supplied permutations sends members of one orbit to different representatives, silently.
+  - Elements that canonical JSON cannot serialize (`bytes`, `datetime`, domain objects) are supported through a `key=` surrogate function, the way `sorted` takes one; without it the `TypeError` names the offending element and index.
+  - Digests carry a versioned domain prefix, so an orbit digest never collides with a plain content hash of the same bytes.
+
 ## [0.10.0] — 2026-06-16
 
 This release makes spiritwriter the **single source of truth for the knowledge-base pipeline** that had been duplicated in `claude-studio-producer` (CSP). Over a six-step lift-and-shift consume-back (strangler-fig) migration, the KB models, classifier, JSON extractor, LLM client, ingest, and `kb` helpers were consolidated here; CSP now imports them and deletes its copies (tracking issues spiritwriter-core#76 / claude-studio-producer#15). The work that lands in *this* package is the additive surface and guardrail tests below; the LLM vision extension carries one breaking-per-convention ABC change (see Changed), which drives the minor bump.
