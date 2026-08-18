@@ -77,6 +77,7 @@ from spiritwriter.fabric.canonicalize import (
     pipeline,
 )
 from spiritwriter.fabric.orbit import (
+    padded,
     least_rotation,
     canonical_cycle,
     anchor_cycle,
@@ -153,6 +154,7 @@ __all__ = [
     # Exact canonical forms under declared symmetry (orbit). The
     # counterpart to the fuzzy, confidence-tiered canonicalize path
     # above: here the symmetry is declared and the answer is exact.
+    "padded",
     "least_rotation",
     "canonical_cycle",
     "anchor_cycle",

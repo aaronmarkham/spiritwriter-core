@@ -352,6 +352,21 @@ rotate, reflect = [1, 2, 3, 0], [3, 2, 1, 0]
 canonical_under(items, [rotate, reflect]) == canonical_cycle(items)     # True
 ```
 
+### Ordering helpers
+
+- `padded(width) -> KeyFn` — Key function zero-padding non-negative integers to
+  a fixed width, restoring numeric order under lexicographic byte comparison.
+  The bound is enforced: a value that does not fit raises rather than sorting
+  silently into the wrong place. Usable as a plain `sorted(key=...)` too.
+
+```python
+canonical_cycle([9, 10, 11], reflect=False, key=padded(3))   # (9, 10, 11)
+canonical_cycle([9, 10, 11], reflect=False)                  # (10, 11, 9)
+```
+
+Note that a persisted digest is only stable while the width is — widening the
+pad changes the canonical bytes.
+
 ### Element requirements
 
 Elements are ordered and hashed through the same canonical JSON the shard
@@ -364,7 +379,9 @@ layer uses:
 - JSON coerces dict keys to strings, so `{1: "a"}` and `{"1": "a"}` share a
   canonical form.
 - Ordering is lexicographic over JSON bytes, so numbers sort as text (`10`
-  before `9`). Pass a zero-padded key if you want numeric order.
+  before `9`). Pass `key=padded(width)` for bounded non-negative integers;
+  dates need no helper, since ISO-8601 already sorts as text (which is what
+  `canonicalize.normalize_date` emits).
 
 Digests carry a versioned domain prefix, so a cycle digest never collides with
 an orbit digest or with a plain content hash of the same bytes.

@@ -11,6 +11,10 @@ Entries before 0.8.0 are not backfilled; consult `git log` for earlier history. 
   - `perms` is treated as a **generating set** and closed under composition (`permutation_closure`) before a representative is chosen — passing generators to a canonicalizer that only scans the supplied permutations sends members of one orbit to different representatives, silently.
   - Elements that canonical JSON cannot serialize (`bytes`, `datetime`, domain objects) are supported through a `key=` surrogate function, the way `sorted` takes one; without it the `TypeError` names the offending element and index.
   - Digests carry a versioned domain prefix, so an orbit digest never collides with a plain content hash of the same bytes.
+  - `padded(width)` builds a `key=` that keeps bounded non-negative integers in numeric order, since lexicographic byte ordering otherwise sorts them as text (`10` before `9`). The width bound is enforced — an overflowing value raises rather than sorting silently into the wrong place. Dates need no helper: ISO-8601, which `normalize_date` already emits, sorts correctly as text.
+
+### Fixed
+- `_canonical_json` and `canonicalize.age_to_bucket` document their ordering behavior. `_canonical_json`'s byte ordering (numbers sort as text) and dict-key coercion (`{1: "a"}` and `{"1": "a"}` share a content address) were undocumented despite governing shard IDs and entity resolution. `age_to_bucket` now warns that its output is **not** text-sortable — `'8-9'` sorts after `'42-43'` — which is harmless as an ESS field value, where unique field keys mean the value never decides order, but wrong if anything sorts or range-scans on it. Docstrings only; no behavior change.
 
 ## [0.10.0] — 2026-06-16
 

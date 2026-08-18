@@ -43,8 +43,8 @@ shard layer uses, which has two consequences worth knowing:
 * **Ordering is lexicographic over those JSON bytes**, so numbers sort
   as text: ``10`` precedes ``9``. Canonicalization only needs *a*
   deterministic total order, so this is correct either way — but if you
-  want numeric order in the result, pass a text-sortable key such as
-  ``key="{:03d}".format``.
+  want numeric order in the result, pass a text-sortable key:
+  :func:`padded` for bounded non-negative integers, ISO-8601 for dates.
 
 Digests are domain-separated, so an orbit digest never collides with an
 unrelated content hash of the same bytes elsewhere in the fabric.
@@ -58,6 +58,7 @@ from typing import Any, Callable, Iterable, Sequence
 from spiritwriter.fabric.shard import _canonical_json, _sha256
 
 __all__ = [
+    "padded",
     "least_rotation",
     "canonical_cycle",
     "anchor_cycle",
@@ -89,6 +90,52 @@ MAX_GROUP_ORDER = 100_000
 
 
 # ── Element ordering ─────────────────────────────────────────────────
+
+
+def padded(width: int) -> KeyFn:
+    """Build a ``key=`` that keeps non-negative integers in numeric order.
+
+    Ordering here is lexicographic over canonical-JSON bytes, so ``10``
+    sorts before ``9``. Zero-padding to a fixed width restores numeric
+    order across a bounded range:
+
+    >>> canonical_cycle([9, 10, 11], reflect=False, key=padded(3))
+    (9, 10, 11)
+
+    ``width`` is explicit and its bound is enforced: a value that does
+    not fit raises rather than sorting silently into the wrong place —
+    the exact failure this helper exists to prevent. Choose the width
+    from the range's ceiling, not from the values you happen to hold
+    today, and remember that a persisted digest is only stable while the
+    width is.
+
+    Dates need no helper: ISO-8601 already sorts as text, which is what
+    :func:`spiritwriter.fabric.canonicalize.normalize_date` emits.
+    """
+    if width < 1:
+        raise ValueError(f"width must be >= 1, got {width}")
+    limit = 10 ** width
+
+    def key(value: Any) -> str:
+        # bool is an int subclass; padding True to "001" is never intended.
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise TypeError(
+                f"padded({width}) takes int, got {type(value).__name__}"
+            )
+        if value < 0:
+            raise ValueError(
+                f"padded({width}) takes non-negative ints, got {value}; "
+                f"negative values do not zero-pad into sort order — offset "
+                f"them into a non-negative range first"
+            )
+        if value >= limit:
+            raise ValueError(
+                f"{value} does not fit width={width} (max {limit - 1}); "
+                f"it would sort out of order — widen the pad"
+            )
+        return f"{value:0{width}d}"
+
+    return key
 
 
 def _key_one(value: Any, key: KeyFn | None, where: str) -> bytes:
@@ -208,8 +255,8 @@ def canonical_cycle(
 
     Ordering is lexicographic over canonical-JSON bytes, so numbers sort
     as text (``10`` before ``9``) and a ``key`` that returns numbers
-    inherits that. Return zero-padded strings, or ISO-8601 for dates, if
-    you need the result to read in value order.
+    inherits that. Use :func:`padded` for bounded non-negative integers,
+    or ISO-8601 for dates, if you need the result to read in value order.
 
     Returns a tuple of the original elements. It is usable as a dict key
     when those elements are themselves hashable; when they are not (dicts,
@@ -281,8 +328,8 @@ def cycle_digest(
 
     Ordering is lexicographic over canonical-JSON bytes, so numbers sort
     as text (``10`` before ``9``) and a ``key`` that returns numbers
-    inherits that. Return zero-padded strings, or ISO-8601 for dates, if
-    you need the result to read in value order.
+    inherits that. Use :func:`padded` for bounded non-negative integers,
+    or ISO-8601 for dates, if you need the result to read in value order.
     """
     if len(seq) <= 1:
         return _sha256(_CYCLE_DOMAIN + _join(_keys(seq, key)))
@@ -432,8 +479,8 @@ def canonical_under(
 
     Ordering is lexicographic over canonical-JSON bytes, so numbers sort
     as text (``10`` before ``9``) and a ``key`` that returns numbers
-    inherits that. Return zero-padded strings, or ISO-8601 for dates, if
-    you need the result to read in value order.
+    inherits that. Use :func:`padded` for bounded non-negative integers,
+    or ISO-8601 for dates, if you need the result to read in value order.
     """
     tuple_items = tuple(items)
     keys = _keys(tuple_items, key)
@@ -456,8 +503,8 @@ def orbit_digest(
 
     Ordering is lexicographic over canonical-JSON bytes, so numbers sort
     as text (``10`` before ``9``) and a ``key`` that returns numbers
-    inherits that. Return zero-padded strings, or ISO-8601 for dates, if
-    you need the result to read in value order.
+    inherits that. Use :func:`padded` for bounded non-negative integers,
+    or ISO-8601 for dates, if you need the result to read in value order.
     """
     tuple_items = tuple(items)
     keys = _keys(tuple_items, key)

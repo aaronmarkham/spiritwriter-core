@@ -13,6 +13,7 @@ from spiritwriter.fabric.orbit import (
     cycle_digest,
     least_rotation,
     orbit_digest,
+    padded,
     permutation_closure,
 )
 from spiritwriter.fabric.shard import _canonical_json
@@ -283,6 +284,7 @@ def test_exported_from_fabric_package():
     import spiritwriter.fabric as fabric
 
     for name in (
+        "padded",
         "least_rotation",
         "canonical_cycle",
         "anchor_cycle",
@@ -538,3 +540,65 @@ def test_elements_are_serialized_once_per_call(monkeypatch):
     group = [[(i + s) % 8 for i in range(8)] for s in range(8)]
     canonical_under(list(range(8)), group)
     assert len(calls) == 8
+
+
+# ── padded ───────────────────────────────────────────────────────────
+
+
+def test_padded_restores_numeric_order():
+    assert canonical_cycle([9, 10, 11], reflect=False, key=padded(3)) == (
+        9,
+        10,
+        11,
+    )
+    assert canonical_cycle([9, 10, 11], reflect=False)[0] == 10  # unpadded
+
+
+def test_padded_is_a_plain_sort_key_too():
+    assert sorted([9, 10, 11], key=padded(3)) == [9, 10, 11]
+    assert [padded(3)(v) for v in (0, 9, 10)] == ["000", "009", "010"]
+
+
+def test_padded_rejects_values_that_do_not_fit():
+    """Overflow raises rather than sorting into the wrong place."""
+    key = padded(2)
+    assert key(99) == "99"
+    with pytest.raises(ValueError, match="does not fit width=2"):
+        key(100)
+
+
+def test_padded_rejects_negatives():
+    with pytest.raises(ValueError, match="non-negative"):
+        padded(3)(-1)
+
+
+def test_padded_rejects_non_integers():
+    with pytest.raises(TypeError, match="takes int"):
+        padded(3)("7")
+    with pytest.raises(TypeError, match="takes int"):
+        padded(3)(7.0)
+
+
+def test_padded_rejects_bool():
+    """bool is an int subclass; padding True to '001' is never intended."""
+    with pytest.raises(TypeError, match="takes int"):
+        padded(3)(True)
+
+
+def test_padded_rejects_bad_width():
+    with pytest.raises(ValueError, match="width must be >= 1"):
+        padded(0)
+
+
+def test_padded_works_with_digests_and_groups():
+    ring = [12, 3, 7]
+    key = padded(3)
+    assert len({cycle_digest(r, key=key) for r in _rotations(ring)}) == 1
+    assert canonical_under([12, 3], [[1, 0]], key=key) == (3, 12)
+
+
+def test_padded_width_changes_the_digest():
+    """Documented consequence: a persisted digest is width-bound."""
+    assert cycle_digest([1, 2], key=padded(3)) != cycle_digest(
+        [1, 2], key=padded(4)
+    )
