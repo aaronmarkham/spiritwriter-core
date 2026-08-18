@@ -82,6 +82,7 @@ from spiritwriter.fabric.orbit import (
     anchor_cycle,
     cycle_digest,
     apply_permutation,
+    permutation_closure,
     canonical_under,
     orbit_digest,
 )
@@ -157,6 +158,7 @@ __all__ = [
     "anchor_cycle",
     "cycle_digest",
     "apply_permutation",
+    "permutation_closure",
     "canonical_under",
     "orbit_digest",
     "verify_chain",
