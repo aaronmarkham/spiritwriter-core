@@ -176,6 +176,31 @@ The full spec ([docs/specs/cmc-spec-v0.1.md](docs/specs/cmc-spec-v0.1.md)) draws
 
 **Deeper:** [Entity Resolution guide](docs/entity-resolution.md), [Shingled Extraction](docs/shingled-extraction.md), [CMC-Lite spec](docs/specs/cmc-lite-v0.1.md).
 
+## Canonical Forms
+
+Entity resolution answers *are these two records the same thing?* with a confidence score. Some structures don't need one. A ring of see-also references read from a different starting point, an edge list walked backwards, a set of co-equal authors listed in another order — each differs from its twin only by a symmetry the structure allows, and there the answer is exact rather than probable.
+
+`fabric.orbit` computes the single canonical representative of a structure's equivalence class, plus a content-addressed digest of it. Two systems that have never communicated arrive at the same value because there is only one value to arrive at — no registry to consult, no identifier service, no prior agreement beyond the operations themselves.
+
+```python
+from spiritwriter.fabric import cycle_digest
+
+a = ["Cartography", "Map projections", "Geodesy", "Surveying", "Topographic mapping"]
+b = ["Geodesy", "Surveying", "Topographic mapping", "Cartography", "Map projections"]
+
+cycle_digest(a) == cycle_digest(b)      # True — same loop, different starting point
+```
+
+### The Numbers
+
+Across **200 pairs** over three corpora — undirected rings, directed cycles, unordered groupings — the rule settles **114/114 same-structure pairs with 0 wrong merges**. The best similarity threshold that makes no wrong merges catches **0 of them**.
+
+The classes are not separable at any cutoff, and the per-relation means say why: pairs that must stay *apart* score **higher** (0.729) than rotations (0.690), permutations (0.610), or reflections (0.546). Rewriting a structure changes the text a great deal; altering the structure changes it hardly at all. Similarity is not a weak signal here to be tuned — it points the wrong way. See [benchmarks/eval/structural_accuracy](benchmarks/eval/structural_accuracy/) for the harness and the full sweep.
+
+This is a floor under the fuzzy layer, not a replacement for it. It collapses exactly the differences you can state in advance and nothing else — it will never know that Twain and Clemens are one person.
+
+**Deeper:** [Canonical Forms guide](docs/canonical-forms.md). Long-form, with the demonstrations running live: [Computed, Not Assigned](https://spiritwriter.ai/computed-not-assigned.html).
+
 ## Documentation
 
 | Guide | Description |
@@ -189,6 +214,7 @@ The full spec ([docs/specs/cmc-spec-v0.1.md](docs/specs/cmc-spec-v0.1.md)) draws
 | [Entitlements](docs/entitlements.md) | bearer tokens, capabilities, budget, scope enforcement |
 | [Jobs](docs/jobs.md) | packaging delegated sub-agent work; issuer / runner sides |
 | [Entity Resolution](docs/entity-resolution.md) | ESS, tiered matching, normalization, batch processing |
+| [Canonical Forms](docs/canonical-forms.md) | exact forms under declared symmetry — rings, cycles, groupings, digests |
 | [Shingled Extraction](docs/shingled-extraction.md) | overlapping-window extraction with multi-pass consensus |
 | [Tracing](docs/tracing.md) | hash-chained provenance, chain verification, signed traces |
 | [Traced Workflows](docs/traced-workflows.md) | multi-stage pipelines with checkpoint/resume |

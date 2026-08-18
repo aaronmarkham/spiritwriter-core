@@ -16,6 +16,12 @@ This page covers when to reach for it, when not to, and what it measures
 at. For the function signatures see
 [api-reference.md](api-reference.md#spiritwriterfabricorbit).
 
+For the long-form version of the argument — with the ring, the symmetry
+group, and the threshold sweep running live in the page — see
+[**Computed, Not Assigned**](https://spiritwriter.ai/computed-not-assigned.html).
+Its counterpart for the *fuzzy* half of the problem is
+[entity-resolution.md](entity-resolution.md).
+
 ## The problem it solves
 
 Consider a loop of five subject headings, each pointing to the next and

@@ -6,6 +6,8 @@ The **`CanonicalRegistry`** is the runtime engine; **Phalanx** is the name of th
 
 No embedding model, no LLM calls. SQLite, normalization, and tiered confidence scoring.
 
+Where a structure carries a *declared symmetry* — a ring read from a different starting point, an edge list walked backwards, co-equal members in another order — there is no confidence to score: the answer is exact, and the counterpart primitive is [`canonical-forms.md`](canonical-forms.md). Similarity scoring cannot substitute for it. On structural variation the two classes are not separable at any threshold, because pairs that must stay apart score *higher* than pairs that must merge.
+
 The registry resolves over `ShardAtom`s — the (`entity`, `key`, `value`) triples on `FACT` and `ENTITY` atoms are what `ess_fields` references. If you haven't read about atoms yet, start at [`atoms.md`](atoms.md) (especially the `ENTITY` and `FACT` use cases and [`examples/atoms/10_entity.py`](../examples/atoms/10_entity.py)) before diving into how the resolver consumes them.
 
 For how atoms get *made* from long-form text in the first place — overlapping windows, multi-pass consensus voting, no fact lost at chunk boundaries — see [`shingled-extraction.md`](shingled-extraction.md). That's a separate primitive from the resolver, often used together.
