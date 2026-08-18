@@ -4,6 +4,24 @@ All notable changes to `spiritwriter` are documented here. The format follows [K
 
 Entries before 0.8.0 are not backfilled; consult `git log` for earlier history. Releases through 0.8.3 were published under the distribution name `spiritwriter-core`.
 
+## [0.10.1] — 2026-08-18
+
+Adds exact canonicalization under declared symmetry, and the harness that measures what it is for. Additive throughout — patch bump under the pre-1.0 convention.
+
+### Added
+- **`spiritwriter.fabric.orbit`** — exact canonical forms for structures that carry a declared symmetry, so equivalence is a byte comparison rather than a threshold decision. `canonical_cycle` / `cycle_digest` give the dihedral (rotation + optional reflection) form of a ring, `anchor_cycle` rotates to a distinguished element without losing traversal direction, and `canonical_under` / `orbit_digest` generalize both to any caller-supplied permutation group. `least_rotation` is Booth's algorithm, O(n) and correct under repeated elements. The exact counterpart to `fabric.canonicalize`, which resolves entities by fuzzy similarity: here the symmetry is declared and the answer has no confidence score attached. (spiritwriter-core#89)
+  - `perms` is treated as a **generating set** and closed under composition (`permutation_closure`) before a representative is chosen — passing generators to a canonicalizer that only scans the supplied permutations sends members of one orbit to different representatives, silently.
+  - Elements that canonical JSON cannot serialize (`bytes`, `datetime`, domain objects) are supported through a `key=` surrogate function, the way `sorted` takes one; without it the `TypeError` names the offending element and index.
+  - Digests carry a versioned domain prefix, so an orbit digest never collides with a plain content hash of the same bytes.
+  - `padded(width)` builds a `key=` that keeps bounded non-negative integers in numeric order, since lexicographic byte ordering otherwise sorts them as text (`10` before `9`). The width bound is enforced — an overflowing value raises rather than sorting silently into the wrong place. Dates need no helper: ISO-8601, which `normalize_date` already emits, sorts correctly as text.
+
+### Benchmarks
+- **`benchmarks/eval/structural_accuracy/`** — new eval suite measuring canonicalization against similarity scoring on records whose variation is structural rather than textual. The companion to `ess_accuracy`, which mutates fields (case, whitespace, typos, unicode) and where scoring does well. Across 200 pairs over three corpora — undirected rings, directed cycles, unordered groupings — the rule settles 114/114 same-structure pairs with 0 wrong merges, while the best similarity threshold that makes no wrong merges catches **0**. The classes are not separable at any cutoff: pairs that must stay apart score *higher* on average (0.729) than rotations (0.690), permutations (0.610), or reflections (0.546), because rewriting a structure changes the text a great deal while altering the structure changes it hardly at all. Negatives are deliberately hard — same members, different arrangement — since negatives drawn from unrelated structures would measure nothing.
+- Golden-vector tests pin the digest wire format (canonical algorithm, JSON encoding, domain prefix, hash). Two systems agree only while those bytes are stable, so changing one is a versioned act rather than a refactor.
+
+### Fixed
+- `_canonical_json` and `canonicalize.age_to_bucket` document their ordering behavior. `_canonical_json`'s byte ordering (numbers sort as text) and dict-key coercion (`{1: "a"}` and `{"1": "a"}` share a content address) were undocumented despite governing shard IDs and entity resolution. `age_to_bucket` now warns that its output is **not** text-sortable — `'8-9'` sorts after `'42-43'` — which is harmless as an ESS field value, where unique field keys mean the value never decides order, but wrong if anything sorts or range-scans on it. Docstrings only; no behavior change.
+
 ## [0.10.0] — 2026-06-16
 
 This release makes spiritwriter the **single source of truth for the knowledge-base pipeline** that had been duplicated in `claude-studio-producer` (CSP). Over a six-step lift-and-shift consume-back (strangler-fig) migration, the KB models, classifier, JSON extractor, LLM client, ingest, and `kb` helpers were consolidated here; CSP now imports them and deletes its copies (tracking issues spiritwriter-core#76 / claude-studio-producer#15). The work that lands in *this* package is the additive surface and guardrail tests below; the LLM vision extension carries one breaking-per-convention ABC change (see Changed), which drives the minor bump.

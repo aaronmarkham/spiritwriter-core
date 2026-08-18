@@ -26,6 +26,7 @@ The docs in `/docs/benchmarks/` cover *why the harness exists* and
 | Suite | Validates | Code | Design | Campaign report |
 |---|---|---|---|---|
 | `ess_accuracy/` | Entity Sense Signature resolution accuracy on a per-corpus basis | [ess_accuracy/](ess_accuracy/) | [docs/benchmarks/ess-accuracy-spec.md](../../docs/benchmarks/ess-accuracy-spec.md) | [docs/benchmarks/runs-log.md](../../docs/benchmarks/runs-log.md) |
+| `structural_accuracy/` | Canonicalization vs. similarity scoring on structural variation (rings, directed cycles, unordered groupings) | [structural_accuracy/](structural_accuracy/) | [structural_accuracy/README.md](structural_accuracy/README.md) | — |
 
 ## Running an eval suite
 

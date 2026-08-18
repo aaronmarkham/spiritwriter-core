@@ -168,6 +168,13 @@ def age_to_bucket(age: int, bucket_size: int = 2) -> str:
     '42-43'
     >>> age_to_bucket(43, 2)
     '42-43'
+
+    .. warning::
+       The result is **not** text-sortable — ``'8-9'`` sorts *after*
+       ``'42-43'``. That is harmless as an ESS field value, since field
+       keys are unique and the value never decides ordering, but do not
+       sort, range-scan, or canonicalize on these strings. Zero-pad
+       first (see ``fabric.orbit.padded``) if you need order.
     """
     floor = (age // bucket_size) * bucket_size
     return f"{floor}-{floor + bucket_size - 1}"
