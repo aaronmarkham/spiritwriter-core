@@ -50,7 +50,17 @@ class AtomKind(str, Enum):
 
 
 def _canonical_json(obj: Any) -> bytes:
-    """Deterministic JSON for content addressing."""
+    """Deterministic JSON for content addressing.
+
+    Two properties matter wherever these bytes are compared rather than
+    just hashed (see ``fabric.orbit``, which orders by them):
+
+    * Ordering is lexicographic over the encoded bytes, so numbers sort
+      as text — ``10`` precedes ``9``. Zero-pad, or use ISO-8601 for
+      dates, when a value-ordered result is wanted.
+    * JSON coerces dict keys to strings, so ``{1: "a"}`` and
+      ``{"1": "a"}`` encode identically and share a content address.
+    """
     return json.dumps(
         obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False
     ).encode("utf-8")

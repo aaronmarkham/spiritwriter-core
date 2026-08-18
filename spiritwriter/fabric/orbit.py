@@ -206,6 +206,11 @@ def canonical_cycle(
     for ordering, exactly like the ``key`` argument to :func:`sorted`.
     The returned tuple always holds the *original* elements.
 
+    Ordering is lexicographic over canonical-JSON bytes, so numbers sort
+    as text (``10`` before ``9``) and a ``key`` that returns numbers
+    inherits that. Return zero-padded strings, or ISO-8601 for dates, if
+    you need the result to read in value order.
+
     Returns a tuple of the original elements. It is usable as a dict key
     when those elements are themselves hashable; when they are not (dicts,
     lists), use :func:`cycle_digest` as the handle instead.
@@ -240,6 +245,10 @@ def anchor_cycle(
     the anchor is matched on its surrogate rather than on Python
     equality.
 
+    Matching is on exact canonical-JSON bytes, so a ``key`` that returns
+    numbers matches on their text form — ``1`` and ``1.0`` are distinct
+    anchors.
+
     Raises ``ValueError`` if the anchor is absent, or if it appears more
     than once and the rotation would therefore be ambiguous.
     """
@@ -269,6 +278,11 @@ def cycle_digest(
     The digest covers the canonical form's element *surrogates* — the
     values ``key`` produces — so two rings differing only in detail the
     key discards share a digest, by construction.
+
+    Ordering is lexicographic over canonical-JSON bytes, so numbers sort
+    as text (``10`` before ``9``) and a ``key`` that returns numbers
+    inherits that. Return zero-padded strings, or ISO-8601 for dates, if
+    you need the result to read in value order.
     """
     if len(seq) <= 1:
         return _sha256(_CYCLE_DOMAIN + _join(_keys(seq, key)))
@@ -415,6 +429,11 @@ def canonical_under(
 
     The identity is always included, so empty ``perms`` yields the input
     itself: a well-defined result under the trivial symmetry.
+
+    Ordering is lexicographic over canonical-JSON bytes, so numbers sort
+    as text (``10`` before ``9``) and a ``key`` that returns numbers
+    inherits that. Return zero-padded strings, or ISO-8601 for dates, if
+    you need the result to read in value order.
     """
     tuple_items = tuple(items)
     keys = _keys(tuple_items, key)
@@ -434,6 +453,11 @@ def orbit_digest(
 
     Same closure semantics as :func:`canonical_under`: ``perms`` is a
     generating set, closed before the canonical form is chosen.
+
+    Ordering is lexicographic over canonical-JSON bytes, so numbers sort
+    as text (``10`` before ``9``) and a ``key`` that returns numbers
+    inherits that. Return zero-padded strings, or ISO-8601 for dates, if
+    you need the result to read in value order.
     """
     tuple_items = tuple(items)
     keys = _keys(tuple_items, key)
