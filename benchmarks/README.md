@@ -35,9 +35,23 @@ python -m pytest benchmarks/bench_store_ops.py -v -s -k "scale"
 
 # Run only frio/perseus/studio patterns
 python -m pytest benchmarks/bench_memory_recall.py -v -s -k "Frio or Perseus or Studio"
+
+# Skip the 1K/5K-shard scale benches — the slow part of a full run
+python -m pytest benchmarks/ -v -s -k "not scale"
 ```
 
 The `-s` flag is important — it shows the benchmark output (ops/sec, latency percentiles).
+
+**Budget ~25 minutes for a full `benchmarks/` run** (95 benches). The nine
+scale benches in `bench_store_ops.py` are about 20 of those minutes on their
+own — `-k "not scale"` covers the other 86 in roughly 5. Two benches in
+`bench_providers.py` skip unless a provider with both STORAGE and
+SEMANTIC_SEARCH is configured.
+
+Perf benches are named `bench_*.py`, not `test_*.py`, so a bare `pytest` at the
+repo root runs the test suite without dragging the scale tier in behind it.
+[`pytest.ini`](pytest.ini) in this directory teaches pytest that pattern, and
+applies only when you point pytest at this directory.
 
 ## What's Measured
 
