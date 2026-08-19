@@ -828,6 +828,33 @@ class CanonicalRegistry:
         self._migrate()
 
         self._validate_or_store_schema()
+        self._warn_undeclared_discriminators()
+
+    def _warn_undeclared_discriminators(self) -> None:
+        """Warn when a discriminator names a field the schema never stores.
+
+        ``_create_entity`` only persists declared fields, so a discriminator
+        the schema does not declare is never present on the stored side, never
+        compares unequal, and never splits anything — the policy silently does
+        nothing. Better to say so than to let a misspelling look like "no
+        collisions found".
+        """
+        if not self.policy.split_on_conflict:
+            return
+        declared = (
+            set(self.schema.ess_fields)
+            | set(self.schema.context_fields)
+            | set(self.schema.metadata_fields)
+        )
+        undeclared = sorted(self.policy.split_on_conflict - declared)
+        if undeclared:
+            logger.warning(
+                "split_on_conflict names field(s) %s that schema %r does not "
+                "declare in ess_fields/context_fields/metadata_fields; they are "
+                "never stored, so they can never trigger a split",
+                undeclared,
+                self.schema.name,
+            )
 
     def _migrate(self) -> None:
         """Bring an existing DB up to the current shape.
@@ -836,6 +863,17 @@ class CanonicalRegistry:
         already exists, so a registry written before split support has no
         ``ess_base``. Add it and backfill from ``ess_digest`` — for an
         unsplit entity the two are equal by definition.
+
+        The backfill runs on **every** open, not only when the column is
+        first added. A version that skipped it once the column existed was
+        silently lossy across a downgrade: an older spiritwriter writing to
+        an already-migrated DB does not know the column and inserts NULL
+        there, and on the next upgrade the "column exists" guard skipped
+        the repair. Since ``find_by_ess`` matches on ``ess_base``, those
+        rows became permanently unfindable and the following ingest minted
+        a duplicate. ``WHERE ess_base IS NULL`` already scopes the write to
+        exactly the rows that need it, so running it unconditionally costs
+        an indexed no-op scan and closes the hole.
         """
         columns = {
             row["name"]
@@ -843,10 +881,9 @@ class CanonicalRegistry:
         }
         if "ess_base" not in columns:
             self._conn.execute("ALTER TABLE entities ADD COLUMN ess_base TEXT")
-            self._conn.execute(
-                "UPDATE entities SET ess_base = ess_digest WHERE ess_base IS NULL"
-            )
-            self._conn.commit()
+        self._conn.execute(
+            "UPDATE entities SET ess_base = ess_digest WHERE ess_base IS NULL"
+        )
         self._conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_ess_base ON entities(ess_base)"
         )

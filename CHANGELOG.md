@@ -4,6 +4,36 @@ All notable changes to `spiritwriter` are documented here. The format follows [K
 
 Entries before 0.8.0 are not backfilled; consult `git log` for earlier history. Releases through 0.8.3 were published under the distribution name `spiritwriter-core`.
 
+## [Unreleased]
+
+Attribute folding for the entity resolver, plus the two things a merge-only resolver could not previously express: recording *which source* a suppressed value came from, and refusing a match outright. **This is the first change that mutates a registry already on disk** — read Migration before upgrading a production database.
+
+### Migration
+
+`CanonicalRegistry.__init__` now migrates the SQLite file it opens:
+
+- Adds an **`ess_base`** column to `entities` (`ALTER TABLE`) when absent and backfills it as `ess_base = ess_digest` — correct by definition for any entity that has not been split. Creates **`idx_ess_base`**.
+- Creates two tables, **`variants`** and **`splits`**, with their indexes.
+
+The migration is additive and idempotent: no column dropped, no row deleted, no existing value rewritten. It is still a **write on open**, so back up the registry file first if it holds anything you cannot re-derive. `find_by_ess()` now matches on `ess_base` rather than `ess_digest`; the two are equal for every unsplit entity, so lookups are unaffected.
+
+The backfill runs on **every** open, not only when the column is added. That matters if you ever downgrade — an older spiritwriter does not know `ess_base` and writes NULL there, and those rows would otherwise stay unfindable forever once you upgraded again.
+
+Downgrading is safe for registries that never used `split_on_conflict`: an older version ignores the unknown tables and the extra column. If splits *were* recorded, an older version cannot see entities stored under a skolemized digest (it matches on `ess_digest`) — nothing is lost or corrupted, but records that should route to the split entity resolve to the base one instead.
+
+**Nothing changes unless you set the new policy options**, with one deliberate exception: folding fills fields the entity has *empty* (`fill_empty`, on by default). It never overwrites an existing value. It is not inert for later resolution, though — `_context_resolve` and `_fuzzy_resolve` read stored context and fuzzy fields, so a field that was empty (and therefore skipped) starts participating once filled.
+
+### Added
+- **Attribute folding** (`fold_entity_fields`) — a T1/T2 match now reconciles the candidate's fields into the entity's stored blob. Previously `upsert()` bumped `last_seen` and `source_count` and nothing else, so the canonical record was frozen at whatever the *first* sighting carried: a later richer record contributed nothing, a later contradicting one raised no signal. Nothing was lost — `sightings` kept every record — but reconciliation fell to every consumer. Pure function: mutates neither argument, returns a fresh dict. Identity fields are never rewritten (that would desynchronize the stored `ess_digest` from the fields it hashes); disagreement there is reported with `reason="identity"`.
+- **`ResolutionPolicy`** — the single place fold behavior is decided, every option a total order or a pure predicate, so repeated runs over the same records produce byte-identical stored fields. `precedence="richest"` degrades to `keep-first` on a tie rather than choosing arbitrarily.
+- **Exact dry run** — `field_conflicts()` and `CanonicalRegistry.plan()` are the non-mutating twins of the fold, calling the same pure function the write path calls, so a plan cannot drift from the write it predicts. `canonicalize_batch()` gains `dry_run=` and a **timestamp-free** `ResolutionReport`, making two reports diffable across runs.
+- **`conflicts="variants"`** — reifies each contributing sighting's suppressed values as a row in the new `variants` table, queryable via `registry.variants(id)`, leaving the canonical blob byte-identical to `keep-first`. `variant_id` hashes the suppressed fields *and the source*, so two sources dropping the same value stay two rows rather than collapsing the record that both disagreed.
+- **`split_on_conflict`** — declares discriminator fields a single entity cannot legitimately hold two of. A match that would conflict there is refused rather than folded: `resolve()` returns `NO_MATCH` carrying `split_from`, `upsert()` mints a separate entity under a `skolem_digest()`, and the refusal lands in the new `splits` table. The one thing a merge-only resolver cannot do — without it a thin `ess_fields` set silently collapses unrelated records onto one digest. A discriminator the schema does not declare is never stored and so can never split anything; the registry warns rather than letting the policy look effective.
+- `stats()` reports `variants` and `splits` counts (breaks callers asserting on the exact dict).
+
+### Fixed
+- The `ess_base` backfill no longer runs only when the column is first added. Skipping it once the column existed was silently lossy across a downgrade-and-rewrite cycle: rows an older version inserted with a NULL `ess_base` were never repaired, became permanently unfindable through `find_by_ess()`, and caused the next ingest to mint a duplicate instead of matching.
+
 ## [0.10.1] — 2026-08-18
 
 Adds exact canonicalization under declared symmetry, and the harness that measures what it is for. Additive throughout — patch bump under the pre-1.0 convention.

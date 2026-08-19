@@ -41,6 +41,10 @@ def _reg(td, **policy_kwargs):
     )
 
 
+def _reg_at(path, **policy_kwargs):
+    return CanonicalRegistry(path, SCHEMA, policy=ResolutionPolicy(**policy_kwargs))
+
+
 # ── Conflict variants ────────────────────────────────────────────────
 
 
@@ -315,6 +319,20 @@ class TestPolicyValidation:
         with pytest.raises(ValueError, match="cannot be both"):
             ResolutionPolicy(combine_fields={"ssn"}, split_on_conflict={"ssn"})
 
+    def test_warns_when_a_discriminator_is_not_declared_by_the_schema(self, caplog):
+        """An undeclared discriminator is never stored, so it never splits."""
+        with tempfile.TemporaryDirectory() as td:
+            with caplog.at_level("WARNING"):
+                _reg(td, split_on_conflict={"passport_no"})
+        assert "passport_no" in caplog.text
+        assert "never stored" in caplog.text
+
+    def test_no_warning_for_a_declared_discriminator(self, caplog):
+        with tempfile.TemporaryDirectory() as td:
+            with caplog.at_level("WARNING"):
+                _reg(td, split_on_conflict={"ssn"})
+        assert "never stored" not in caplog.text
+
 
 class TestMigration:
     def test_registry_written_before_ess_base_still_opens(self):
@@ -359,6 +377,77 @@ class TestMigration:
                 "SELECT ess_base FROM entities WHERE canonical_id = 'old1'"
             ).fetchone()["ess_base"]
             assert backfilled == "deadbeef"
+
+    def test_backfill_repairs_null_ess_base_written_by_an_older_version(self):
+        """The downgrade cycle: migrated -> older writer -> upgrade.
+
+        An older spiritwriter does not know ``ess_base`` and inserts NULL
+        there. A migration that only backfilled when *adding* the column
+        skipped the repair on the next open, and since ``find_by_ess``
+        matches on ``ess_base`` the row became permanently unfindable —
+        the next ingest minted a duplicate instead of matching it.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "cycle.db"
+            reg = CanonicalRegistry(path, SCHEMA)
+            first = {"last_name": "Smith", "first_name": "Ada"}
+            reg.upsert(first, reg.resolve(first), "a", "1")
+            reg.close()
+
+            # Simulate the older writer: it has no ess_base in its INSERT.
+            conn = sqlite3.connect(str(path))
+            conn.execute(
+                "INSERT INTO entities "
+                "(canonical_id, ess_digest, ess_fields, first_seen, last_seen) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (
+                    "legacy1",
+                    "digest-written-by-old-version",
+                    json.dumps({"last_name": "Jones", "first_name": "Ada"}),
+                    "2026-01-01T00:00:00Z",
+                    "2026-01-01T00:00:00Z",
+                ),
+            )
+            conn.commit()
+            nulls = conn.execute(
+                "SELECT COUNT(*) FROM entities WHERE ess_base IS NULL"
+            ).fetchone()[0]
+            conn.close()
+            assert nulls == 1, "precondition: the old writer left a NULL"
+
+            # Upgrade again — the backfill must repair it.
+            reg = CanonicalRegistry(path, SCHEMA)
+            remaining = reg._conn.execute(
+                "SELECT COUNT(*) as c FROM entities WHERE ess_base IS NULL"
+            ).fetchone()["c"]
+            assert remaining == 0
+            assert (
+                reg._conn.execute(
+                    "SELECT ess_base FROM entities WHERE canonical_id = 'legacy1'"
+                ).fetchone()["ess_base"]
+                == "digest-written-by-old-version"
+            )
+
+    def test_backfill_does_not_disturb_a_split_entity(self):
+        """The repair must not overwrite a deliberately skolemized digest."""
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "split.db"
+            reg = _reg_at(path, split_on_conflict={"ssn"})
+            for i, ssn in enumerate(["111", "999"]):
+                rec = {"last_name": "Smith", "first_name": "Ada", "ssn": ssn}
+                reg.upsert(rec, reg.resolve(rec), "s", str(i))
+            before = reg._conn.execute(
+                "SELECT canonical_id, ess_digest, ess_base FROM entities "
+                "ORDER BY canonical_id"
+            ).fetchall()
+            reg.close()
+
+            reopened = CanonicalRegistry(path, SCHEMA)
+            after = reopened._conn.execute(
+                "SELECT canonical_id, ess_digest, ess_base FROM entities "
+                "ORDER BY canonical_id"
+            ).fetchall()
+            assert [tuple(r) for r in before] == [tuple(r) for r in after]
 
     def test_migration_is_idempotent(self):
         with tempfile.TemporaryDirectory() as td:
