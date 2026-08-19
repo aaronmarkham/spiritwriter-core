@@ -288,6 +288,8 @@ class ResolutionResult:
     canonical_id: str | None       # existing entity ID if matched, None if new
     field_matches: dict[str, bool] # per-field match breakdown for debugging
     notes: str = ""                # human-readable explanation
+    split_from: str | None = None  # entity this record was refused a merge into
+    split_conflicts: tuple[FieldConflict, ...] = ()  # why it was refused
 
 
 @dataclass
@@ -368,7 +370,21 @@ class ResolutionPolicy:
             :class:`FoldResult` only; ``keep-all`` additionally stores the
             suppressed values under the ``__conflicts__`` key of the
             entity's field blob, as ``{field: [dropped, ...]}`` in
-            first-seen order with duplicates dropped.
+            first-seen order with duplicates dropped; ``variants`` leaves
+            the canonical blob identical to ``keep-first`` and instead
+            reifies each source's suppressed values as a row in the
+            ``variants`` table, queryable via
+            :meth:`CanonicalRegistry.variants`.
+        split_on_conflict: Discriminator fields. Disagreement on one of
+            these is treated as proof that two records are *different*
+            entities rather than one entity with a messy field, so a
+            match that would conflict there is refused: the record gets
+            its own entity and the refusal is recorded in the ``splits``
+            table. Empty by default, which disables the behavior
+            entirely. Use it for fields a single entity cannot
+            legitimately hold two of (a national ID, a serial number)
+            when a thin ``ess_fields`` set would otherwise collapse
+            unrelated records onto one digest.
         combine_fields: Text fields merged by sentence-level dedup rather
             than first-wins. A sentence already present in the stored
             value (compared case- and whitespace-insensitively) is not
@@ -394,13 +410,14 @@ class ResolutionPolicy:
     """
 
     precedence: str = "keep-first"          # "keep-first" | "richest"
-    conflicts: str = "keep-first"           # "keep-first" | "keep-all"
+    conflicts: str = "keep-first"           # "keep-first" | "keep-all" | "variants"
     combine_fields: frozenset[str] = frozenset()
     combine_max_length: int = 4096
     fill_empty: bool = True
+    split_on_conflict: frozenset[str] = frozenset()
 
     _PRECEDENCE = ("keep-first", "richest")
-    _CONFLICTS = ("keep-first", "keep-all")
+    _CONFLICTS = ("keep-first", "keep-all", "variants")
 
     def __post_init__(self) -> None:
         if self.precedence not in self._PRECEDENCE:
@@ -417,6 +434,16 @@ class ResolutionPolicy:
         # hashable and cannot be mutated behind a registry's back.
         if not isinstance(self.combine_fields, frozenset):
             object.__setattr__(self, "combine_fields", frozenset(self.combine_fields))
+        if not isinstance(self.split_on_conflict, frozenset):
+            object.__setattr__(
+                self, "split_on_conflict", frozenset(self.split_on_conflict)
+            )
+        overlap = self.combine_fields & self.split_on_conflict
+        if overlap:
+            raise ValueError(
+                "a field cannot be both combine_fields and split_on_conflict "
+                f"(it would never reach the split check): {sorted(overlap)}"
+            )
 
 
 DEFAULT_POLICY = ResolutionPolicy()
@@ -644,6 +671,29 @@ def fold_entity_fields(
     )
 
 
+def skolem_digest(base_digest: str, discriminators: dict[str, Any]) -> str:
+    """Derive a distinct ESS digest for an entity split off a collision.
+
+    ``entities`` carries ``UNIQUE(ess_digest)``, so two records that hash
+    to the same ESS cannot both be stored under it. When a match is
+    refused (see ``ResolutionPolicy.split_on_conflict``) the new entity
+    gets a digest derived from the base plus the discriminator values
+    that proved them different.
+
+    Mixing the discriminators in is load-bearing, not decoration: without
+    them a re-ingest of the same record would recompute the *base* digest,
+    match the entity it was deliberately split from, and silently re-fuse
+    the two. With them, the same record recomputes the same skolemized
+    digest and lands back on its own entity. (The trick, and that failure
+    mode, are lifted from docling-graph's ``skolem_document_id``.)
+    """
+    return _sha256(
+        _canonical_json(
+            [base_digest, sorted((k, str(v)) for k, v in discriminators.items())]
+        )
+    )
+
+
 def field_conflicts(
     current: dict[str, Any],
     incoming: dict[str, Any],
@@ -701,7 +751,33 @@ CREATE TABLE IF NOT EXISTS merges (
     merged_at TEXT NOT NULL
 );
 
+-- Suppressed values reified per contributing sighting (conflicts="variants").
+-- variant_id mixes the source in deliberately: two sources dropping the same
+-- value must stay two rows, or the record of "they disagreed" collapses.
+CREATE TABLE IF NOT EXISTS variants (
+    variant_id TEXT PRIMARY KEY,
+    canonical_id TEXT NOT NULL REFERENCES entities(canonical_id),
+    source_name TEXT NOT NULL,
+    source_id TEXT NOT NULL,
+    fields TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+-- Refusals to merge: a match rejected because it conflicted on a
+-- discriminator field (policy.split_on_conflict).
+CREATE TABLE IF NOT EXISTS splits (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    kept_id TEXT NOT NULL,
+    split_id TEXT NOT NULL,
+    field TEXT NOT NULL,
+    kept_value TEXT NOT NULL,
+    split_value TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_ess ON entities(ess_digest);
+CREATE INDEX IF NOT EXISTS idx_variants_entity ON variants(canonical_id);
+CREATE INDEX IF NOT EXISTS idx_splits_kept ON splits(kept_id);
 CREATE INDEX IF NOT EXISTS idx_sightings_entity ON sightings(canonical_id);
 CREATE INDEX IF NOT EXISTS idx_sightings_source ON sightings(source_name, source_id);
 """
@@ -749,8 +825,32 @@ class CanonicalRegistry:
         self._conn.execute("PRAGMA foreign_keys=ON")
         self._conn.row_factory = sqlite3.Row
         self._conn.executescript(_CREATE_SQL)
+        self._migrate()
 
         self._validate_or_store_schema()
+
+    def _migrate(self) -> None:
+        """Bring an existing DB up to the current shape.
+
+        ``CREATE TABLE IF NOT EXISTS`` never adds columns to a table that
+        already exists, so a registry written before split support has no
+        ``ess_base``. Add it and backfill from ``ess_digest`` — for an
+        unsplit entity the two are equal by definition.
+        """
+        columns = {
+            row["name"]
+            for row in self._conn.execute("PRAGMA table_info(entities)").fetchall()
+        }
+        if "ess_base" not in columns:
+            self._conn.execute("ALTER TABLE entities ADD COLUMN ess_base TEXT")
+            self._conn.execute(
+                "UPDATE entities SET ess_base = ess_digest WHERE ess_base IS NULL"
+            )
+            self._conn.commit()
+        self._conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_ess_base ON entities(ess_base)"
+        )
+        self._conn.commit()
 
     def _validate_or_store_schema(self) -> None:
         """Store schema on first run, validate on subsequent opens."""
@@ -813,7 +913,32 @@ class CanonicalRegistry:
         # T1: exact ESS match
         existing = self.find_by_ess(ess)
         if existing:
-            entity = existing[0]
+            entity, refused = self._pick_compatible(existing, candidate)
+            if entity is None:
+                # Every candidate sharing this ESS conflicts on a
+                # discriminator. Refuse the merge rather than fold two
+                # different things together; upsert() mints a separate
+                # entity and records why.
+                kept, conflicts = refused
+                result = ResolutionResult(
+                    tier=ResolutionTier.NO_MATCH,
+                    confidence=ResolutionTier.NO_MATCH.confidence,
+                    canonical_id=None,
+                    field_matches={f: True for f in self.schema.ess_fields},
+                    notes=(
+                        "ESS collision refused: conflicts on "
+                        + ", ".join(sorted(c.field for c in conflicts))
+                    ),
+                    split_from=kept,
+                    split_conflicts=conflicts,
+                )
+                if self._emitter is not None:
+                    self._emitter.emit(
+                        "candidate_split",
+                        split_from=kept,
+                        fields=sorted(c.field for c in conflicts),
+                    )
+                return result
             result = ResolutionResult(
                 tier=ResolutionTier.T1_EXACT,
                 confidence=ResolutionTier.T1_EXACT.confidence,
@@ -1054,6 +1179,14 @@ class CanonicalRegistry:
                     "WHERE canonical_id = ?",
                     (now, canonical_id),
                 )
+            if (
+                self.policy.conflicts == "variants"
+                and fold is not None
+                and fold.conflicts
+            ):
+                self._record_variant(
+                    canonical_id, fold.conflicts, source_name, source_id, now
+                )
         elif resolution.tier == ResolutionTier.T3_FUZZY:
             # Create new entity, then record the merge event for review
             canonical_id = self._create_entity(ess, candidate, now)
@@ -1067,6 +1200,29 @@ class CanonicalRegistry:
                         resolution.tier.value,
                         resolution.confidence,
                         resolution.notes,
+                        now,
+                    ),
+                )
+        elif resolution.split_from:
+            # A refused ESS collision: mint a separate entity under a
+            # skolemized digest and record why the merge was refused.
+            discriminators = {
+                c.field: c.dropped for c in resolution.split_conflicts
+            }
+            canonical_id = self._create_entity(
+                ess, candidate, now, digest=skolem_digest(ess.digest, discriminators)
+            )
+            for conflict in resolution.split_conflicts:
+                self._conn.execute(
+                    "INSERT INTO splits "
+                    "(kept_id, split_id, field, kept_value, split_value, created_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (
+                        resolution.split_from,
+                        canonical_id,
+                        conflict.field,
+                        conflict.kept,
+                        conflict.dropped,
                         now,
                     ),
                 )
@@ -1090,6 +1246,107 @@ class CanonicalRegistry:
         )
         self._conn.commit()
         return canonical_id
+
+    def _discriminator_conflicts(
+        self, stored: dict[str, Any], candidate: dict[str, Any]
+    ) -> tuple[FieldConflict, ...]:
+        """Discriminator fields where stored and candidate disagree."""
+        if not self.policy.split_on_conflict:
+            return ()
+        out: list[FieldConflict] = []
+        for name in sorted(self.policy.split_on_conflict):
+            have, want = stored.get(name), candidate.get(name)
+            if _is_empty(have) or _is_empty(want):
+                continue
+            if not scalars_equivalent(have, want):
+                out.append(
+                    FieldConflict(name, str(have), str(want), reason="discriminator")
+                )
+        return tuple(out)
+
+    def _pick_compatible(
+        self, candidates: list[dict[str, Any]], candidate: dict[str, Any]
+    ) -> tuple[dict[str, Any] | None, tuple[str, tuple[FieldConflict, ...]]]:
+        """Choose which same-ESS entity a candidate may fold into.
+
+        Returns ``(entity, refusal)``. With no discriminators configured
+        the first entity always wins, which is exactly the pre-split
+        behavior. Otherwise the first entity that does not conflict on a
+        discriminator wins; if every one conflicts, ``entity`` is None and
+        ``refusal`` names the entity it was closest to plus the conflicts
+        that refused it.
+
+        Contagion falls out of this rather than needing its own bookkeeping:
+        a split entity keeps its discriminator values, so the next record
+        carrying those values matches *it* and the next record carrying
+        the original's matches the original.
+        """
+        if not self.policy.split_on_conflict:
+            return candidates[0], ("", ())
+        first_refusal: tuple[str, tuple[FieldConflict, ...]] = ("", ())
+        for entity in candidates:
+            conflicts = self._discriminator_conflicts(entity["ess_fields"], candidate)
+            if not conflicts:
+                return entity, ("", ())
+            if not first_refusal[0]:
+                first_refusal = (entity["canonical_id"], conflicts)
+        return None, first_refusal
+
+    def variants(self, canonical_id: str) -> list[dict[str, Any]]:
+        """Suppressed values reified under an entity (conflicts="variants").
+
+        One row per contributing sighting, so two sources that dropped the
+        same value stay two rows.
+        """
+        rows = self._conn.execute(
+            "SELECT * FROM variants WHERE canonical_id = ? ORDER BY variant_id",
+            (canonical_id,),
+        ).fetchall()
+        return [{**dict(r), "fields": json.loads(r["fields"])} for r in rows]
+
+    def splits(self, kept_id: str | None = None) -> list[dict[str, Any]]:
+        """Merges refused because they conflicted on a discriminator field."""
+        if kept_id is None:
+            rows = self._conn.execute("SELECT * FROM splits ORDER BY id").fetchall()
+        else:
+            rows = self._conn.execute(
+                "SELECT * FROM splits WHERE kept_id = ? ORDER BY id", (kept_id,)
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def _record_variant(
+        self,
+        canonical_id: str,
+        conflicts: tuple[FieldConflict, ...],
+        source_name: str,
+        source_id: str,
+        now: str,
+    ) -> None:
+        """Reify one sighting's suppressed values as a variant row."""
+        dropped = {c.field: c.dropped for c in conflicts}
+        variant_id = _sha256(
+            _canonical_json(
+                {
+                    "canonical_id": canonical_id,
+                    "source_name": source_name,
+                    "source_id": source_id,
+                    "fields": dropped,
+                }
+            )
+        )
+        self._conn.execute(
+            "INSERT OR REPLACE INTO variants "
+            "(variant_id, canonical_id, source_name, source_id, fields, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                variant_id,
+                canonical_id,
+                source_name,
+                source_id,
+                json.dumps(dropped, sort_keys=True),
+                now,
+            ),
+        )
 
     def _stored_fields(self, canonical_id: str | None) -> dict[str, Any] | None:
         """The entity's stored field blob, or None if it does not exist."""
@@ -1127,9 +1384,19 @@ class CanonicalRegistry:
         return self._fold_into(resolution.canonical_id, candidate)
 
     def _create_entity(
-        self, ess: EntitySenseSig, candidate: dict[str, Any], now: str
+        self,
+        ess: EntitySenseSig,
+        candidate: dict[str, Any],
+        now: str,
+        digest: str | None = None,
     ) -> str:
-        """Create a new canonical entity."""
+        """Create a new canonical entity.
+
+        ``digest`` overrides the stored ``ess_digest`` for an entity split
+        off an ESS collision (see :func:`skolem_digest`). ``ess_base``
+        always records the un-skolemized digest, so resolution can still
+        find the entity by the ESS its fields actually hash to.
+        """
         canonical_id = uuid.uuid4().hex
         ess_fields_dict = {
             f: str(candidate[f])
@@ -1148,10 +1415,11 @@ class CanonicalRegistry:
 
         self._conn.execute(
             "INSERT INTO entities "
-            "(canonical_id, ess_digest, ess_fields, first_seen, last_seen) "
-            "VALUES (?, ?, ?, ?, ?)",
+            "(canonical_id, ess_digest, ess_base, ess_fields, first_seen, last_seen) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
             (
                 canonical_id,
+                digest or ess.digest,
                 ess.digest,
                 json.dumps(ess_fields_dict, sort_keys=True),
                 now,
@@ -1243,9 +1511,15 @@ class CanonicalRegistry:
         return entity
 
     def find_by_ess(self, ess: EntitySenseSig) -> list[dict[str, Any]]:
-        """Exact ESS lookup."""
+        """Exact ESS lookup.
+
+        Matches on ``ess_base`` — the digest an entity's identity fields
+        actually hash to — so entities split off a collision (whose
+        ``ess_digest`` is skolemized) are still found by the ESS they came
+        from. For an unsplit entity the two columns are equal.
+        """
         rows = self._conn.execute(
-            "SELECT * FROM entities WHERE ess_digest = ?",
+            "SELECT * FROM entities WHERE ess_base = ? ORDER BY first_seen, canonical_id",
             (ess.digest,),
         ).fetchall()
         return [
@@ -1336,6 +1610,10 @@ class CanonicalRegistry:
         entities = self._conn.execute("SELECT COUNT(*) as c FROM entities").fetchone()["c"]
         sightings = self._conn.execute("SELECT COUNT(*) as c FROM sightings").fetchone()["c"]
         merges = self._conn.execute("SELECT COUNT(*) as c FROM merges").fetchone()["c"]
+        variants = self._conn.execute(
+            "SELECT COUNT(*) as c FROM variants"
+        ).fetchone()["c"]
+        splits = self._conn.execute("SELECT COUNT(*) as c FROM splits").fetchone()["c"]
 
         source_rows = self._conn.execute(
             "SELECT source_name, COUNT(*) as c FROM sightings GROUP BY source_name"
@@ -1346,6 +1624,8 @@ class CanonicalRegistry:
             "entities": entities,
             "sightings": sightings,
             "merges": merges,
+            "variants": variants,
+            "splits": splits,
             "sources": sources,
         }
 
@@ -1380,6 +1660,7 @@ class ResolutionReport:
     conflicts: list[dict[str, str]] = field(default_factory=list)
     entities_created: int = 0
     entities_folded: int = 0
+    splits_refused: int = 0
 
     @property
     def identity_conflicts(self) -> int:
@@ -1397,6 +1678,7 @@ class ResolutionReport:
             "conflicts": self.conflicts,
             "entities_created": self.entities_created,
             "entities_folded": self.entities_folded,
+            "splits_refused": self.splits_refused,
         }
 
 
@@ -1436,6 +1718,11 @@ def canonicalize_batch(
             report.dry_run = dry_run
             tier = resolution.tier.value
             report.tiers[tier] = report.tiers.get(tier, 0) + 1
+            if resolution.split_from:
+                report.splits_refused += 1
+                report.conflicts.extend(
+                    c.as_dict() for c in resolution.split_conflicts
+                )
             fold = registry.plan(record, resolution)
             if fold is None:
                 report.entities_created += 1

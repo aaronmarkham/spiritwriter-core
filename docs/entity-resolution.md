@@ -24,7 +24,7 @@ Resolution returns a `ResolutionTier` with a confidence score:
 | `T2_STRONG` | 0.85 | Yes | All fuzzy fields pass threshold; high overall score |
 | `T3_FUZZY` | 0.70 | No (creates merge event) | Combined fuzzy score ≥ 0.65 but below T2 |
 | `T4_WEAK` | 0.50 | No (flag only) | Context overlap + partial ESS — too weak to act on |
-| `NO_MATCH` | 0.0 | n/a | New entity |
+| `NO_MATCH` | 0.0 | n/a | New entity — or a match *refused* on a discriminator field, when `split_on_conflict` is set; see [Refusing a merge](#refusing-a-merge) |
 
 The split between auto-merge (T1, T2) and flag-only (T3, T4) is the safety valve. T1 is "definitely the same"; T2 is "almost certainly the same"; T3+ wants a human or a higher-confidence pass before merging records.
 
@@ -340,6 +340,78 @@ fallback is what makes it a total order rather than a coin flip.
 
 `conflicts="keep-all"` additionally stores suppressed values under a
 `__conflicts__` key in the field blob, as `{field: [dropped, ...]}`.
+
+### Conflict variants
+
+`conflicts="variants"` leaves the canonical blob byte-identical to
+`keep-first` and instead reifies each contributing sighting's suppressed
+values as a row in the `variants` table:
+
+```python
+registry = CanonicalRegistry(path, schema,
+                             policy=ResolutionPolicy(conflicts="variants"))
+...
+registry.variants(canonical_id)
+# [{"variant_id": "...", "source_name": "b", "source_id": "2",
+#   "fields": {"city": "Sparks"}, ...}]
+```
+
+The `variant_id` is a content hash over the canonical id, the suppressed
+fields, **and the source that contributed them**. Mixing the source in is
+load-bearing: without it, two sources dropping the same value collapse to one
+row and the fact that *two* independent sources disagreed is lost. Re-ingesting
+the same sighting is idempotent (`INSERT OR REPLACE` on the same id), so the
+table records distinct disagreements rather than repeat deliveries.
+
+Compared with `keep-all`, this is queryable — "which sources disagreed about
+`city`, and what did each say" is a `SELECT`, not a JSON scan.
+
+### Refusing a merge
+
+Every rule so far assumes the match was right and only the fields need
+reconciling. `split_on_conflict` covers the case where the *match* is wrong:
+
+```python
+policy = ResolutionPolicy(split_on_conflict={"ssn"})
+```
+
+A field listed there is a **discriminator** — one a single entity cannot
+legitimately hold two of. If a T1 match would conflict on one, the merge is
+refused: `resolve()` returns `NO_MATCH` with `split_from` naming the entity it
+declined to fold into, `upsert()` mints a separate entity, and the refusal
+lands in the `splits` table.
+
+```python
+result = registry.resolve(record)
+result.tier             # NO_MATCH
+result.split_from       # canonical id it refused to merge into
+result.split_conflicts  # (FieldConflict(field="ssn", ..., reason="discriminator"),)
+
+registry.splits()       # [{"kept_id": ..., "split_id": ..., "field": "ssn", ...}]
+```
+
+This is the one thing a merge-only resolver cannot do. Without it, a thin
+`ess_fields` set silently collapses unrelated records onto one digest — and
+the thinner the schema, the more damage, quietly, at scale. Absence is not
+disagreement: a record missing the discriminator still matches normally.
+
+**How it survives re-ingest.** `entities` carries `UNIQUE(ess_digest)`, so two
+records with the same ESS cannot both be stored under it. A split entity gets a
+`skolem_digest()` — derived from the base digest *plus* the discriminator
+values that proved them different — while `ess_base` keeps the digest its
+fields actually hash to, so `find_by_ess()` still finds it.
+
+Mixing the discriminators into that derivation is what makes the split
+durable. Without them, re-resolving the split record would recompute the base
+digest, match the entity it was deliberately split from, and silently re-fuse
+the two. With them, the same record recomputes the same skolemized digest and
+lands back on its own entity. Contagion needs no extra bookkeeping: the split
+entity keeps its discriminator values, so later records route to whichever
+entity they agree with.
+
+Registries created before this existed have no `ess_base` column;
+`CanonicalRegistry` adds and backfills it on open (`ess_base = ess_digest`,
+which is correct by definition for an unsplit entity).
 
 ### Dry run
 
