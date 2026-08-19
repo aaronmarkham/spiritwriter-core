@@ -64,6 +64,18 @@ from spiritwriter.fabric.canonicalize import (
     CanonicalSchema,
     CanonicalRegistry,
     canonicalize_batch,
+    # Attribute folding — what an entity's stored fields look like after a
+    # T1/T2 match. fold_entity_fields() is pure; field_conflicts() is its
+    # non-mutating dry-run twin, and CanonicalRegistry.plan() exposes the
+    # same computation without writing. See docs/entity-resolution.md.
+    ResolutionPolicy,
+    DEFAULT_POLICY,
+    FieldConflict,
+    FoldResult,
+    ResolutionReport,
+    fold_entity_fields,
+    field_conflicts,
+    scalars_equivalent,
     normalize_name,
     normalize_date,
     age_to_bucket,
@@ -143,6 +155,14 @@ __all__ = [
     "CanonicalSchema",
     "CanonicalRegistry",
     "canonicalize_batch",
+    "ResolutionPolicy",
+    "DEFAULT_POLICY",
+    "FieldConflict",
+    "FoldResult",
+    "ResolutionReport",
+    "fold_entity_fields",
+    "field_conflicts",
+    "scalars_equivalent",
     "normalize_name",
     "normalize_date",
     "age_to_bucket",
