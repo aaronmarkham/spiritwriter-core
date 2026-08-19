@@ -5,8 +5,12 @@ Shared Python library for knowledge management, secrets, LLM abstraction, and **
 ## Setup
 
 ```bash
-pip install -e .
+pip install -e .                        # library only
+pip install -e ".[dev,sealed,network]"  # what CI installs — use this to run the tests
 ```
+
+The `dev` extra carries `pytest-asyncio`. Without it the async tests in
+`tests/test_llm_anthropic.py` are skipped, not run.
 
 ## Skills
 
@@ -53,5 +57,10 @@ spiritwriter/
 ## Tests
 
 ```bash
+pip install -e ".[dev,sealed,network]"
 python -m pytest tests/ -v
 ```
+
+Expect 885 passed, 11 skipped — the skips are the IPFS tests, which need a
+local Kubo node. Any other skip means an extra is missing; the skip reason
+names it.

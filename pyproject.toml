@@ -57,3 +57,10 @@ include = ["spiritwriter*"]
 [tool.setuptools.package-data]
 "spiritwriter.audit" = ["data/*.json"]
 "spiritwriter.sw_vocab" = ["data/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "asyncio: async test driven by pytest-asyncio (in the `dev` extra)",
+    "ipfs: needs a local Kubo node on 127.0.0.1:5001",
+]
