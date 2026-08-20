@@ -790,6 +790,46 @@ class CanonicalRegistry:
         self._conn.executescript(_CREATE_SQL)
 
         self._validate_or_store_schema()
+        self._warn_inert_policy_fields()
+
+    def _warn_inert_policy_fields(self) -> None:
+        """Warn when the policy names fields the fold can never reach.
+
+        A field only reaches the combine rule if the schema declares it in
+        ``context_fields`` or ``metadata_fields``. Naming anything else is
+        accepted silently and does nothing, so a typo reads as "combining
+        just never applied" rather than as a mistake. Two distinct ways to
+        land there, and the message says which:
+
+        * the schema does not declare the field at all — usually a typo;
+        * the field is an identity field, which is never folded because
+          rewriting it would desynchronize the stored ``ess_digest`` from
+          the fields it hashes.
+        """
+        if not self.policy.combine_fields:
+            return
+        identity = frozenset(self.schema.ess_fields)
+        foldable = frozenset(_foldable_fields(self.schema))
+        declared = identity | foldable
+
+        undeclared = sorted(self.policy.combine_fields - declared)
+        if undeclared:
+            logger.warning(
+                "combine_fields names field(s) %s that schema %r does not "
+                "declare in context_fields/metadata_fields; they are never "
+                "stored, so combining can never apply to them",
+                undeclared,
+                self.schema.name,
+            )
+        on_identity = sorted(self.policy.combine_fields & identity)
+        if on_identity:
+            logger.warning(
+                "combine_fields names identity field(s) %s of schema %r; "
+                "identity fields are never folded, so combining can never "
+                "apply to them",
+                on_identity,
+                self.schema.name,
+            )
 
     def _validate_or_store_schema(self) -> None:
         """Store schema on first run, validate on subsequent opens."""

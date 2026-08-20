@@ -247,6 +247,60 @@ class TestPolicyValidation:
         assert {ResolutionPolicy(), ResolutionPolicy()} != set()
 
 
+class TestInertPolicyWarnings:
+    """A combine_field the fold can never reach should say so.
+
+    Naming an unreachable field is accepted silently and simply does
+    nothing, so a typo reads as "combining never applied" rather than as
+    a mistake. Two distinct causes, each with its own message.
+    """
+
+    def test_warns_when_the_schema_does_not_declare_the_field(self, caplog):
+        with tempfile.TemporaryDirectory() as td:
+            with caplog.at_level("WARNING"):
+                CanonicalRegistry(Path(td) / "r.db", SCHEMA,
+                                  policy=ResolutionPolicy(combine_fields={"summary"}))
+        assert "summary" in caplog.text
+        assert "does not declare" in caplog.text
+
+    def test_warns_when_the_field_is_an_identity_field(self, caplog):
+        with tempfile.TemporaryDirectory() as td:
+            with caplog.at_level("WARNING"):
+                CanonicalRegistry(Path(td) / "r.db", SCHEMA,
+                                  policy=ResolutionPolicy(combine_fields={"last_name"}))
+        assert "last_name" in caplog.text
+        assert "never folded" in caplog.text
+
+    def test_no_warning_for_a_declared_foldable_field(self, caplog):
+        with tempfile.TemporaryDirectory() as td:
+            with caplog.at_level("WARNING"):
+                CanonicalRegistry(Path(td) / "r.db", SCHEMA,
+                                  policy=ResolutionPolicy(combine_fields={"notes"}))
+        assert "combine_fields" not in caplog.text
+
+    def test_no_warning_when_combine_fields_is_empty(self, caplog):
+        with tempfile.TemporaryDirectory() as td:
+            with caplog.at_level("WARNING"):
+                CanonicalRegistry(Path(td) / "r.db", SCHEMA)
+        assert "combine_fields" not in caplog.text
+
+    def test_the_warning_is_accurate_the_field_really_is_inert(self):
+        """Pin the behaviour the warning describes."""
+        current = {"notes": "First sentence."}
+        incoming = {"notes": "Second sentence."}
+        undeclared = fold_entity_fields(
+            current, incoming, SCHEMA,
+            ResolutionPolicy(combine_fields={"summary"}))
+        assert undeclared.combined == ()
+        assert [c.field for c in undeclared.conflicts] == ["notes"]
+
+        declared = fold_entity_fields(
+            current, incoming, SCHEMA,
+            ResolutionPolicy(combine_fields={"notes"}))
+        assert declared.combined == ("notes",)
+        assert declared.conflicts == ()
+
+
 class TestDryRunTwin:
     def test_field_conflicts_matches_the_real_fold(self):
         current = {"city": "Reno", "employer": "ACME"}
