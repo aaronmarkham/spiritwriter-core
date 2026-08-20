@@ -18,6 +18,7 @@ from spiritwriter.fabric.canonicalize import (
     # Pre-resolution normalization helpers
     first_initial,
     strip_punctuation,
+    strip_accents,
     apply_normalizers,
     pipeline,
 )
@@ -662,6 +663,68 @@ class TestStripPunctuation:
 
     def test_empty(self):
         assert strip_punctuation("") == ""
+
+
+class TestStripAccents:
+    """Diacritics split the same person into two entities without this.
+
+    Rosters disagree about whether they carry accents at all — some
+    scrapers strip them, some records were typed without them, OCR
+    mangles them. Neither ESS nor fuzzy matching bridges the gap on its
+    own, so the pair below is a genuine missed match, not a nicety.
+    """
+
+    PAIRS = [
+        ("GARCÍA", "GARCIA"),
+        ("HERNÁNDEZ", "HERNANDEZ"),
+        ("MUÑOZ", "MUNOZ"),
+        ("PEÑA", "PENA"),
+        ("Nguyễn", "Nguyen"),
+        ("José", "Jose"),
+    ]
+
+    def test_strips_diacritics_keeping_base_letters(self):
+        assert strip_accents("GARCÍA") == "GARCIA"
+        assert strip_accents("Nguyễn") == "Nguyen"
+
+    def test_unaccented_text_is_unchanged(self):
+        assert strip_accents("Smith") == "Smith"
+        assert strip_accents("O'Brien-Jones") == "O'Brien-Jones"
+
+    def test_empty_and_none(self):
+        assert strip_accents("") == ""
+        assert strip_accents(None) == ""
+
+    def test_idempotent(self):
+        once = strip_accents("HERNÁNDEZ")
+        assert strip_accents(once) == once
+
+    def test_without_it_the_pair_does_not_resolve(self):
+        """Pins the defect: normalize_name alone leaves them apart."""
+        for accented, plain in self.PAIRS:
+            a = EntitySenseSig.compute(last_name=normalize_name(accented))
+            b = EntitySenseSig.compute(last_name=normalize_name(plain))
+            assert a.digest != b.digest, f"{accented}/{plain} unexpectedly matched"
+
+    def test_with_it_the_pair_resolves(self):
+        norm = pipeline(strip_accents, normalize_name)
+        for accented, plain in self.PAIRS:
+            a = EntitySenseSig.compute(last_name=norm(accented))
+            b = EntitySenseSig.compute(last_name=norm(plain))
+            assert a.digest == b.digest, f"{accented}/{plain} still split"
+
+    def test_fuzzy_alone_does_not_rescue_a_strict_threshold(self):
+        """Why the helper is needed rather than a looser threshold."""
+        for accented, plain in self.PAIRS:
+            assert fuzzy_score(accented, plain) < 0.90
+
+    def test_composes_in_a_normalizer_map(self):
+        cand = apply_normalizers(
+            {"last_name": "GARCÍA", "first_name": "José"},
+            {"last_name": pipeline(strip_accents, normalize_name),
+             "first_name": pipeline(strip_accents, normalize_name)},
+        )
+        assert cand == {"last_name": "GARCIA", "first_name": "JOSE"}
 
 
 class TestApplyNormalizers:

@@ -58,6 +58,44 @@ result.tier   # ResolutionTier.T4_WEAK or NO_MATCH — NOT T1, because
               # Two canonical entities get created for the same person.
 ```
 
+### Accents are a second, quieter version of the same failure
+
+The `K.` / `Kazuhiko` case above is easy to spot because the strings look
+different. Diacritics are the same failure wearing a disguise — the strings
+look the *same* to a reader, and neither ESS nor fuzzy matching bridges them:
+
+```python
+EntitySenseSig.compute(last_name=normalize_name("GARCÍA")).digest
+EntitySenseSig.compute(last_name=normalize_name("GARCIA")).digest
+# different -> two canonical entities for one person
+```
+
+`normalize_name` does not help: its `[^\w\s-]` is Unicode-aware, so `Í`
+survives, and `.upper()` keeps it. Fuzzy matching does not rescue it either,
+because on a short surname one substitution is a large fraction of the string:
+
+| pair | `fuzzy_score` | passes a 0.90 threshold? |
+|---|---|---|
+| `GARCÍA` / `GARCIA` | 0.833 | no |
+| `HERNÁNDEZ` / `HERNANDEZ` | 0.889 | no |
+| `MUÑOZ` / `MUNOZ` | 0.800 | no |
+| `PEÑA` / `PENA` | 0.750 | no |
+| `Nguyễn` / `Nguyen` | 0.833 | no |
+
+Sources genuinely disagree here — some scrapers strip accents, some records
+were typed without them, OCR mangles them — so this is a routine split, not an
+edge case. `strip_accents` closes it, and all five pairs above go to a `1.000`
+score and a single shared digest:
+
+```python
+NORMALIZERS = {"last_name": pipeline(strip_accents, normalize_name)}
+```
+
+`normalize_name` deliberately does **not** strip accents itself. Doing so would
+change the digest of every accented entity already in a registry, orphaning it
+from records that normalize the new way — a re-key, not a patch. Compose the
+helper instead.
+
 The fix: declare a per-field normalizer map and pipe candidates through `apply_normalizers()` before calling the registry. The helpers ship at the top of `spiritwriter.fabric.canonicalize`:
 
 ```python
@@ -86,6 +124,7 @@ Helpers shipped with the module:
 |---|---|---|
 | `first_initial(s)` | First letter, uppercased | Collapsing `'K.'` / `'Kazuhiko'` / `'K'` to one form |
 | `strip_punctuation(s)` | Strip ASCII punctuation (hyphens preserved) | Names with apostrophes, periods, commas |
+| `strip_accents(s)` | Drop diacritics, keep the base letters | Any name field where sources disagree about accents — see below |
 | `normalize_name(s)` | Uppercase + strip + collapse whitespace + strip punctuation | General-purpose name field |
 | `normalize_date(s)` | Parse various date formats → ISO 8601 | DOB / event date fields that arrive in mixed formats |
 | `apply_normalizers(cand, map)` | Apply per-field normalizers; fields without a normalizer pass through | The composer; what you actually call |

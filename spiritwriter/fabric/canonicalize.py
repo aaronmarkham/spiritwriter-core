@@ -13,6 +13,7 @@ import hashlib
 import json
 import re
 import sqlite3
+import unicodedata
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -93,6 +94,44 @@ def strip_punctuation(s: str | None) -> str:
     if not s:
         return ""
     return re.sub(r"[^\w\s-]", "", s)
+
+
+def strip_accents(s: str | None) -> str:
+    """Drop diacritics, keeping the base letters.
+
+    NFKD only *separates* a combining mark from the letter it sits on — the
+    mark is still present and still compares unequal, so ``"GARCÍA"`` and
+    ``"GARCIA"`` remain different keys until the marks are removed. Sources
+    disagree about whether they carry diacritics at all (some scrapers strip
+    them, some records were typed without them, OCR mangles them), so without
+    this the same person arriving from two sources hashes to two ESS digests
+    and becomes two canonical entities.
+
+    Fuzzy matching does not reliably rescue it: on a short surname a single
+    substitution is a large fraction of the string, so accented/unaccented
+    pairs score well below a strict threshold.
+
+    Compose it with the other helpers rather than replacing them —
+    ``pipeline(strip_accents, normalize_name)`` is the usual name field.
+    ``normalize_name`` deliberately does **not** do this itself: changing it
+    would change the digest of every accented entity already stored, orphaning
+    them from records that normalize the new way.
+
+    >>> strip_accents("GARCÍA")
+    'GARCIA'
+    >>> strip_accents("Nguyễn")
+    'Nguyen'
+    >>> strip_accents("MUÑOZ")
+    'MUNOZ'
+    >>> strip_accents("Smith")
+    'Smith'
+    >>> strip_accents(None)
+    ''
+    """
+    if not s:
+        return ""
+    decomposed = unicodedata.normalize("NFKD", s)
+    return "".join(ch for ch in decomposed if not unicodedata.combining(ch))
 
 
 def apply_normalizers(

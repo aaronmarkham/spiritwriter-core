@@ -85,6 +85,7 @@ from spiritwriter.fabric.canonicalize import (
     # calling resolve()/upsert()). See docs/entity-resolution.md.
     first_initial,
     strip_punctuation,
+    strip_accents,
     apply_normalizers,
     pipeline,
 )
@@ -169,6 +170,7 @@ __all__ = [
     "fuzzy_score",
     "first_initial",
     "strip_punctuation",
+    "strip_accents",
     "apply_normalizers",
     "pipeline",
     # Exact canonical forms under declared symmetry (orbit). The
