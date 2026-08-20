@@ -4,6 +4,22 @@ All notable changes to `spiritwriter` are documented here. The format follows [K
 
 Entries before 0.8.0 are not backfilled; consult `git log` for earlier history. Releases through 0.8.3 were published under the distribution name `spiritwriter-core`.
 
+## [Unreleased]
+
+Attribute folding for the entity resolver. Additive API, **no database change** — the SQLite schema a registry creates is byte-identical to 0.10.1 (verified object-for-object), so there is no migration, no new table or column, and nothing to back up before upgrading. Patch bump under the pre-1.0 convention.
+
+### Added
+- **Attribute folding** (`fold_entity_fields`) — a T1/T2 match now reconciles the candidate's fields into the entity's stored blob. Previously `upsert()` bumped `last_seen` and `source_count` and nothing else, so the canonical record was frozen at whatever the *first* sighting carried: a later richer record contributed nothing, a later contradicting one raised no signal. Nothing was lost — `sightings` kept every record — but reconciliation fell to every consumer. Pure function: mutates neither argument, returns a fresh dict. Identity fields are never rewritten (that would desynchronize the stored `ess_digest` from the fields it hashes); disagreement there is reported with `reason="identity"`.
+- **`ResolutionPolicy`** — the single place fold behavior is decided, every option a total order or a pure predicate, so repeated runs over the same records produce byte-identical stored fields. `precedence="richest"` degrades to `keep-first` on a tie rather than choosing arbitrarily. `conflicts="keep-all"` additionally records suppressed values under a `__conflicts__` key *inside the existing `ess_fields` JSON blob* — a value-shape change on an opt-in path, not a schema change.
+- **Exact dry run** — `field_conflicts()` and `CanonicalRegistry.plan()` are the non-mutating twins of the fold, calling the same pure function the write path calls, so a plan cannot drift from the write it predicts. `canonicalize_batch()` gains `dry_run=` and a **timestamp-free** `ResolutionReport`, making two reports diffable across runs.
+- **`strip_accents()`** — a normalization helper that drops diacritics while keeping the base letters. `normalize_name` does not do this (`[^\w\s-]` is Unicode-aware, so `Í` survives `.upper()`), and fuzzy matching does not rescue it: `GARCÍA`/`GARCIA` scores 0.833, `MUÑOZ`/`MUNOZ` 0.800, `PEÑA`/`PENA` 0.750 — all under a strict threshold, because on a short surname one substitution is a large fraction of the string. So the same person arriving from two sources that disagree about accents becomes two canonical entities, silently. Compose it — `pipeline(strip_accents, normalize_name)` — rather than expecting `normalize_name` to change: stripping accents there would alter the digest of every accented entity already stored, orphaning it from records normalized the new way.
+- The registry warns when `combine_fields` names a field the fold can never reach — one the schema does not declare, or an identity field (never folded, since rewriting one would desynchronize the stored `ess_digest`). Naming an unreachable field is otherwise accepted silently and simply does nothing, so a typo reads as "combining never applied" rather than as a mistake.
+
+### Changed
+- `upsert()` on a T1/T2 match now fills entity fields that were **empty**, where before it left them frozen at first sight. It never overwrites a value that already exists — on a genuine conflict the stored value wins by default and the disagreement is reported rather than silently absorbed. This is the one behavior change; everything else is opt-in.
+
+  It is not inert for later resolution: `_context_resolve` reads stored context fields and `_fuzzy_resolve` reads stored fuzzy fields, so a field that was empty (and therefore skipped) starts participating once filled. Measured on a 360-record corpus with 45% context-field dropout, resolution was unaffected — identical tier histogram, identical cluster count, zero false merges and zero split entities either way — while canonical records carrying `facility` went from 32/60 to 59/60 and `booking_date` from 26/60 to 60/60. The gain is data completeness on the canonical record; it is not a matching improvement.
+
 ## [0.10.1] — 2026-08-18
 
 Adds exact canonicalization under declared symmetry, and the harness that measures what it is for. Additive throughout — patch bump under the pre-1.0 convention.

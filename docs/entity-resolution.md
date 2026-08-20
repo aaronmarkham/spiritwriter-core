@@ -58,6 +58,44 @@ result.tier   # ResolutionTier.T4_WEAK or NO_MATCH — NOT T1, because
               # Two canonical entities get created for the same person.
 ```
 
+### Accents are a second, quieter version of the same failure
+
+The `K.` / `Kazuhiko` case above is easy to spot because the strings look
+different. Diacritics are the same failure wearing a disguise — the strings
+look the *same* to a reader, and neither ESS nor fuzzy matching bridges them:
+
+```python
+EntitySenseSig.compute(last_name=normalize_name("GARCÍA")).digest
+EntitySenseSig.compute(last_name=normalize_name("GARCIA")).digest
+# different -> two canonical entities for one person
+```
+
+`normalize_name` does not help: its `[^\w\s-]` is Unicode-aware, so `Í`
+survives, and `.upper()` keeps it. Fuzzy matching does not rescue it either,
+because on a short surname one substitution is a large fraction of the string:
+
+| pair | `fuzzy_score` | passes a 0.90 threshold? |
+|---|---|---|
+| `GARCÍA` / `GARCIA` | 0.833 | no |
+| `HERNÁNDEZ` / `HERNANDEZ` | 0.889 | no |
+| `MUÑOZ` / `MUNOZ` | 0.800 | no |
+| `PEÑA` / `PENA` | 0.750 | no |
+| `Nguyễn` / `Nguyen` | 0.833 | no |
+
+Sources genuinely disagree here — some scrapers strip accents, some records
+were typed without them, OCR mangles them — so this is a routine split, not an
+edge case. `strip_accents` closes it, and all five pairs above go to a `1.000`
+score and a single shared digest:
+
+```python
+NORMALIZERS = {"last_name": pipeline(strip_accents, normalize_name)}
+```
+
+`normalize_name` deliberately does **not** strip accents itself. Doing so would
+change the digest of every accented entity already in a registry, orphaning it
+from records that normalize the new way — a re-key, not a patch. Compose the
+helper instead.
+
 The fix: declare a per-field normalizer map and pipe candidates through `apply_normalizers()` before calling the registry. The helpers ship at the top of `spiritwriter.fabric.canonicalize`:
 
 ```python
@@ -86,6 +124,7 @@ Helpers shipped with the module:
 |---|---|---|
 | `first_initial(s)` | First letter, uppercased | Collapsing `'K.'` / `'Kazuhiko'` / `'K'` to one form |
 | `strip_punctuation(s)` | Strip ASCII punctuation (hyphens preserved) | Names with apostrophes, periods, commas |
+| `strip_accents(s)` | Drop diacritics, keep the base letters | Any name field where sources disagree about accents — see below |
 | `normalize_name(s)` | Uppercase + strip + collapse whitespace + strip punctuation | General-purpose name field |
 | `normalize_date(s)` | Parse various date formats → ISO 8601 | DOB / event date fields that arrive in mixed formats |
 | `apply_normalizers(cand, map)` | Apply per-field normalizers; fields without a normalizer pass through | The composer; what you actually call |
@@ -259,6 +298,129 @@ for record, result in results:
 #                              see "Why T3 and not T2?" above)
 # Johnson: no_match  (0.0)   — different person
 ```
+
+## Folding: what happens after a match
+
+Resolution decides *which* entity a record belongs to. Folding decides what
+that entity's stored fields look like afterwards.
+
+Without folding, a canonical record is frozen at first sight: `upsert()` bumps
+`last_seen` and `source_count`, and the field blob keeps whatever the first
+sighting happened to carry. Nothing is lost — `get_entity()` still returns
+every sighting — but a later, richer record contributes nothing to the
+canonical view, and a later contradicting one raises no signal at all.
+
+`fold_entity_fields()` closes that gap. It is pure: it mutates neither
+argument and returns a fresh dict, so the same inputs always produce the same
+output.
+
+```python
+from spiritwriter.fabric.canonicalize import fold_entity_fields
+
+result = fold_entity_fields(
+    {"city": "Reno"},                      # stored
+    {"city": "Reno", "employer": "ACME"},  # incoming
+    schema,
+)
+result.fields    # {"city": "Reno", "employer": "ACME"}
+result.filled    # ("employer",)
+result.conflicts # ()
+```
+
+Rules, in order:
+
+1. **Identity fields are never rewritten.** The entity's stored `ess_digest`
+   is computed from `schema.ess_fields`, so rewriting one would desynchronize
+   the digest from the fields it hashes. A disagreement is reported as a
+   conflict with `reason="identity"` and otherwise left alone — it usually
+   means your normalizers let two different people match.
+2. **An empty field takes the incoming value** (`policy.fill_empty`, on by
+   default). This cannot overwrite anything, so it is strictly enrichment —
+   though it is not inert for *future* resolution: `_context_resolve` reads
+   stored context fields and `_fuzzy_resolve` reads stored fuzzy fields, so a
+   field that was empty (and therefore skipped) starts participating once
+   filled. ESS computation is unaffected — both paths filter the stored blob
+   to `schema.ess_fields` before hashing, so folded values and the
+   `__conflicts__` key can never perturb a digest or an overlap.
+3. **Equivalent values are not a conflict.** `scalars_equivalent()` ignores
+   case and whitespace runs — deliberately looser than ESS equality, because
+   it compares stored text rather than identity.
+4. **`policy.combine_fields` merge by sentence-level dedup** instead of
+   first-wins.
+5. **Anything left is a conflict**, resolved by `policy.precedence` and
+   recorded either way.
+
+### Policy
+
+`ResolutionPolicy` is the single place the fold's behavior is decided. Every
+option is a total order or a pure predicate, so two runs over the same records
+in the same order produce byte-identical stored fields.
+
+```python
+from spiritwriter.fabric.canonicalize import ResolutionPolicy, CanonicalRegistry
+
+policy = ResolutionPolicy(
+    precedence="richest",          # or "keep-first" (default)
+    conflicts="keep-all",          # or "keep-first" (default)
+    combine_fields={"notes"},
+)
+registry = CanonicalRegistry(path, schema, policy=policy)
+```
+
+The **default policy is conservative on purpose**: it fills fields the entity
+has empty and keeps the stored value on a genuine conflict. No value that
+exists today is ever overwritten — the only behavior change from the
+pre-folding engine is that empty fields get populated and conflicts get
+reported instead of silently absorbed.
+
+`precedence="richest"` lets the more populated record win a conflict, counting
+non-empty non-meta fields, with ties falling back to `keep-first`. That
+fallback is what makes it a total order rather than a coin flip.
+
+`conflicts="keep-all"` additionally stores suppressed values under a
+`__conflicts__` key in the field blob, as `{field: [dropped, ...]}`.
+
+### Dry run
+
+`field_conflicts()` is the non-mutating twin of `fold_entity_fields()`, and
+`registry.plan()` is the same thing at registry level: it returns exactly the
+`FoldResult` that `upsert()` will apply, without writing.
+
+```python
+resolution = registry.resolve(record)
+planned = registry.plan(record, resolution)   # None if it would create a new entity
+if planned and planned.conflicts:
+    review(planned.conflicts)
+else:
+    registry.upsert(record, resolution, "source", record_id)
+```
+
+Both paths call the same pure function, so a plan cannot drift from the write
+it predicts. That is the point of keeping the predicate separate rather than
+reimplementing "what would happen" alongside "what happens".
+
+For a whole batch, pass `dry_run=True` and a report:
+
+```python
+from spiritwriter.fabric.canonicalize import canonicalize_batch, ResolutionReport
+
+report = ResolutionReport()
+canonicalize_batch(records, registry, "county_roster", dry_run=True, report=report)
+
+report.tiers                # {"t1_exact": 12, "t3_fuzzy": 2, "no_match": 40}
+report.fields_filled        # {"employer": 9}
+report.conflicts            # [{"field": "city", "kept": ..., "dropped": ..., ...}]
+report.identity_conflicts   # ess_fields disagreements — always worth a look
+```
+
+A dry run resolves each record against the registry **as it stands now**; it
+does not model records within the same batch resolving against each other,
+since none of them are committed.
+
+`ResolutionReport` is deliberately timestamp-free, so `report.to_dict()` is
+byte-identical across runs over the same state. That makes two reports
+diffable — which is how you notice that a normalizer change quietly moved
+forty records from T2 to T4.
 
 ## Entity Sense Signatures
 
