@@ -338,6 +338,329 @@ class CanonicalSchema:
         }))
 
 
+# ── Fold policy & attribute folding ──────────────────────────────────
+#
+# Resolution decides *which* entity a record belongs to. Folding decides
+# what the entity's stored fields look like afterwards. Without it a
+# canonical record is frozen at first sight: a later, richer sighting
+# contributes nothing and a later contradicting one raises no signal.
+
+
+@dataclass(frozen=True)
+class ResolutionPolicy:
+    """Deterministic knobs of a fold (see :func:`fold_entity_fields`).
+
+    Every option is a *total* order or a pure predicate, so two runs over
+    the same records in the same order produce byte-identical stored
+    fields. Nothing here consults wall-clock time, randomness, or dict
+    iteration order.
+
+    Attributes:
+        precedence: Who wins a genuine scalar conflict. ``keep-first``
+            keeps the value already on the entity — the outcome today's
+            engine produces, since it never rewrites a stored field.
+            ``richest`` lets the more populated record win, counting
+            non-empty non-meta fields, ties broken in favour of the
+            stored value. Both are total: ``richest`` degrades to
+            ``keep-first`` whenever the counts tie, and the count itself
+            is order-independent.
+        conflicts: ``keep-first`` reports conflicts on the returned
+            :class:`FoldResult` only; ``keep-all`` additionally stores the
+            suppressed values under the ``__conflicts__`` key of the
+            entity's field blob, as ``{field: [dropped, ...]}`` in
+            first-seen order with duplicates dropped.
+        combine_fields: Text fields merged by sentence-level dedup rather
+            than first-wins. A sentence already present in the stored
+            value (compared case- and whitespace-insensitively) is not
+            appended twice.
+        combine_max_length: Truncation bound for combined text fields.
+            Truncation prefers a sentence boundary inside the bound and
+            falls back to a hard cut.
+        fill_empty: Promote an incoming value into a field the entity has
+            empty. On by default: it cannot overwrite anything, so it is
+            strictly an enrichment. Note it is not inert for *future*
+            resolution — ``_context_resolve`` reads stored context fields
+            and ``_fuzzy_resolve`` reads stored fuzzy fields, so a field
+            that was empty (and therefore skipped) starts participating
+            once filled. ESS computation is unaffected: both paths filter
+            the stored blob to ``schema.ess_fields`` before hashing.
+
+    Note:
+        Identity fields (``schema.ess_fields``) are never folded. The
+        entity's stored ``ess_digest`` is computed from them, so
+        rewriting one would desynchronize the digest from the fields it
+        hashes. Disagreement on an identity field is reported as a
+        conflict with ``reason="identity"`` and otherwise left alone.
+    """
+
+    precedence: str = "keep-first"          # "keep-first" | "richest"
+    conflicts: str = "keep-first"           # "keep-first" | "keep-all"
+    combine_fields: frozenset[str] = frozenset()
+    combine_max_length: int = 4096
+    fill_empty: bool = True
+
+    _PRECEDENCE = ("keep-first", "richest")
+    _CONFLICTS = ("keep-first", "keep-all")
+
+    def __post_init__(self) -> None:
+        if self.precedence not in self._PRECEDENCE:
+            raise ValueError(
+                f"precedence must be one of {self._PRECEDENCE}, got {self.precedence!r}"
+            )
+        if self.conflicts not in self._CONFLICTS:
+            raise ValueError(
+                f"conflicts must be one of {self._CONFLICTS}, got {self.conflicts!r}"
+            )
+        if self.combine_max_length < 1:
+            raise ValueError("combine_max_length must be >= 1")
+        # Accept any iterable of field names; freeze it so the policy stays
+        # hashable and cannot be mutated behind a registry's back.
+        if not isinstance(self.combine_fields, frozenset):
+            object.__setattr__(self, "combine_fields", frozenset(self.combine_fields))
+
+
+DEFAULT_POLICY = ResolutionPolicy()
+
+# Keys the fold treats as bookkeeping rather than entity content.
+_FOLD_META_KEYS = frozenset({"__conflicts__"})
+
+_SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+")
+
+
+@dataclass(frozen=True)
+class FieldConflict:
+    """One field where stored and incoming values genuinely disagree.
+
+    ``kept`` is the value that survives the fold, ``dropped`` the one
+    suppressed. ``reason`` is ``"identity"`` for an ``ess_fields``
+    disagreement (reported, never folded) or ``"scalar"`` otherwise.
+    """
+
+    field: str
+    kept: str
+    dropped: str
+    reason: str = "scalar"
+
+    def as_dict(self) -> dict[str, str]:
+        return {
+            "field": self.field,
+            "kept": self.kept,
+            "dropped": self.dropped,
+            "reason": self.reason,
+        }
+
+
+@dataclass(frozen=True)
+class FoldResult:
+    """Outcome of folding one candidate into one stored field blob.
+
+    ``fields`` is a new dict — :func:`fold_entity_fields` never mutates
+    its arguments — and ``changed`` says whether it differs from the blob
+    it came from, so callers can skip a no-op write.
+    """
+
+    fields: dict[str, Any]
+    conflicts: tuple[FieldConflict, ...] = ()
+    filled: tuple[str, ...] = ()
+    combined: tuple[str, ...] = ()
+    changed: bool = False
+
+
+def _is_empty(value: Any) -> bool:
+    """True for None, empty string, or whitespace-only string."""
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return not value.strip()
+    return False
+
+
+def scalars_equivalent(current: Any, incoming: Any) -> bool:
+    """Formatting-insensitive scalar equality.
+
+    Values differing only by surrounding whitespace, internal whitespace
+    runs, or case are the same value for folding purposes. Deliberately
+    looser than ESS equality (exact after ``.strip().lower()``) because
+    this compares *stored text*, not identity.
+
+    >>> scalars_equivalent("Ada  Lovelace", "ada lovelace")
+    True
+    >>> scalars_equivalent("Ada", "Grace")
+    False
+    """
+    if current is None or incoming is None:
+        return current is incoming
+    a = re.sub(r"\s+", " ", str(current)).strip().lower()
+    b = re.sub(r"\s+", " ", str(incoming)).strip().lower()
+    return a == b
+
+
+def _sentences(text: str) -> list[str]:
+    return [s.strip() for s in _SENTENCE_SPLIT.split(text) if s.strip()]
+
+
+def _combine_text(current: str, incoming: str, max_length: int) -> str:
+    """Append the sentences of ``incoming`` not already in ``current``.
+
+    Order is preserved and comparison is case/whitespace-insensitive, so
+    the result is a pure function of the two inputs.
+    """
+    seen = {re.sub(r"\s+", " ", s).lower() for s in _sentences(current)}
+    out = _sentences(current)
+    for sentence in _sentences(incoming):
+        key = re.sub(r"\s+", " ", sentence).lower()
+        if key not in seen:
+            seen.add(key)
+            out.append(sentence)
+    combined = " ".join(out)
+    if len(combined) <= max_length:
+        return combined
+    truncated = combined[:max_length]
+    boundary = max(truncated.rfind(". "), truncated.rfind("! "), truncated.rfind("? "))
+    if boundary > 0:
+        return truncated[: boundary + 1]
+    return truncated
+
+
+def _richness(fields: Any) -> int:
+    """Count non-empty, non-meta values. Order-independent by construction."""
+    if not isinstance(fields, dict):
+        return 0
+    return sum(
+        1 for k, v in fields.items() if k not in _FOLD_META_KEYS and not _is_empty(v)
+    )
+
+
+def _foldable_fields(schema: CanonicalSchema) -> list[str]:
+    """A schema's declared non-identity fields, in declaration order.
+
+    Identity fields back the stored ESS digest and are never rewritten.
+    """
+    identity = frozenset(schema.ess_fields)
+    return [
+        f
+        for f in list(schema.context_fields) + list(schema.metadata_fields)
+        if f not in identity
+    ]
+
+
+def fold_entity_fields(
+    current: dict[str, Any],
+    incoming: dict[str, Any],
+    schema: CanonicalSchema,
+    policy: ResolutionPolicy = DEFAULT_POLICY,
+) -> FoldResult:
+    """Fold a resolved candidate's fields into an entity's stored blob.
+
+    Pure: neither argument is mutated and the returned ``fields`` is a
+    fresh dict. Given the same inputs it always returns the same output —
+    no clock, no randomness, no reliance on dict ordering beyond the
+    caller's own.
+
+    Rules, in order:
+
+    1. Identity fields (``schema.ess_fields``) are never rewritten; a
+       disagreement is reported with ``reason="identity"``.
+    2. An empty stored field takes the incoming value when
+       ``policy.fill_empty`` (default). This cannot overwrite anything.
+    3. Equivalent values (:func:`scalars_equivalent`) are not a conflict
+       and change nothing.
+    4. ``policy.combine_fields`` are merged by sentence-level dedup.
+    5. Anything left is a conflict, resolved by ``policy.precedence`` and
+       recorded either way.
+
+    Only schema-declared fields are folded; unknown keys on the candidate
+    are ignored, matching what ``_create_entity`` stores.
+    """
+    folded = dict(current)
+    conflicts: list[FieldConflict] = []
+    filled: list[str] = []
+    combined: list[str] = []
+
+    # Rule 1 — identity fields report, never fold.
+    for name in schema.ess_fields:
+        if name not in incoming:
+            continue
+        stored, candidate = current.get(name), incoming[name]
+        if _is_empty(stored) or _is_empty(candidate):
+            continue
+        if not scalars_equivalent(stored, candidate):
+            conflicts.append(
+                FieldConflict(name, str(stored), str(candidate), reason="identity")
+            )
+
+    for name in _foldable_fields(schema):
+        if name not in incoming:
+            continue
+        candidate = incoming[name]
+        if _is_empty(candidate):
+            continue
+        stored = folded.get(name)
+
+        # Rule 2 — fill an empty field.
+        if _is_empty(stored):
+            if policy.fill_empty:
+                folded[name] = str(candidate)
+                filled.append(name)
+            continue
+
+        # Rule 3 — same value, nothing to do.
+        if scalars_equivalent(stored, candidate):
+            continue
+
+        # Rule 4 — sentence-level combine.
+        if name in policy.combine_fields:
+            merged = _combine_text(
+                str(stored), str(candidate), policy.combine_max_length
+            )
+            if merged != str(stored):
+                folded[name] = merged
+                combined.append(name)
+            continue
+
+        # Rule 5 — genuine conflict.
+        if policy.precedence == "richest" and _richness(incoming) > _richness(current):
+            kept, dropped = str(candidate), str(stored)
+            folded[name] = kept
+        else:
+            kept, dropped = str(stored), str(candidate)
+        conflicts.append(FieldConflict(name, kept, dropped, reason="scalar"))
+
+    if policy.conflicts == "keep-all" and conflicts:
+        record = dict(folded.get("__conflicts__") or {})
+        for conflict in conflicts:
+            dropped_values = list(record.get(conflict.field, []))
+            if conflict.dropped not in dropped_values:
+                dropped_values.append(conflict.dropped)
+            record[conflict.field] = dropped_values
+        folded["__conflicts__"] = record
+
+    return FoldResult(
+        fields=folded,
+        conflicts=tuple(conflicts),
+        filled=tuple(filled),
+        combined=tuple(combined),
+        changed=folded != current,
+    )
+
+
+def field_conflicts(
+    current: dict[str, Any],
+    incoming: dict[str, Any],
+    schema: CanonicalSchema,
+    policy: ResolutionPolicy = DEFAULT_POLICY,
+) -> list[FieldConflict]:
+    """Fields where folding ``incoming`` into ``current`` would disagree.
+
+    The non-mutating dry-run twin of :func:`fold_entity_fields`: it
+    writes nothing and returns exactly the conflicts a real fold with the
+    same arguments would report. Keeping the predicate available
+    separately is what lets a dry run be *exact* rather than an
+    approximation that drifts from the code that actually runs.
+    """
+    return list(fold_entity_fields(current, incoming, schema, policy).conflicts)
+
+
 # ── SQLite schema ────────────────────────────────────────────────────
 
 _CREATE_SQL = """
@@ -396,14 +719,28 @@ class CanonicalRegistry:
     Storage: SQLite (WAL mode), one DB per registry.
     """
 
-    def __init__(self, db_path: str | Path, schema: CanonicalSchema, *, emitter: TraceEmitter | None = None):
+    def __init__(
+        self,
+        db_path: str | Path,
+        schema: CanonicalSchema,
+        *,
+        emitter: TraceEmitter | None = None,
+        policy: ResolutionPolicy = DEFAULT_POLICY,
+    ):
         """Open or create a registry.
 
         Creates tables on first run. Schema is stored in DB metadata
         so mismatches are caught early.
+
+        ``policy`` governs attribute folding on a T1/T2 match — see
+        :class:`ResolutionPolicy`. The default fills fields the entity has
+        empty and keeps the stored value on a genuine conflict, so no
+        value that exists today is ever overwritten; conflicts are
+        reported rather than silently absorbed.
         """
         self.db_path = Path(db_path).expanduser()
         self.schema = schema
+        self.policy = policy
         self._emitter = emitter
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -701,12 +1038,22 @@ class CanonicalRegistry:
 
         if resolution.tier in (ResolutionTier.T1_EXACT, ResolutionTier.T2_STRONG):
             canonical_id = resolution.canonical_id
-            # Update last_seen and source_count
-            self._conn.execute(
-                "UPDATE entities SET last_seen = ?, source_count = source_count + 1 "
-                "WHERE canonical_id = ?",
-                (now, canonical_id),
-            )
+            # Fold the candidate's fields into the stored blob before
+            # touching the counters: without this the canonical record is
+            # whatever the *first* sighting said, forever.
+            fold = self._fold_into(canonical_id, candidate)
+            if fold is not None and fold.changed:
+                self._conn.execute(
+                    "UPDATE entities SET ess_fields = ?, last_seen = ?, "
+                    "source_count = source_count + 1 WHERE canonical_id = ?",
+                    (json.dumps(fold.fields, sort_keys=True), now, canonical_id),
+                )
+            else:
+                self._conn.execute(
+                    "UPDATE entities SET last_seen = ?, source_count = source_count + 1 "
+                    "WHERE canonical_id = ?",
+                    (now, canonical_id),
+                )
         elif resolution.tier == ResolutionTier.T3_FUZZY:
             # Create new entity, then record the merge event for review
             canonical_id = self._create_entity(ess, candidate, now)
@@ -743,6 +1090,41 @@ class CanonicalRegistry:
         )
         self._conn.commit()
         return canonical_id
+
+    def _stored_fields(self, canonical_id: str | None) -> dict[str, Any] | None:
+        """The entity's stored field blob, or None if it does not exist."""
+        if not canonical_id:
+            return None
+        row = self._conn.execute(
+            "SELECT ess_fields FROM entities WHERE canonical_id = ?",
+            (canonical_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return json.loads(row["ess_fields"])
+
+    def _fold_into(
+        self, canonical_id: str | None, candidate: dict[str, Any]
+    ) -> FoldResult | None:
+        """Fold ``candidate`` into a stored entity. Computes only — no write."""
+        stored = self._stored_fields(canonical_id)
+        if stored is None:
+            return None
+        return fold_entity_fields(stored, candidate, self.schema, self.policy)
+
+    def plan(
+        self, candidate: dict[str, Any], resolution: ResolutionResult
+    ) -> FoldResult | None:
+        """What :meth:`upsert` would do to the stored fields — without doing it.
+
+        Returns ``None`` when the resolution would create a new entity
+        (nothing to fold into), otherwise the exact :class:`FoldResult`
+        that ``upsert`` will apply. Because both paths call the same pure
+        :func:`fold_entity_fields`, a plan cannot drift from the write.
+        """
+        if resolution.tier not in (ResolutionTier.T1_EXACT, ResolutionTier.T2_STRONG):
+            return None
+        return self._fold_into(resolution.canonical_id, candidate)
 
     def _create_entity(
         self, ess: EntitySenseSig, candidate: dict[str, Any], now: str
@@ -980,23 +1362,96 @@ class CanonicalRegistry:
 
 # ── Batch convenience ────────────────────────────────────────────────
 
+@dataclass
+class ResolutionReport:
+    """Audit record of one :func:`canonicalize_batch` run.
+
+    Deliberately timestamp-free so re-running the same batch over the
+    same registry state produces a byte-identical report. That is what
+    makes two reports diffable — a normalizer change that quietly moves
+    forty records from T2 to T4 shows up as a diff, not as silence.
+    """
+
+    records: int = 0
+    dry_run: bool = False
+    tiers: dict[str, int] = field(default_factory=dict)
+    fields_filled: dict[str, int] = field(default_factory=dict)
+    fields_combined: dict[str, int] = field(default_factory=dict)
+    conflicts: list[dict[str, str]] = field(default_factory=list)
+    entities_created: int = 0
+    entities_folded: int = 0
+
+    @property
+    def identity_conflicts(self) -> int:
+        """Conflicts on an ``ess_fields`` value — never folded, always a smell."""
+        return sum(1 for c in self.conflicts if c.get("reason") == "identity")
+
+    def to_dict(self) -> dict[str, Any]:
+        """Stable, JSON-serializable form with deterministic key order."""
+        return {
+            "records": self.records,
+            "dry_run": self.dry_run,
+            "tiers": dict(sorted(self.tiers.items())),
+            "fields_filled": dict(sorted(self.fields_filled.items())),
+            "fields_combined": dict(sorted(self.fields_combined.items())),
+            "conflicts": self.conflicts,
+            "entities_created": self.entities_created,
+            "entities_folded": self.entities_folded,
+        }
+
+
 def canonicalize_batch(
     records: list[dict[str, Any]],
     registry: CanonicalRegistry,
     source_name: str,
     source_id_field: str = "source_id",
+    *,
+    dry_run: bool = False,
+    report: ResolutionReport | None = None,
 ) -> list[tuple[dict[str, Any], ResolutionResult]]:
     """Resolve and upsert a batch of records.
 
     Returns list of (record, resolution) tuples for the caller
     to act on (e.g., build alerts, update state).
+
+    With ``dry_run=True`` nothing is written: every record is resolved and
+    its fold computed through the same pure :func:`fold_entity_fields`
+    the real path uses, so the plan is exact rather than an estimate.
+    Note that a dry run resolves each record against the registry as it
+    stands *now* — it does not model records in the same batch resolving
+    against each other, since none of them are committed.
+
+    Pass a :class:`ResolutionReport` as ``report`` to collect tier counts,
+    filled fields, and conflicts. Reports are timestamp-free and therefore
+    diffable across runs.
     """
     results: list[tuple[dict[str, Any], ResolutionResult]] = []
 
     for record in records:
         resolution = registry.resolve(record)
         source_id = str(record.get(source_id_field, uuid.uuid4().hex))
-        registry.upsert(record, resolution, source_name, source_id)
+
+        if report is not None:
+            report.records += 1
+            report.dry_run = dry_run
+            tier = resolution.tier.value
+            report.tiers[tier] = report.tiers.get(tier, 0) + 1
+            fold = registry.plan(record, resolution)
+            if fold is None:
+                report.entities_created += 1
+            else:
+                if fold.changed:
+                    report.entities_folded += 1
+                for name in fold.filled:
+                    report.fields_filled[name] = report.fields_filled.get(name, 0) + 1
+                for name in fold.combined:
+                    report.fields_combined[name] = (
+                        report.fields_combined.get(name, 0) + 1
+                    )
+                report.conflicts.extend(c.as_dict() for c in fold.conflicts)
+
+        if not dry_run:
+            registry.upsert(record, resolution, source_name, source_id)
         results.append((record, resolution))
 
     return results
