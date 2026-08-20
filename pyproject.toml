@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "spiritwriter"
-version = "0.10.1"
+version = "0.10.2"
 description = "Agent memory you own — content-addressed memory shards, provable traces, scoped delegation, and entity resolution, local-first"
 readme = "README.md"
 license = {text = "Apache-2.0"}
