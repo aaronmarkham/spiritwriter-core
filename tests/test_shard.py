@@ -1126,3 +1126,115 @@ class TestMoveScope:
         import pytest
         with pytest.raises(KeyError):
             store.move_scope("nonexistent", "jobs:done")
+
+
+# ── wire stability (golden vectors) ──────────────────────────────────
+#
+# shard_id is a content address other systems store and compare. It
+# holds only while these bytes are stable, so these pin the whole
+# chain: atom serialization, canonical JSON encoding, digest.
+#
+# Both fabric.canonicalize and fabric.orbit import _canonical_json and
+# _sha256 from this module, so a change made to suit either of them
+# silently re-addresses every shard already emitted anywhere. If one of
+# these fails, that is a versioned break, not a refactor: bump a domain
+# tag, do not update the constant in place.
+
+GOLDEN_MINIMAL = "5bcde99a2b777943e7e669a3ad8c81ea7d2e13f2cb7d7ad8c2fff349d776130c"
+GOLDEN_REPORT = "d38019501716f867e981a353f6468ca90ea7598babf2a013455210f0f3e28f0b"
+
+
+def _report_atoms():
+    """A key/value report shard — the shape a caller builds from a dict.
+
+    Deliberately exercises what a single-atom vector cannot: several
+    atoms in sorted-key order, and bool / int / float / None / list /
+    dict / non-ASCII values routed through the same ``json.dumps`` the
+    callers use.
+    """
+    report = {
+        "checked": True,
+        "complete": False,
+        "counted": 42,
+        "labels": ["alpha", "beta"],
+        "missing": None,
+        "name": "sample",
+        "nested": {"b": 2, "a": 1},
+        "ratio": 0.5,
+        "unicode": "café",
+    }
+    return [
+        ShardAtom(
+            text=f"{key}={value}",
+            key=key,
+            value=json.dumps(value, sort_keys=True)
+            if isinstance(value, (list, dict))
+            else str(value),
+        )
+        for key, value in sorted(report.items())
+    ]
+
+
+def test_golden_minimal_shard_id():
+    shard = MemoryShard(
+        atoms=[ShardAtom(text="k=v", key="k", value="v")], scope="s", origin="o"
+    )
+    assert shard.shard_id == GOLDEN_MINIMAL
+
+
+def test_golden_report_shard_id():
+    shard = MemoryShard(
+        atoms=_report_atoms(), scope="report:sample:v1", origin="agent:example"
+    )
+    assert shard.shard_id == GOLDEN_REPORT
+
+
+def test_shard_id_excludes_meta_and_time():
+    """The address covers atoms + scope + origin only.
+
+    Which is what makes a golden vector possible: no clock to freeze,
+    and incidental bookkeeping cannot move an address.
+    """
+    base = dict(
+        atoms=[ShardAtom(text="k=v", key="k", value="v")], scope="s", origin="o"
+    )
+    assert (
+        MemoryShard(**base, meta={}).shard_id
+        == MemoryShard(**base, meta={"atom_count": 1}).shard_id
+        == GOLDEN_MINIMAL
+    )
+
+
+def test_shard_id_covers_atom_order_scope_and_origin():
+    """Guards that the vectors above would actually catch a drift.
+
+    A golden constant nobody proves is sensitive can quietly stop
+    guarding anything, so assert each covered input moves the address.
+    """
+    atoms = _report_atoms()
+    assert (
+        MemoryShard(
+            atoms=atoms, scope="report:sample:v1", origin="agent:example"
+        ).shard_id
+        == GOLDEN_REPORT
+    )
+    assert (
+        MemoryShard(
+            atoms=list(reversed(atoms)),
+            scope="report:sample:v1",
+            origin="agent:example",
+        ).shard_id
+        != GOLDEN_REPORT
+    )
+    assert (
+        MemoryShard(
+            atoms=atoms, scope="report:sample:v2", origin="agent:example"
+        ).shard_id
+        != GOLDEN_REPORT
+    )
+    assert (
+        MemoryShard(
+            atoms=atoms, scope="report:sample:v1", origin="agent:other"
+        ).shard_id
+        != GOLDEN_REPORT
+    )
