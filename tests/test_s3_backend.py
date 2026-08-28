@@ -17,8 +17,8 @@ import pytest
 
 from spiritwriter.fabric.shard import MemoryShard, ShardAtom, AtomKind
 from spiritwriter.fabric.crypto import encrypt_shard, generate_job_key
-from spiritwriter.fabric.network import ShardManifest
-from spiritwriter.fabric.backends.s3 import S3Backend, S3Config
+from spiritwriter.fabric.network import ShardManifest, IntegrityError, NetworkUnavailable
+from spiritwriter.fabric.backends.s3 import S3Backend, S3Config, S3ConfigurationError
 
 
 # === Fake S3 client ===
@@ -40,12 +40,21 @@ class _Exceptions:
 
 
 class FakeS3Client:
-    """Minimal in-memory S3 client covering the S3Backend surface."""
+    """Minimal in-memory S3 client covering the S3Backend surface.
+
+    Set ``get_error`` to an error code (e.g. "AccessDenied", "SlowDown") to
+    make every ``get_object`` raise that error — used to simulate IAM/
+    throttling/transport failures that must PROPAGATE from resolve*, not be
+    swallowed as "not found". A ``get_object`` against a bucket the client
+    doesn't know raises ``NoSuchBucket`` (matching real S3), which the backend
+    must surface as a configuration error rather than "not found".
+    """
 
     def __init__(self, existing_buckets=("test-bucket",)):
         self.store: dict[tuple[str, str], bytes] = {}
         self._buckets = set(existing_buckets)
         self.exceptions = _Exceptions()
+        self.get_error: str | None = None
 
     def put_object(self, Bucket, Key, Body, **kwargs):
         if Bucket not in self._buckets:
@@ -54,6 +63,10 @@ class FakeS3Client:
         return {}
 
     def get_object(self, Bucket, Key, **kwargs):
+        if self.get_error is not None:
+            raise _ClientError(self.get_error)
+        if Bucket not in self._buckets:
+            raise _ClientError("NoSuchBucket")
         try:
             body = self.store[(Bucket, Key)]
         except KeyError:
@@ -113,7 +126,10 @@ class TestPublishResolve:
         loc = backend.publish(shard)
         assert loc.shard_id == shard.shard_id
         assert loc.cid is not None
-        assert loc.local is True
+        # An S3 object is REMOTE (L2), so local=False — intentionally diverges
+        # from IPFSBackend, which sets local=True (its bug, tracked separately).
+        assert loc.local is False
+        assert loc.pinned is True
 
     def test_resolve_by_shard_id(self, backend):
         shard = _make_shard()
@@ -215,6 +231,83 @@ class TestManifest:
 
     def test_resolve_manifest_missing_returns_none(self, backend):
         assert backend.resolve_manifest("sw/manifests/nope.json") is None
+
+    def test_resolve_manifest_integrity_mismatch_raises(self, backend, client):
+        # Publish a genuine manifest, then overwrite the object at its key
+        # with a DIFFERENT manifest's bytes. The parsed manifest_id no longer
+        # matches the key it was fetched from -> IntegrityError.
+        loc = backend.publish(_make_shard("m"))
+        manifest = ShardManifest(scope="scope-a", entries=[loc], publisher_id="pub-a")
+        key = backend.publish_manifest(manifest)
+
+        tampered = ShardManifest(scope="scope-b", entries=[loc], publisher_id="pub-b")
+        assert tampered.manifest_id != manifest.manifest_id
+        client.store[("test-bucket", key)] = tampered.to_json().encode("utf-8")
+
+        with pytest.raises(IntegrityError):
+            backend.resolve_manifest(key)
+
+
+class TestErrorHandling:
+    """Finding 1 & 2 — a misconfigured bucket or a transport/IAM error must
+    fail loudly on the resolve* path, never read as an empty store."""
+
+    # --- Finding 1: NoSuchBucket is a config error, not "not found" ---
+
+    def test_resolve_missing_bucket_raises_config_error(self, client):
+        backend = S3Backend(bucket="does-not-exist", prefix="sw", client=client)
+        with pytest.raises(S3ConfigurationError):
+            backend.resolve("deadbeef00")
+
+    def test_resolve_encrypted_missing_bucket_raises_config_error(self, client):
+        backend = S3Backend(bucket="does-not-exist", prefix="sw", client=client)
+        with pytest.raises(S3ConfigurationError):
+            backend.resolve_encrypted("deadbeef00")
+
+    def test_resolve_manifest_missing_bucket_raises_config_error(self, client):
+        backend = S3Backend(bucket="does-not-exist", prefix="sw", client=client)
+        with pytest.raises(S3ConfigurationError):
+            backend.resolve_manifest("sw/manifests/whatever.json")
+
+    def test_publish_missing_bucket_raises_config_error(self, client):
+        backend = S3Backend(bucket="does-not-exist", prefix="sw", client=client)
+        with pytest.raises(S3ConfigurationError):
+            backend.publish(_make_shard())
+
+    # --- Finding 2: IAM/throttling/transport errors propagate ---
+
+    @pytest.mark.parametrize("code", ["AccessDenied", "SlowDown", "RequestTimeout"])
+    def test_resolve_propagates_transport_error(self, backend, client, code):
+        client.get_error = code
+        with pytest.raises(NetworkUnavailable):
+            backend.resolve("deadbeef00")
+
+    @pytest.mark.parametrize("code", ["AccessDenied", "SlowDown"])
+    def test_resolve_encrypted_propagates_transport_error(self, backend, client, code):
+        client.get_error = code
+        with pytest.raises(NetworkUnavailable):
+            backend.resolve_encrypted("deadbeef00")
+
+    def test_resolve_sealed_propagates_transport_error(self, backend, client):
+        client.get_error = "AccessDenied"
+        with pytest.raises(NetworkUnavailable):
+            backend.resolve_sealed("deadbeef00")
+
+    def test_resolve_manifest_propagates_transport_error(self, backend, client):
+        client.get_error = "AccessDenied"
+        with pytest.raises(NetworkUnavailable):
+            backend.resolve_manifest("sw/manifests/whatever.json")
+
+    def test_resolve_by_cid_propagates_transport_error(self, backend, client):
+        client.get_error = "AccessDenied"
+        with pytest.raises(NetworkUnavailable):
+            backend.resolve_by_cid("sw/shards/de/adbeef00.json")
+
+    # --- Finding 2 boundary: a genuine NoSuchKey still returns None ---
+
+    def test_resolve_genuine_not_found_still_returns_none(self, backend):
+        assert backend.resolve("deadbeef00") is None
+        assert backend.resolve_encrypted("deadbeef00") is None
 
 
 class TestAvailability:
