@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "spiritwriter"
-version = "0.10.2"
+version = "0.10.3"
 description = "Agent memory you own — content-addressed memory shards, provable traces, scoped delegation, and entity resolution, local-first"
 readme = "README.md"
 license = {text = "Apache-2.0"}
@@ -47,6 +47,7 @@ spiritwriter = "spiritwriter.secrets.cli:main"
 [project.optional-dependencies]
 sealed = ["PyNaCl>=1.5.0"]
 network = ["requests>=2.28"]
+s3 = ["boto3>=1.26"]
 strands = ["strands-agents>=0.1.0"]
 mempalace = ["mempalace>=3.0.0"]
 dev = ["pytest>=8.0", "pytest-asyncio>=0.23"]

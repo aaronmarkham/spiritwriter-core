@@ -46,6 +46,7 @@ One library wrote both. The only difference is the posture.
 pip install -e .                        # core
 pip install -e ".[sealed]"              # + NaCl sealed boxes (zero-knowledge)
 pip install -e ".[network]"             # + IPFS backend
+pip install -e ".[s3]"                  # + S3 backend (AWS object storage)
 pip install -e ".[dev,sealed,network]"  # everything
 ```
 
@@ -90,7 +91,7 @@ Each capability maps to a problem you'd otherwise re-solve by hand:
 - **Delegation you can scope** — *Entitlements + Jobs.* Hand a sub-agent a token bundling decryption keys + scope patterns + capabilities + budget; the store enforces every constraint before it decrypts. Package content + task + entitlement into one unit of work; the sub-agent hydrates, runs, returns a result shard. Every step traced.
 - **Proof of what happened** — *Tracing.* Hash-chained JSONL, optionally Ed25519-signed. Replay a run, prove nothing's been edited, render it as workflow / genealogy / multi-agent diagrams — for debugging expensive failures, auditing before deploy, or proving a run's integrity to a third party.
 - **Entities that don't collide** — *Entity Resolution.* Tell "Bear" the dog from "Bear" the brand; merge "Carlos Martinez" and "MARTINEZ, CARLOS A" into one. Deterministic-then-fuzzy, no embeddings, no LLM in the merge path. (See [The Bear Problem](#the-bear-problem) below.)
-- **Sharing without a database** — *IPFS distribution.* Publish shards to a private swarm; consumers fetch missing shards from the network and cache locally.
+- **Sharing without a database** — *IPFS distribution.* Publish shards to a private swarm; consumers fetch missing shards from the network and cache locally. Or persist them to a managed S3 bucket for durability without a node to operate.
 - **Tamper-evident audits** — *Android APK audits.* Inputs, evidence, findings, and report bound into a hash-chained trace plus a self-hashing witness — anyone with the APK can re-run verification offline.
 
 ## Encryption
@@ -218,7 +219,7 @@ This is a floor under the fuzzy layer. It collapses exactly the differences you 
 | [Shingled Extraction](docs/shingled-extraction.md) | overlapping-window extraction with multi-pass consensus |
 | [Tracing](docs/tracing.md) | hash-chained provenance, chain verification, signed traces |
 | [Traced Workflows](docs/traced-workflows.md) | multi-stage pipelines with checkpoint/resume |
-| [Network Distribution](docs/network-distribution.md) | IPFS backend, manifests, private swarm, L1/L2 resolution |
+| [Network Distribution](docs/network-distribution.md) | IPFS and S3 backends, choosing between them, manifests, private swarm, L1/L2 resolution |
 | [Substrate Flavor](docs/substrate-flavor.md) | wire format + verification rules for library-free implementers in any language |
 | [Audit](docs/audit.md) | tamper-evident Android APK security audits |
 | [Integration Guide](docs/integration-guide.md) | how frio, perseus-news, and Claude Studio Producer use it |
@@ -267,7 +268,8 @@ spiritwriter/
 │   ├── jobs.py          # JobSpec, package_job
 │   ├── runner.py        # hydrate_job, BudgetTracker, create_result_shard
 │   └── backends/
-│       └── ipfs.py      # IPFS / Kubo backend
+│       ├── ipfs.py      # IPFS / Kubo backend
+│       └── s3.py        # S3 backend (AWS object storage)
 ├── geo/            # Geographic types and view shards (experimental)
 ├── ingest/         # Document ingestion (PDF)
 ├── integrations/   # Third-party memory-provider adapters (mempalace, ...)
@@ -302,6 +304,7 @@ Two postures, several products:
 python -m pytest tests/ -v                              # full suite
 python -m pytest tests/test_demos.py -v                 # the demos above
 python -m pytest tests/test_ipfs_backend.py -v -m ipfs  # IPFS integration (requires Kubo)
+python -m pytest tests/test_s3_backend.py -v             # S3 backend (in-memory fake, no AWS)
 ```
 
 ## Changelog

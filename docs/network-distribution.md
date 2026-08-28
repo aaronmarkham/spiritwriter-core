@@ -1,8 +1,8 @@
-# Distributing Shards over IPFS
+# Distributing Shards
 
-A shard sitting on host A is invisible to an agent on host B. Local-first storage gives you durability and speed; eventually you need to cross the machine boundary. The **network resolver** wraps `ShardStore` with a transparent L2: when `get(shard_id)` misses locally, the resolver fetches from a private IPFS swarm, verifies the content address, and caches the bytes locally for next time.
+A shard sitting on host A is invisible to an agent on host B. Local-first storage gives you durability and speed; eventually you need to cross the machine boundary. The **network resolver** wraps `ShardStore` with a transparent L2: when `get(shard_id)` misses locally, the resolver fetches from the configured backend — a private **IPFS** swarm or an **S3** bucket — verifies the content address, and caches the bytes locally for next time. This page covers the IPFS backend first, then the S3 backend, and ends with [choosing between them](#choosing-a-backend-s3-vs-ipfs).
 
-The pattern works because shards are content-addressed. Two stores holding the same `shard_id` are holding bit-identical content — no coordination layer, no consistency protocol, only SHA-256 and IPFS's CID lookup. Publishing is opt-in and explicit; nothing leaves a local store unless you call `publish()`.
+The pattern works because shards are content-addressed. Two stores holding the same `shard_id` are holding bit-identical content — no coordination layer, no consistency protocol, only SHA-256 and the backend's content-addressed lookup. Publishing is opt-in and explicit; nothing leaves a local store unless you call `publish()`.
 
 ## Install
 
@@ -258,6 +258,112 @@ Integration tests require a local Kubo daemon and skip automatically if it's not
 python -m pytest tests/test_ipfs_backend.py -v -m ipfs
 ```
 
+## S3 Backend
+
+The IPFS backend is one implementation of `NetworkResolver`; the S3 backend is another. Same protocol, same L1/L2 wiring into `ShardStore` — the store doesn't know or care which one it's talking to. Where IPFS gives you decentralized peer-to-peer sharing across a private swarm, S3 gives you a managed, durable object store with no node to operate. Reach for it when you're already on AWS, want managed durability, or run in a hosted runtime (a Lambda worker, an ECS task) where standing up and babysitting a Kubo daemon is the wrong shape.
+
+Nothing here is wired by default. `ShardStore("./shards")` is still a pure local store; you opt in by passing a resolver, exactly as with IPFS.
+
+### Install
+
+```bash
+pip install 'spiritwriter[s3]'
+```
+
+The `[s3]` extra adds `boto3`. The core library never imports it unless you construct an `S3Backend`, so a `pip install spiritwriter` stays lean.
+
+### Quick Start
+
+```python
+from spiritwriter.fabric.backends.s3 import S3Backend
+from spiritwriter.fabric.store import ShardStore
+from spiritwriter.fabric.shard import MemoryShard, ShardAtom, AtomKind
+
+backend = S3Backend(bucket="my-shard-bucket", prefix="spiritwriter", region="us-west-2")
+
+# Wire into ShardStore for automatic L2 fallback — identical to the IPFS path
+store = ShardStore("./my-shards", resolver=backend)
+
+shard = MemoryShard(
+    atoms=[ShardAtom(text="S3 distribution is live", kind=AtomKind.FACT)],
+    scope="project:infra",
+    origin="deploy-agent",
+)
+store.put(shard)                 # local write; never auto-publishes
+
+loc = backend.publish(shard)     # explicit publish to S3
+print(f"{loc.shard_id[:16]}... -> s3 key {loc.cid}")
+```
+
+On another host with access to the same bucket, `store.get(shard_id)` misses locally, fetches from S3, verifies the content address, and caches the bytes — the same L1/L2 flow described above.
+
+### Configure
+
+Construct directly, or build config from the environment for container/Lambda deployments:
+
+```python
+from spiritwriter.fabric.backends.s3 import S3Backend, S3Config
+
+# From env — reads SPIRITWRITER_S3_BUCKET / _PREFIX / _REGION / _ENDPOINT
+backend = S3Backend(config=S3Config.from_env())
+```
+
+| Constructor arg | `S3Config` field | Env var (`from_env`) | Purpose |
+|---|---|---|---|
+| `bucket` | `bucket` | `SPIRITWRITER_S3_BUCKET` | Target bucket (required — empty raises `ValueError`) |
+| `prefix` | `prefix` | `SPIRITWRITER_S3_PREFIX` | Optional key namespace, e.g. `spiritwriter` |
+| `region` | `region` | `SPIRITWRITER_S3_REGION` | AWS region (else boto3 resolves it) |
+| `endpoint_url` | `endpoint_url` | `SPIRITWRITER_S3_ENDPOINT` | Endpoint override for S3-compatible stores / tests |
+
+**Injecting a boto3 client.** The backend builds its own client from the config, but you can pass a pre-configured one via `client=` — the escape hatch for connection-pool size, timeouts, and retry policy in a concurrent host, and the seam unit tests use to inject a fake:
+
+```python
+import boto3
+from botocore.config import Config
+
+s3 = boto3.client("s3", config=Config(max_pool_connections=50, retries={"max_attempts": 5}))
+backend = S3Backend(bucket="my-shard-bucket", prefix="spiritwriter", client=s3)
+```
+
+### Storage Layout
+
+Object keys mirror `ShardStore`'s git-object scheme, under the (optional) prefix, so a bucket browses with the same mental model as a local store:
+
+```
+{prefix}/shards/{ab}/{cd1234...}.json          # plaintext
+{prefix}/shards/{ab}/{cd1234...}.enc.json      # AES-encrypted
+{prefix}/shards/{ab}/{cd1234...}.sealed.json   # NaCl sealed
+{prefix}/manifests/{manifest_id}.json          # manifests
+```
+
+Encryption before publishing works identically to the IPFS path — `publish_encrypted()` and `publish_sealed()` write to the `.enc.json` / `.sealed.json` namespaces, and `get_encrypted()` / `get_sealed()` fall back to L2 the same way `get()` does. The object bytes are opaque to S3.
+
+### S3 vs IPFS Semantics
+
+The two backends implement the same protocol but the storage models differ, and the doc is honest about where:
+
+- **The `cid` is an S3 key, not a portable content ID.** For IPFS, `cid` is a globally-portable multihash — hand it to any node and it resolves. For S3, `ShardLocation.cid` is a *bucket/prefix-relative object key*. It's meaningful only against the bucket that produced it. `resolve_by_cid(cid)` treats `cid` as the key and does a `get_object`.
+- **No `cid_map.json`.** The IPFS backend persists a `shard_id → CID` map because CIDs aren't derivable from shard IDs. S3 keys *are* a deterministic function of `shard_id` (the layout above), so the S3 backend keeps no map — `resolve(shard_id)` recomputes the key and fetches. There's nothing local to sync between nodes; access to the bucket is the whole story. (`backend.key_for(shard_id)` exposes the computed key.)
+- **`pin` / `unpin` are no-ops.** S3 has no pinning concept — objects persist until explicitly deleted. Both methods exist to satisfy the protocol and simply report success. Note `unpin()` does **not** delete the object (the IPFS analog only marks a CID garbage-collectable); to actually remove content, use an S3 delete or a lifecycle rule.
+- **Durability is the bucket's job.** Retention, versioning, and replication are bucket-level lifecycle policy, not something the backend manages. That's the trade: you get S3's eleven-nines durability for free, but the backend has no say over it.
+- **Failure semantics fail loud.** A misconfigured bucket (missing / typo'd `SPIRITWRITER_S3_BUCKET`) raises `S3ConfigurationError`, never an empty result — a silent empty store is the exact failure this backend refuses to produce. Only a genuine object-not-found (`NoSuchKey`/`404`) returns `None` from a `resolve*`. Every other error — `AccessDenied`, throttling, connection reset — propagates as `NetworkUnavailable` rather than being swallowed into `None`, because a hosted worker that treats a transport error as "shard missing" reports success on partial data. This diverges from the IPFS backend, which returns `None` on transport error. `resolve_manifest()` also content-address-verifies the parsed manifest against the requested key (`IntegrityError` on mismatch), since manifests feed the receipt/lineage path.
+
+## Choosing a backend: S3 vs IPFS
+
+Both are opt-in L2 stores behind the same local-first `ShardStore`. Pick by how you operate, not by feature count:
+
+| | IPFS | S3 |
+|---|---|---|
+| **Operability** | Run and maintain a Kubo node (private swarm) | Managed — no node; an AWS account and a bucket |
+| **Sharing model** | Peer-to-peer across nodes on the swarm | Shared bucket; access is IAM, not peers |
+| **Portability of `cid`** | Global content ID — resolves on any node | Bucket/prefix-relative key — local to that bucket |
+| **Discovery** | `cid_map.json` per node, exchanged via manifests | None needed — keys derive from `shard_id` |
+| **Durability model** | Pinning + whoever hosts the content | Bucket lifecycle (S3 durability), backend-agnostic |
+| **Prerequisites** | Kubo daemon, swarm key, `requests` | `boto3`, bucket, AWS credentials |
+| **Best fit** | Decentralized sharing, no cloud dependency, air-gapped/private swarms | Already on AWS, hosted runtimes (Lambda/ECS), managed durability with nothing to operate |
+
+Rule of thumb: **choose S3 when the durability and operability are someone else's problem (AWS's), and IPFS when you want peer-to-peer sharing across nodes you control with no cloud in the path.** The choice is a one-line `resolver=` swap; the shard model, encryption, manifests, and integrity checks are identical on either.
+
 ## What Network Distribution Is Not
 
 - **Not real-time replication.** Publishing is explicit; nothing pushes shards across the swarm without a `publish()` call. Two nodes can hold different sets of the same scope until manifests are exchanged.
@@ -274,6 +380,8 @@ For tighter access control on encrypted shards, see [entitlements.md](entitlemen
 | `spiritwriter/fabric/network.py` | `NetworkResolver` protocol, `ShardLocation`, `ShardManifest`, exceptions |
 | `spiritwriter/fabric/backends/__init__.py` | Backends package |
 | `spiritwriter/fabric/backends/ipfs.py` | `IPFSBackend`, `IPFSConfig`, swarm verification |
+| `spiritwriter/fabric/backends/s3.py` | `S3Backend`, `S3Config`, `S3ConfigurationError` |
+| `tests/test_s3_backend.py` | Unit tests (in-memory fake S3 client) |
 | `spiritwriter/fabric/store.py` | `ShardStore` with optional resolver injection |
 | `tests/test_network.py` | Unit tests (mock resolver) |
 | `tests/test_ipfs_backend.py` | Integration tests (requires Kubo) |
