@@ -16,7 +16,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -234,7 +234,7 @@ class IPFSBackend:
         # Skip if already published
         existing_cid = self._cid_map.get(shard_id)
         if existing_cid:
-            return ShardLocation(shard_id=shard_id, cid=existing_cid, local=True, pinned=True)
+            return ShardLocation(shard_id=shard_id, cid=existing_cid, local=False, pinned=True)
 
         payload = shard.to_json().encode("utf-8")
         cid = self._add_bytes(payload)
@@ -245,14 +245,19 @@ class IPFSBackend:
         self._cid_map[shard_id] = cid
         self._save_cid_map()
 
-        return ShardLocation(shard_id=shard_id, cid=cid, local=True, pinned=self._config.pin_by_default)
+        # local=False: an IPFS object is REMOTE (an L2 store). ShardLocation.local
+        # is documented in network.py as "True if in local ShardStore", so a
+        # local-first resolver that checks loc.local would wrongly skip the network
+        # fallback if this said True. (The local cid_map is only an index of what
+        # this node published; it is not the L1 ShardStore.) Matches the s3 fix.
+        return ShardLocation(shard_id=shard_id, cid=cid, local=False, pinned=self._config.pin_by_default)
 
     def publish_sealed(self, sealed: Any) -> ShardLocation:
         """Publish a sealed shard to IPFS. Network sees opaque bytes."""
         shard_id = sealed.shard_id
         existing_cid = self._cid_map.get(shard_id)
         if existing_cid:
-            return ShardLocation(shard_id=shard_id, cid=existing_cid, local=True, pinned=True)
+            return ShardLocation(shard_id=shard_id, cid=existing_cid, local=False, pinned=True)
 
         payload = sealed.to_json().encode("utf-8")
         cid = self._add_bytes(payload)
@@ -265,14 +270,14 @@ class IPFSBackend:
         self._cid_map[map_key] = cid
         self._save_cid_map()
 
-        return ShardLocation(shard_id=shard_id, cid=cid, local=True, pinned=self._config.pin_by_default)
+        return ShardLocation(shard_id=shard_id, cid=cid, local=False, pinned=self._config.pin_by_default)
 
     def publish_encrypted(self, encrypted: EncryptedShard) -> ShardLocation:
         """Publish an encrypted shard to IPFS."""
         shard_id = encrypted.shard_id
         existing_cid = self._cid_map.get(f"encrypted:{shard_id}")
         if existing_cid:
-            return ShardLocation(shard_id=shard_id, cid=existing_cid, local=True, pinned=True)
+            return ShardLocation(shard_id=shard_id, cid=existing_cid, local=False, pinned=True)
 
         payload = encrypted.to_json().encode("utf-8")
         cid = self._add_bytes(payload)
@@ -284,7 +289,7 @@ class IPFSBackend:
         self._cid_map[map_key] = cid
         self._save_cid_map()
 
-        return ShardLocation(shard_id=shard_id, cid=cid, local=True, pinned=self._config.pin_by_default)
+        return ShardLocation(shard_id=shard_id, cid=cid, local=False, pinned=self._config.pin_by_default)
 
     def publish_public(self, shard: MemoryShard, *, confirm_public: bool = False) -> ShardLocation:
         """Publish a PLAINTEXT shard to the PUBLIC IPFS network.
@@ -310,7 +315,7 @@ class IPFSBackend:
         shard_id = shard.shard_id
         existing_cid = self._cid_map.get(f"public:{shard_id}")
         if existing_cid:
-            return ShardLocation(shard_id=shard_id, cid=existing_cid, local=True, pinned=True)
+            return ShardLocation(shard_id=shard_id, cid=existing_cid, local=False, pinned=True)
 
         payload = shard.to_json().encode("utf-8")
         cid = self._add_bytes_raw(payload)
@@ -325,19 +330,25 @@ class IPFSBackend:
         self._save_cid_map()
 
         logger.warning("Shard %s published to PUBLIC IPFS (CID: %s)", shard_id[:16], cid)
-        return ShardLocation(shard_id=shard_id, cid=cid, local=True, pinned=self._config.pin_by_default)
+        return ShardLocation(shard_id=shard_id, cid=cid, local=False, pinned=self._config.pin_by_default)
 
     def resolve(self, shard_id: str) -> MemoryShard | None:
-        """Fetch a plaintext shard from IPFS by shard_id."""
+        """Fetch a plaintext shard from IPFS by shard_id. None only if absent.
+
+        "Not found" on the Kubo path is a *cid_map miss*: the local index maps
+        every shard_id this node published to its CID, so an unknown shard_id
+        was genuinely never published -> None. That miss is the IPFS analog of
+        s3's NoSuchKey. Everything past it is a real fetch: a transport/timeout/
+        unreachable failure from ``_cat_cid`` (NetworkUnavailable/NetworkTimeout)
+        must PROPAGATE, never be swallowed into None -- otherwise a node-down or
+        timeout reads as "shard absent" and a caller of ShardStore.get() silently
+        proceeds as if the data is gone. Matches the s3 backend's posture.
+        """
         cid = self._cid_map.get(shard_id)
         if not cid:
             return None
 
-        try:
-            data = self._cat_cid(cid)
-        except (NetworkUnavailable, NetworkTimeout):
-            return None
-
+        data = self._cat_cid(cid)
         shard = MemoryShard.from_json(data.decode("utf-8"))
         if shard.shard_id != shard_id:
             raise IntegrityError(
@@ -346,16 +357,17 @@ class IPFSBackend:
         return shard
 
     def resolve_sealed(self, shard_id: str) -> Any:
-        """Fetch a sealed shard from IPFS."""
+        """Fetch a sealed shard from IPFS. None only if absent.
+
+        A cid_map miss is the genuine not-found (-> None); a transport/timeout
+        error from ``_cat_cid`` PROPAGATES rather than reading as absent. See
+        :meth:`resolve` for the rationale.
+        """
         cid = self._cid_map.get(f"sealed:{shard_id}")
         if not cid:
             return None
 
-        try:
-            data = self._cat_cid(cid)
-        except (NetworkUnavailable, NetworkTimeout):
-            return None
-
+        data = self._cat_cid(cid)
         from spiritwriter.fabric.sealed import SealedShard
         sealed = SealedShard.from_json(data.decode("utf-8"))
         if sealed.shard_id != shard_id:
@@ -365,16 +377,17 @@ class IPFSBackend:
         return sealed
 
     def resolve_encrypted(self, shard_id: str) -> EncryptedShard | None:
-        """Fetch an encrypted shard from IPFS."""
+        """Fetch an encrypted shard from IPFS. None only if absent.
+
+        A cid_map miss is the genuine not-found (-> None); a transport/timeout
+        error from ``_cat_cid`` PROPAGATES rather than reading as absent. See
+        :meth:`resolve` for the rationale.
+        """
         cid = self._cid_map.get(f"encrypted:{shard_id}")
         if not cid:
             return None
 
-        try:
-            data = self._cat_cid(cid)
-        except (NetworkUnavailable, NetworkTimeout):
-            return None
-
+        data = self._cat_cid(cid)
         encrypted = EncryptedShard.from_json(data.decode("utf-8"))
         if encrypted.shard_id != shard_id:
             raise IntegrityError(
@@ -417,13 +430,39 @@ class IPFSBackend:
         return cid
 
     def resolve_manifest(self, cid: str) -> ShardManifest | None:
-        """Fetch and parse a manifest by CID."""
-        try:
-            data = self._cat_cid(cid)
-        except (NetworkUnavailable, NetworkTimeout):
-            return None
+        """Fetch and parse a manifest by CID, then verify its content address.
 
-        return ShardManifest.from_json(data.decode("utf-8"))
+        Two parity fixes over the original, both matching the s3 backend:
+
+        * Transport/timeout errors PROPAGATE. The original swallowed
+          NetworkUnavailable/NetworkTimeout into ``None``, so an unreachable
+          node was indistinguishable from a genuinely-absent manifest -- the
+          same silent-None bug fixed on the resolve* path. On this raw-CID path
+          there is no local index to consult, so a fetch failure is a transport
+          error and is raised, not masked.
+
+        * Content-address verification. resolve() checks the fetched shard's
+          id; the manifest path did not. We recompute the manifest's content
+          address from its parsed content and compare it to the ``manifest_id``
+          the payload declares (``from_json`` recomputes the property and
+          ignores the serialized field, so the two disagree only if the bytes
+          were altered). A mismatch raises IntegrityError. This is the
+          IPFS-honest analog of s3's key-vs-manifest_id check: an IPFS CID is a
+          multihash over the raw bytes -- not the sha256 ``manifest_id`` -- and
+          Kubo already verifies the CID<->bytes binding on ``cat``, so the
+          residual hole this closes is a manifest whose declared identity
+          disagrees with its own content. The manifest feeds the receipt/lineage
+          path, so that is exactly where the integrity guarantee must not gap.
+        """
+        raw = self._cat_cid(cid).decode("utf-8")
+        manifest = ShardManifest.from_json(raw)
+        declared_id = json.loads(raw).get("manifest_id")
+        if declared_id is not None and declared_id != manifest.manifest_id:
+            raise IntegrityError(
+                f"Manifest ID mismatch: payload declares {declared_id}, "
+                f"content addresses to {manifest.manifest_id} (CID {cid})"
+            )
+        return manifest
 
     def is_available(self) -> bool:
         """Check if the Kubo node is reachable and on the correct swarm.

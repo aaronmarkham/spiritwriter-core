@@ -4,6 +4,20 @@ All notable changes to `spiritwriter` are documented here. The format follows [K
 
 Entries before 0.8.0 are not backfilled; consult `git log` for earlier history. Releases through 0.8.3 were published under the distribution name `spiritwriter-core`.
 
+## [0.10.4] — 2026-08-28
+
+Correctness parity for the IPFS/Kubo backend, bringing it in line with the fixes made to the S3 backend in 0.10.3. Behavior-preserving on the happy path; the change is that failures now surface instead of being swallowed. Patch bump under the pre-1.0 convention.
+
+Companion to spiritwriter-core#98 (the S3 backend, which takes 0.10.3); this is 0.10.4 to avoid colliding on the version — if the merge order flips, renumber.
+
+### Fixed
+- **`resolve*` no longer swallows transport errors into `None`.** `resolve` / `resolve_sealed` / `resolve_encrypted` / `resolve_manifest` caught `NetworkUnavailable` / `NetworkTimeout` from the Kubo `cat` call and returned `None`, making a node-down / timeout / unreachable failure indistinguishable from "never published" — so a caller of `ShardStore.get()` would silently proceed as if the shard were absent. These errors now **propagate**. The genuine not-found signal on the Kubo path is a `cid_map` miss (the local index of what this node published — the IPFS analog of S3's `NoSuchKey`): an unknown `shard_id` still returns `None`, only a real fetch failure raises. Matches the S3 backend's posture.
+- **`publish*` marks IPFS objects as remote (`ShardLocation.local=False`).** `publish` / `publish_sealed` / `publish_encrypted` / `publish_public` set `local=True` on objects that live on IPFS, not in the local `ShardStore`. `network.py` documents `local` as "True if in local ShardStore", so a local-first resolver checking `loc.local` would wrongly skip the network fallback. Now `False`, matching the S3 fix. (The local `cid_map` is only a published-CID index, not the L1 store.)
+- **`resolve_manifest` verifies the manifest's content address.** `resolve()` checked the fetched shard's id; the manifest path did not. The parsed manifest's recomputed content address is now compared against the `manifest_id` the payload declares, raising `IntegrityError` on mismatch. Because an IPFS CID is a multihash over the raw bytes (not the sha256 `manifest_id`) and Kubo already verifies the CID↔bytes binding on `cat`, this closes the residual gap of a manifest whose declared identity disagrees with its own content — the IPFS-honest analog of the S3 backend's key-vs-`manifest_id` check. The manifest feeds the receipt/lineage path, so this is where the integrity guarantee must not have a hole.
+
+### Tests
+- `tests/test_ipfs_backend_unit.py` — offline unit tests (no Kubo node) using an in-memory `FakeKubo` injected at the `_add_bytes` / `_cat_cid` boundary, mirroring `test_s3_backend.py`'s error-handling coverage: a simulated transient/timeout error propagates from every `resolve*` (rather than returning `None`), a genuine not-found (`cid_map` miss) returns `None`, `publish*` sets `local=False`, and a manifest whose declared identity disagrees with its content raises `IntegrityError`. The Kubo-gated integration tests in `test_ipfs_backend.py` are unchanged and still skipped without a node.
+
 ## [0.10.3] — 2026-08-28
 
 A second `NetworkResolver` backend, backed by Amazon S3, for AWS-hosted runtimes that want managed durability without operating a Kubo node. Opt-in and additive — nothing in `ShardStore` wires it by default, so a store is byte-identical to 0.10.2 until you pass `resolver=S3Backend(...)`. Patch bump under the pre-1.0 convention.
