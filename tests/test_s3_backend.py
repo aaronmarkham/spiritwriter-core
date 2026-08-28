@@ -107,9 +107,25 @@ class TestConstruction:
     def test_config_from_env(self, monkeypatch):
         monkeypatch.setenv("SPIRITWRITER_S3_BUCKET", "env-bucket")
         monkeypatch.setenv("SPIRITWRITER_S3_PREFIX", "envprefix")
+        monkeypatch.setenv("SPIRITWRITER_S3_REGION", "us-west-2")
+        monkeypatch.setenv("SPIRITWRITER_S3_ENDPOINT", "https://s3.example.test")
         cfg = S3Config.from_env()
         assert cfg.bucket == "env-bucket"
         assert cfg.prefix == "envprefix"
+        assert cfg.region == "us-west-2"
+        assert cfg.endpoint_url == "https://s3.example.test"
+
+    def test_config_from_env_normalizes_empty_region_endpoint_to_none(self, monkeypatch):
+        # from_env uses `os.environ.get(...) or None`, so an empty-string env var
+        # must normalize to None — not be passed straight to boto3 (an empty
+        # endpoint_url="" would break client construction). Region/endpoint are
+        # unset here, and an explicitly-empty endpoint must also read as None.
+        monkeypatch.setenv("SPIRITWRITER_S3_BUCKET", "env-bucket")
+        monkeypatch.setenv("SPIRITWRITER_S3_ENDPOINT", "")
+        monkeypatch.delenv("SPIRITWRITER_S3_REGION", raising=False)
+        cfg = S3Config.from_env()
+        assert cfg.region is None
+        assert cfg.endpoint_url is None
 
     def test_key_layout_git_style(self, backend):
         shard = _make_shard()
