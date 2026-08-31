@@ -130,9 +130,19 @@ class ShardStore:
         return shard.ref
 
     def get(self, shard_id: str) -> MemoryShard | None:
-        """Retrieve a shard by content address. Returns None if not found.
+        """Retrieve a shard by content address.
 
-        L1: local file. L2: network fallback (if resolver configured).
+        L1: local file. L2: network fallback (if a resolver is configured).
+
+        Returns ``None`` ONLY on genuine absence (no local file and, when a
+        resolver is configured, the resolver reports the shard was never
+        published). A transport/config failure from the resolver —
+        ``NetworkUnavailable`` / ``NetworkTimeout``, or ``S3ConfigurationError``
+        from the S3 backend — PROPAGATES; it is never collapsed into ``None``,
+        so a transient failure is not mistaken for "absent". A caller that must
+        not treat a transient failure as missing (e.g. a hosted worker
+        resolving through this API) should let the error fail the operation
+        rather than proceed as if the data were gone.
         """
         # L1: local file
         path = self._shard_path(shard_id)
@@ -175,11 +185,22 @@ class ShardStore:
     # === Query Operations ===
 
     def resolve(self, ref: ShardRef) -> MemoryShard | None:
-        """Resolve a shard reference to its full content."""
+        """Resolve a shard reference to its full content.
+
+        Delegates to :meth:`get`, so it inherits the same contract: ``None``
+        only on genuine absence; a transport/config failure PROPAGATES rather
+        than collapsing to ``None``.
+        """
         return self.get(ref.shard_id)
 
     def resolve_many(self, refs: list[ShardRef]) -> list[MemoryShard]:
-        """Resolve multiple refs. Skips any that aren't found locally."""
+        """Resolve multiple refs, skipping any that are genuinely absent.
+
+        Inherits :meth:`get`'s contract: a genuinely-absent shard is skipped,
+        but a transport/config failure PROPAGATES — the batch fails loud rather
+        than returning a misleadingly-partial list that hides an unreachable
+        backend.
+        """
         shards = []
         for ref in refs:
             shard = self.get(ref.shard_id)
@@ -200,7 +221,11 @@ class ShardStore:
         return "\n".join(parts)
 
     def by_scope(self, scope: str) -> list[MemoryShard]:
-        """Get all shards in a scope."""
+        """Get all shards in a scope.
+
+        Skips genuinely-absent shards; a transport/config failure from the
+        resolver PROPAGATES (see :meth:`get`) rather than yielding a partial set.
+        """
         index = self._load_index()
         shard_ids = index.get(scope, [])
         shards = []
@@ -285,7 +310,13 @@ class ShardStore:
         return None
 
     def resolve_ref(self, name: str) -> MemoryShard | None:
-        """Resolve a named ref to its full shard."""
+        """Resolve a named ref to its full shard.
+
+        A missing ref returns ``None``. When the ref exists, resolution
+        delegates to :meth:`get`, inheriting its contract: ``None`` only on
+        genuine absence of the target shard; a transport/config failure
+        PROPAGATES rather than collapsing to ``None``.
+        """
         shard_id = self.get_ref(name)
         if shard_id:
             return self.get(shard_id)
@@ -399,7 +430,14 @@ class ShardStore:
         return encrypted.shard_id
 
     def get_encrypted(self, shard_id: str) -> EncryptedShard | None:
-        """Retrieve an encrypted shard by id. Falls back to network."""
+        """Retrieve an encrypted shard by id. Falls back to network.
+
+        Returns ``None`` ONLY on genuine absence. A transport/config failure
+        from the resolver (``NetworkUnavailable`` / ``NetworkTimeout``, or
+        ``S3ConfigurationError`` from the S3 backend) PROPAGATES — it is never
+        collapsed into ``None``, so a transient failure is not mistaken for
+        "absent". See :meth:`get` for the full contract.
+        """
         path = self._encrypted_path(shard_id)
         if path.exists():
             return EncryptedShard.from_json(path.read_text(encoding="utf-8"))
@@ -501,8 +539,14 @@ class ShardStore:
     def get_sealed(self, shard_id: str):
         """Retrieve a sealed shard by id. Returns SealedShard or None.
 
-        Falls back to network if resolver configured.
+        Falls back to network if a resolver is configured.
         Requires PyNaCl to be installed (for deserialization).
+
+        Returns ``None`` ONLY on genuine absence. A transport/config failure
+        from the resolver (``NetworkUnavailable`` / ``NetworkTimeout``, or
+        ``S3ConfigurationError`` from the S3 backend) PROPAGATES — it is never
+        collapsed into ``None``, so a transient failure is not mistaken for
+        "absent". See :meth:`get` for the full contract.
         """
         path = self._sealed_path(shard_id)
         if path.exists():

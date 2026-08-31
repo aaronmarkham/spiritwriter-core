@@ -13,6 +13,7 @@ failure. ``pin_by_default=False`` keeps ``publish`` from touching the real
 network (its pin call is not part of what we test here).
 """
 
+import hashlib
 import json
 
 import pytest
@@ -38,20 +39,24 @@ from spiritwriter.fabric.backends.ipfs import IPFSBackend, IPFSConfig
 class FakeKubo:
     """Minimal in-memory stand-in for a Kubo node.
 
-    ``add`` content-addresses bytes to a fake CID and stores them; ``cat``
-    returns them. Set ``cat_error`` to an exception instance to make every
-    ``cat`` raise it — used to simulate transport/timeout/unreachable failures
-    that must PROPAGATE from resolve*, not be swallowed into ``None``.
+    ``add`` content-addresses bytes to a deterministic fake CID and stores
+    them; ``cat`` returns them. The CID is a pure function of the bytes (like a
+    real Kubo node), so re-adding identical bytes yields the same CID — this is
+    what lets ``resolve_manifest``'s content-address anchor
+    (``_recompute_cid(fetched) == requested_cid``) be exercised offline. Set
+    ``cat_error`` to an exception instance to make every ``cat`` raise it — used
+    to simulate transport/timeout/unreachable failures that must PROPAGATE from
+    resolve*, not be swallowed into ``None``.
     """
 
     def __init__(self):
         self.blocks: dict[str, bytes] = {}
-        self._counter = 0
         self.cat_error: Exception | None = None
 
     def add(self, data: bytes) -> str:
-        self._counter += 1
-        cid = f"Qmfake{self._counter:04d}"
+        # Content-addressed: CID is a deterministic function of the bytes, so
+        # add is idempotent and _recompute_cid(same bytes) reproduces the CID.
+        cid = "Qm" + hashlib.sha256(data).hexdigest()[:44]
         self.blocks[cid] = data
         return cid
 
@@ -86,6 +91,10 @@ def backend(kubo, tmp_path):
     # Inject the fake node at the HTTP boundary.
     b._add_bytes = kubo.add
     b._cat_cid = kubo.cat
+    # _recompute_cid mirrors _add_bytes' CID derivation (Kubo `add --only-hash`);
+    # the fake's content-addressed `add` reproduces the same CID for the same
+    # bytes, so pointing it at `kubo.add` is a faithful stand-in.
+    b._recompute_cid = kubo.add
     return b
 
 
@@ -138,6 +147,42 @@ class TestLocalFlagIsFalse:
         backend._add_bytes_raw = kubo.add
         loc = backend.publish_public(_make_shard("public"), confirm_public=True)
         assert loc.local is False
+
+
+# === Finding 2: the idempotent early-return reflects the SAME pin state as a
+#     fresh publish (pin_by_default), not a hardcoded True ===
+
+class TestIdempotentReturnPinState:
+    # The `backend` fixture is built with pin_by_default=False.
+    def test_idempotent_republish_pinned_false(self, backend):
+        backend.publish(_make_shard("pin-dupe"))
+        loc = backend.publish(_make_shard("pin-dupe"))  # cid_map hit -> idempotent return
+        assert loc.pinned is False  # object was never pinned; must not claim True
+
+    def test_idempotent_republish_encrypted_pinned_false(self, backend):
+        encrypted = encrypt_shard(_make_shard("pin-enc"), generate_job_key())
+        backend.publish_encrypted(encrypted)
+        loc = backend.publish_encrypted(encrypted)  # cid_map hit
+        assert loc.pinned is False
+
+    def test_idempotent_republish_public_pinned_false(self, backend, kubo):
+        backend._add_bytes_raw = kubo.add
+        backend.publish_public(_make_shard("pin-pub"), confirm_public=True)
+        loc = backend.publish_public(_make_shard("pin-pub"), confirm_public=True)
+        assert loc.pinned is False
+
+    def test_idempotent_republish_pinned_true_when_pin_default(self, kubo, tmp_path):
+        # Symmetric check: with pin_by_default=True the idempotent return says True.
+        b = IPFSBackend(
+            store_root=tmp_path,
+            config=IPFSConfig(require_private_swarm=False, pin_by_default=True),
+        )
+        b._add_bytes = kubo.add
+        b._cat_cid = kubo.cat
+        b.pin = lambda cid: True  # don't touch a real node
+        b.publish(_make_shard("pin-on"))
+        loc = b.publish(_make_shard("pin-on"))
+        assert loc.pinned is True
 
 
 # === Fix 1: transport errors PROPAGATE from resolve*; only a genuine
@@ -213,6 +258,32 @@ class TestResolveManifest:
         kubo.cat_error = NetworkUnavailable("down")
         with pytest.raises(NetworkUnavailable):
             backend.resolve_manifest("Qmwhatever")
+
+    def test_resolve_manifest_wrong_cid_raises(self, backend, kubo):
+        # Finding 3 anchor: genuine, self-consistent manifest bytes served under
+        # a CID that does NOT match their content hash (wrong object / a node
+        # lying about the CID) must fail — the old self-consistency-only check
+        # passed this because the declared manifest_id still matched the content.
+        loc = backend.publish(_make_shard("mm"))
+        manifest = ShardManifest(scope="s", entries=[loc], publisher_id="p")
+        good_bytes = manifest.to_json().encode("utf-8")
+        wrong_cid = "Qmnotthecontenthash0000"
+        kubo.blocks[wrong_cid] = good_bytes  # served under a CID it doesn't address to
+        with pytest.raises(IntegrityError):
+            backend.resolve_manifest(wrong_cid)
+
+    def test_resolve_manifest_missing_declared_id_raises(self, backend, kubo):
+        # Finding 3: a dropped `manifest_id` field is a failure, not a silent
+        # skip. Serve the bytes under their true content CID so the anchor
+        # passes, then confirm the identity check still rejects the absent id.
+        loc = backend.publish(_make_shard("mn"))
+        manifest = ShardManifest(scope="s", entries=[loc], publisher_id="p")
+        d = manifest.to_dict()
+        del d["manifest_id"]
+        payload = json.dumps(d, ensure_ascii=False).encode("utf-8")
+        cid = kubo.add(payload)  # true content CID -> CID anchor passes
+        with pytest.raises(IntegrityError):
+            backend.resolve_manifest(cid)
 
     def test_resolve_manifest_integrity_mismatch_raises(self, backend, kubo):
         # Store bytes whose declared manifest_id no longer matches the content

@@ -149,19 +149,38 @@ class NetworkResolver(Protocol):
         ...
 
     def resolve(self, shard_id: str) -> MemoryShard | None:
-        """Fetch a plaintext shard from the network by shard_id."""
+        """Fetch a plaintext shard from the network by shard_id.
+
+        Returns ``None`` ONLY on genuine absence (the shard was never
+        published). A transport/config failure — ``NetworkUnavailable`` /
+        ``NetworkTimeout`` (and ``S3ConfigurationError`` for the S3 backend) —
+        MUST propagate, never be swallowed into ``None``: a transient failure
+        must not be mistaken for "absent".
+        """
         ...
 
     def resolve_sealed(self, shard_id: str) -> SealedShard | None:
-        """Fetch a sealed shard from the network."""
+        """Fetch a sealed shard from the network.
+
+        ``None`` only on genuine absence; a transport/config failure
+        propagates (see :meth:`resolve`).
+        """
         ...
 
     def resolve_encrypted(self, shard_id: str) -> EncryptedShard | None:
-        """Fetch an encrypted shard from the network."""
+        """Fetch an encrypted shard from the network.
+
+        ``None`` only on genuine absence; a transport/config failure
+        propagates (see :meth:`resolve`).
+        """
         ...
 
     def resolve_by_cid(self, cid: str) -> bytes:
-        """Fetch raw bytes by CID. Caller handles deserialization."""
+        """Fetch raw bytes by CID. Caller handles deserialization.
+
+        Raises on a transport/config failure or a missing object (there is no
+        ``None`` return here); it never returns partial/empty bytes as success.
+        """
         ...
 
     def pin(self, cid: str) -> bool:
@@ -177,7 +196,14 @@ class NetworkResolver(Protocol):
         ...
 
     def resolve_manifest(self, cid: str) -> ShardManifest | None:
-        """Fetch and parse a manifest by CID."""
+        """Fetch and parse a manifest by CID.
+
+        Returns ``None`` ONLY on genuine absence; a transport/config failure
+        propagates (see :meth:`resolve`). Implementations verify the fetched
+        manifest's content address against the requested ``cid`` and raise
+        :class:`IntegrityError` on a mismatch — the manifest feeds the
+        receipt/lineage path, so an unverified manifest must not pass.
+        """
         ...
 
     def is_available(self) -> bool:
