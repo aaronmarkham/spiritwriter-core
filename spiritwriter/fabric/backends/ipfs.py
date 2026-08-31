@@ -16,7 +16,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -221,6 +221,24 @@ class IPFSBackend:
         result = resp.json()
         return result["Hash"]
 
+    def _recompute_cid(self, data: bytes) -> str:
+        """Recompute the CID for ``data`` WITHOUT storing it.
+
+        Mirrors :meth:`_add_bytes` (same Kubo ``add`` derivation, same default
+        params) but passes ``only-hash=true`` so the node computes the CID and
+        stores nothing. This is what lets :meth:`resolve_manifest` anchor the
+        fetched bytes to the *requested* CID: an IPFS CID is the content hash,
+        so ``_recompute_cid(fetched_bytes) == requested_cid`` proves the bytes
+        are the ones that CID names, using the exact derivation ``publish`` used
+        to mint the CID in the first place.
+        """
+        resp = self._api(
+            "add",
+            files={"file": ("shard.json", data, "application/octet-stream")},
+            params={"only-hash": "true"},
+        )
+        return resp.json()["Hash"]
+
     def _cat_cid(self, cid: str) -> bytes:
         """Fetch raw bytes from IPFS by CID."""
         resp = self._api("cat", params={"arg": cid})
@@ -234,7 +252,14 @@ class IPFSBackend:
         # Skip if already published
         existing_cid = self._cid_map.get(shard_id)
         if existing_cid:
-            return ShardLocation(shard_id=shard_id, cid=existing_cid, local=True, pinned=True)
+            # Idempotent early-return: reflect the SAME pin state a fresh publish
+            # would (pin_by_default), not a hardcoded True. With pin_by_default=False
+            # the object was never pinned, so reporting pinned=True here would be a
+            # self-contradiction (Finding 2).
+            return ShardLocation(
+                shard_id=shard_id, cid=existing_cid, local=False,
+                pinned=self._config.pin_by_default,
+            )
 
         payload = shard.to_json().encode("utf-8")
         cid = self._add_bytes(payload)
@@ -245,14 +270,26 @@ class IPFSBackend:
         self._cid_map[shard_id] = cid
         self._save_cid_map()
 
-        return ShardLocation(shard_id=shard_id, cid=cid, local=True, pinned=self._config.pin_by_default)
+        # local=False: an IPFS object is REMOTE (an L2 store). ShardLocation.local
+        # is documented in network.py as "True if in local ShardStore", so a
+        # local-first resolver that checks loc.local would wrongly skip the network
+        # fallback if this said True. (The local cid_map is only an index of what
+        # this node published; it is not the L1 ShardStore.) Matches the s3 fix.
+        return ShardLocation(shard_id=shard_id, cid=cid, local=False, pinned=self._config.pin_by_default)
 
     def publish_sealed(self, sealed: Any) -> ShardLocation:
         """Publish a sealed shard to IPFS. Network sees opaque bytes."""
         shard_id = sealed.shard_id
         existing_cid = self._cid_map.get(shard_id)
         if existing_cid:
-            return ShardLocation(shard_id=shard_id, cid=existing_cid, local=True, pinned=True)
+            # Idempotent early-return: reflect the SAME pin state a fresh publish
+            # would (pin_by_default), not a hardcoded True. With pin_by_default=False
+            # the object was never pinned, so reporting pinned=True here would be a
+            # self-contradiction (Finding 2).
+            return ShardLocation(
+                shard_id=shard_id, cid=existing_cid, local=False,
+                pinned=self._config.pin_by_default,
+            )
 
         payload = sealed.to_json().encode("utf-8")
         cid = self._add_bytes(payload)
@@ -265,14 +302,21 @@ class IPFSBackend:
         self._cid_map[map_key] = cid
         self._save_cid_map()
 
-        return ShardLocation(shard_id=shard_id, cid=cid, local=True, pinned=self._config.pin_by_default)
+        return ShardLocation(shard_id=shard_id, cid=cid, local=False, pinned=self._config.pin_by_default)
 
     def publish_encrypted(self, encrypted: EncryptedShard) -> ShardLocation:
         """Publish an encrypted shard to IPFS."""
         shard_id = encrypted.shard_id
         existing_cid = self._cid_map.get(f"encrypted:{shard_id}")
         if existing_cid:
-            return ShardLocation(shard_id=shard_id, cid=existing_cid, local=True, pinned=True)
+            # Idempotent early-return: reflect the SAME pin state a fresh publish
+            # would (pin_by_default), not a hardcoded True. With pin_by_default=False
+            # the object was never pinned, so reporting pinned=True here would be a
+            # self-contradiction (Finding 2).
+            return ShardLocation(
+                shard_id=shard_id, cid=existing_cid, local=False,
+                pinned=self._config.pin_by_default,
+            )
 
         payload = encrypted.to_json().encode("utf-8")
         cid = self._add_bytes(payload)
@@ -284,7 +328,7 @@ class IPFSBackend:
         self._cid_map[map_key] = cid
         self._save_cid_map()
 
-        return ShardLocation(shard_id=shard_id, cid=cid, local=True, pinned=self._config.pin_by_default)
+        return ShardLocation(shard_id=shard_id, cid=cid, local=False, pinned=self._config.pin_by_default)
 
     def publish_public(self, shard: MemoryShard, *, confirm_public: bool = False) -> ShardLocation:
         """Publish a PLAINTEXT shard to the PUBLIC IPFS network.
@@ -310,7 +354,14 @@ class IPFSBackend:
         shard_id = shard.shard_id
         existing_cid = self._cid_map.get(f"public:{shard_id}")
         if existing_cid:
-            return ShardLocation(shard_id=shard_id, cid=existing_cid, local=True, pinned=True)
+            # Idempotent early-return: reflect the SAME pin state a fresh publish
+            # would (pin_by_default), not a hardcoded True. With pin_by_default=False
+            # the object was never pinned, so reporting pinned=True here would be a
+            # self-contradiction (Finding 2).
+            return ShardLocation(
+                shard_id=shard_id, cid=existing_cid, local=False,
+                pinned=self._config.pin_by_default,
+            )
 
         payload = shard.to_json().encode("utf-8")
         cid = self._add_bytes_raw(payload)
@@ -325,19 +376,25 @@ class IPFSBackend:
         self._save_cid_map()
 
         logger.warning("Shard %s published to PUBLIC IPFS (CID: %s)", shard_id[:16], cid)
-        return ShardLocation(shard_id=shard_id, cid=cid, local=True, pinned=self._config.pin_by_default)
+        return ShardLocation(shard_id=shard_id, cid=cid, local=False, pinned=self._config.pin_by_default)
 
     def resolve(self, shard_id: str) -> MemoryShard | None:
-        """Fetch a plaintext shard from IPFS by shard_id."""
+        """Fetch a plaintext shard from IPFS by shard_id. None only if absent.
+
+        "Not found" on the Kubo path is a *cid_map miss*: the local index maps
+        every shard_id this node published to its CID, so an unknown shard_id
+        was genuinely never published -> None. That miss is the IPFS analog of
+        s3's NoSuchKey. Everything past it is a real fetch: a transport/timeout/
+        unreachable failure from ``_cat_cid`` (NetworkUnavailable/NetworkTimeout)
+        must PROPAGATE, never be swallowed into None -- otherwise a node-down or
+        timeout reads as "shard absent" and a caller of ShardStore.get() silently
+        proceeds as if the data is gone. Matches the s3 backend's posture.
+        """
         cid = self._cid_map.get(shard_id)
         if not cid:
             return None
 
-        try:
-            data = self._cat_cid(cid)
-        except (NetworkUnavailable, NetworkTimeout):
-            return None
-
+        data = self._cat_cid(cid)
         shard = MemoryShard.from_json(data.decode("utf-8"))
         if shard.shard_id != shard_id:
             raise IntegrityError(
@@ -346,16 +403,17 @@ class IPFSBackend:
         return shard
 
     def resolve_sealed(self, shard_id: str) -> Any:
-        """Fetch a sealed shard from IPFS."""
+        """Fetch a sealed shard from IPFS. None only if absent.
+
+        A cid_map miss is the genuine not-found (-> None); a transport/timeout
+        error from ``_cat_cid`` PROPAGATES rather than reading as absent. See
+        :meth:`resolve` for the rationale.
+        """
         cid = self._cid_map.get(f"sealed:{shard_id}")
         if not cid:
             return None
 
-        try:
-            data = self._cat_cid(cid)
-        except (NetworkUnavailable, NetworkTimeout):
-            return None
-
+        data = self._cat_cid(cid)
         from spiritwriter.fabric.sealed import SealedShard
         sealed = SealedShard.from_json(data.decode("utf-8"))
         if sealed.shard_id != shard_id:
@@ -365,16 +423,17 @@ class IPFSBackend:
         return sealed
 
     def resolve_encrypted(self, shard_id: str) -> EncryptedShard | None:
-        """Fetch an encrypted shard from IPFS."""
+        """Fetch an encrypted shard from IPFS. None only if absent.
+
+        A cid_map miss is the genuine not-found (-> None); a transport/timeout
+        error from ``_cat_cid`` PROPAGATES rather than reading as absent. See
+        :meth:`resolve` for the rationale.
+        """
         cid = self._cid_map.get(f"encrypted:{shard_id}")
         if not cid:
             return None
 
-        try:
-            data = self._cat_cid(cid)
-        except (NetworkUnavailable, NetworkTimeout):
-            return None
-
+        data = self._cat_cid(cid)
         encrypted = EncryptedShard.from_json(data.decode("utf-8"))
         if encrypted.shard_id != shard_id:
             raise IntegrityError(
@@ -417,13 +476,71 @@ class IPFSBackend:
         return cid
 
     def resolve_manifest(self, cid: str) -> ShardManifest | None:
-        """Fetch and parse a manifest by CID."""
-        try:
-            data = self._cat_cid(cid)
-        except (NetworkUnavailable, NetworkTimeout):
-            return None
+        """Fetch and parse a manifest by CID, then verify its content address.
 
-        return ShardManifest.from_json(data.decode("utf-8"))
+        Returns None only on genuine absence; raises on a transport/config
+        failure or an integrity violation — a transient failure must not be
+        mistaken for "absent".
+
+        Two integrity properties, both matching the s3 backend's posture:
+
+        * Transport/timeout errors PROPAGATE. The original swallowed
+          NetworkUnavailable/NetworkTimeout into ``None``, so an unreachable
+          node was indistinguishable from a genuinely-absent manifest -- the
+          same silent-None bug fixed on the resolve* path. On this raw-CID path
+          there is no local index to consult, so a fetch failure is a transport
+          error and is raised, not masked.
+
+        * Content-address verification anchored to the REQUESTED CID (Finding
+          3). On IPFS the CID *is* the content hash, so the strong check is
+          that the fetched bytes re-derive to the CID we asked for. We recompute
+          the CID with :meth:`_recompute_cid` -- the same Kubo ``add``
+          derivation ``publish`` used to mint it (``only-hash=true``, so nothing
+          is stored) -- and compare it to ``cid``; a mismatch raises
+          IntegrityError. A coordinated tamper that rewrites the manifest bytes
+          (and any ``manifest_id`` field with them) changes the content hash and
+          therefore fails this anchor, which the old self-consistency-only check
+          did not catch. We additionally require the declared ``manifest_id`` to
+          match the identity recomputed from the parsed content: a missing or
+          mismatched identity is a failure, never a silent skip.
+
+          Residual gap (documented honestly): the CID recompute is performed by
+          the same Kubo node that served the bytes, not by an independent
+          in-process hasher -- an exact in-process re-derivation would have to
+          reimplement Kubo's UnixFS/dag-pb chunking and multihash params, which
+          is not feasible to keep byte-exact here. So this defends against
+          bytes served under the wrong CID, truncation/corruption, and a
+          rewritten manifest; it does NOT defend against a fully-compromised
+          node that lies consistently on both ``cat`` and ``add`` (that node is
+          the shared trust root either way). The manifest feeds the
+          receipt/lineage path, so this is where the guarantee must not gap.
+        """
+        raw_bytes = self._cat_cid(cid)
+
+        # Finding 3 (primary anchor): fetched bytes must re-derive to the CID
+        # the caller asked for. Mirrors publish's derivation exactly.
+        recomputed_cid = self._recompute_cid(raw_bytes)
+        if recomputed_cid != cid:
+            raise IntegrityError(
+                f"Manifest CID mismatch: requested {cid}, but fetched bytes "
+                f"content-address to {recomputed_cid} (tampered or wrong object)"
+            )
+
+        # Finding 4: parse the payload ONCE and reuse the dict — this is on the
+        # receipt/lineage hot path (the old code did from_json + json.loads).
+        parsed = json.loads(raw_bytes)
+        manifest = ShardManifest.from_dict(parsed)
+
+        # Finding 3 (identity self-consistency): the manifest must declare an
+        # identity that matches the one recomputed from its content. A
+        # missing/mismatched manifest_id is a failure, not a silent skip.
+        declared_id = parsed.get("manifest_id")
+        if declared_id != manifest.manifest_id:
+            raise IntegrityError(
+                f"Manifest ID mismatch: payload declares {declared_id!r}, "
+                f"content addresses to {manifest.manifest_id} (CID {cid})"
+            )
+        return manifest
 
     def is_available(self) -> bool:
         """Check if the Kubo node is reachable and on the correct swarm.
