@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "spiritwriter"
-version = "0.10.3"
+version = "0.11.0"
 description = "Agent memory you own — content-addressed memory shards, provable traces, scoped delegation, and entity resolution, local-first"
 readme = "README.md"
 license = {text = "Apache-2.0"}
@@ -30,7 +30,6 @@ dependencies = [
     "anthropic>=0.40.0",
     "cryptography>=41.0.0",
     "keyring>=25.0.0",
-    "pymupdf>=1.24.0",
     "click>=8.1.0",
     "rich>=13.0.0",
 ]
@@ -45,6 +44,7 @@ Issues = "https://github.com/aaronmarkham/spiritwriter-core/issues"
 spiritwriter = "spiritwriter.secrets.cli:main"
 
 [project.optional-dependencies]
+pdf = ["pymupdf>=1.24.0"]
 sealed = ["PyNaCl>=1.5.0"]
 network = ["requests>=2.28"]
 s3 = ["boto3>=1.26"]

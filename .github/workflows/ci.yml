@@ -45,7 +45,7 @@ jobs:
           cache: "pip"
 
       - name: Install with optional extras
-        run: pip install -e ".[dev,sealed,network]"
+        run: pip install -e ".[dev,sealed,network,pdf]"
 
       - name: Run tests
         run: python -m pytest tests/ -v --tb=short
