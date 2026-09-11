@@ -4,6 +4,18 @@ All notable changes to `spiritwriter` are documented here. The format follows [K
 
 Entries before 0.8.0 are not backfilled; consult `git log` for earlier history. Releases through 0.8.3 were published under the distribution name `spiritwriter-core`.
 
+## [0.11.0] — 2026-09-10
+
+**PyMuPDF is now an optional `pdf` extra, not a core dependency.** PDF ingestion is a feature of the `spiritwriter.ingest` path, not of core agent-memory — yet every install pulled `pymupdf`, which (a) is **AGPL-licensed** (dual GNU AGPL-3.0 / Artifex commercial), so it trips corporate license scanners, and (b) ships a large native (MuPDF) wheel that **builds from source and fails** in environments without a prebuilt wheel or a C toolchain. The loader already imported `fitz` lazily behind a clear error, so gating it behind an extra is a natural fit. Minor bump under the pre-1.0 convention because it changes the default install surface.
+
+### Changed
+- **`pymupdf` moved from `dependencies` to the new opt-in `pdf` extra.** Install PDF support with `pip install 'spiritwriter[pdf]'`. Core installs (and text/markdown ingestion) no longer pull `pymupdf` — no AGPL dependency, no native build. Non-PDF users are unaffected; PDF users add one extra.
+- The loader's missing-dependency error and module docstring now point at `pip install 'spiritwriter[pdf]'` (the docstring previously referenced a non-existent `[ingest]` extra).
+- CI installs the `pdf` extra so PDF ingestion tests keep running; `tests/test_ingest.py` already `importorskip`s `fitz`, so its PDF tests skip cleanly wherever the extra is absent.
+
+### Upgrade note
+If you ingest PDFs via `extract_pdf_text`, `DocumentIngestor`, or `spiritwriter.ingest.extraction`, add the extra: `pip install 'spiritwriter[pdf]'`. Text/markdown ingestion needs nothing new.
+
 ## [0.10.3] — 2026-08-28
 
 Two `NetworkResolver` backends this cycle — a new **S3 backend** (spiritwriter-core#98) and the **IPFS/Kubo backend brought to correctness parity** with it (spiritwriter-core#99) — plus a **shared resolver contract fix** threaded up through the store API and the protocol so a transport failure surfaces instead of being mistaken for "absent". The last released version was 0.10.2, so both land under this single increment. Opt-in and additive — a `ShardStore` is byte-identical to 0.10.2 until you pass `resolver=...`. Patch bump under the pre-1.0 convention.

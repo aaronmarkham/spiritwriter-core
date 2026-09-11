@@ -7,9 +7,9 @@ This is the lightweight, format-dispatching text path. For rich single-PDF
 structural analysis (zones, figures, reading-order graph) use
 ``DocumentIngestor`` instead — that path is intentionally PDF-shaped.
 
-Text formats need no extra dependencies. PDF uses PyMuPDF (the optional
-``[ingest]``/``fitz`` dependency); without it, PDFs raise a clear error
-rather than failing obscurely.
+Text formats need no extra dependencies. PDF uses PyMuPDF, the optional
+``pdf`` extra (``pip install 'spiritwriter[pdf]'``); without it, PDFs raise
+a clear error rather than failing obscurely.
 """
 
 from __future__ import annotations
@@ -34,7 +34,8 @@ def extract_pdf_text(path: Path) -> str:
         import fitz  # PyMuPDF
     except ImportError as e:  # pragma: no cover - depends on optional extra
         raise UnsupportedDocument(
-            f"{path.name}: PDF support requires PyMuPDF (pip install pymupdf)"
+            f"{path.name}: PDF support requires PyMuPDF "
+            "(pip install 'spiritwriter[pdf]')"
         ) from e
     doc = fitz.open(str(path))
     try:
