@@ -43,8 +43,8 @@ Traces go to `~/.spiritwriter/claude-code/traces/<session_id>.jsonl`, with the d
 
 | Hook | Trace event | Key fields |
 |------|-------------|------------|
-| `PreToolUse` | `tool_call` | `tool_use_id`, `tool_name`, `args_sha256`, `args_summary` |
-| `PostToolUse` | `tool_result` | `tool_use_id`, `ok`, `duration_ms` |
+| `PreToolUse` | `tool_call` | `tool_use_id`, `tool_name`, `args_sha256`, `args_summary`; write tools add `lines_added`, `lines_removed`, `bytes_written` |
+| `PostToolUse` | `tool_result` | `tool_use_id`, `ok`, `duration_ms`; successful write tools add `artifact_sha256`, `artifact_bytes` |
 | `PostToolUse` on `Agent`/`Task` | `spawn_with_shards` | `tool_use_id`, `child_agent_id`, `task`, `model`, `task_prompt_sha256` |
 | `SubagentStart` / `SubagentStop` | `agent_started` / `agent_completed` | `agent_type`, `last_message_sha256` |
 | `UserPromptSubmit` | `prompt_submitted` | `prompt_sha256`, `prompt_chars` |
@@ -52,6 +52,8 @@ Traces go to `~/.spiritwriter/claude-code/traces/<session_id>.jsonl`, with the d
 | anything else | `hook_event` | raw `hook_event` name only |
 
 Every event also carries `hook_event` (the raw hook name) and `prompt_id` when present. `run_id` is the session id. `agent_id` is the subagent's id, or `main` for the top-level agent.
+
+**Artifacts:** a successful Write, Edit, MultiEdit, or NotebookEdit hashes the file on disk, so each version of a file gets a content-addressed id (`artifact_sha256`). Consecutive hashes for the same path trace the file's history, and the `agent_id` on each one says who produced that version. Only regular files up to 64 MiB are hashed, and relative paths resolve against the hook's `cwd`.
 
 **Lineage:** a subagent's events carry its `agent_id`. The `spawn_with_shards` event whose `child_agent_id` equals that id is the call that spawned it, and it shares `tool_use_id` with the parent's `tool_call`. Nested subagents link the same way.
 
@@ -65,7 +67,7 @@ Every event also carries `hook_event` (the raw hook name) and `prompt_id` when p
 | Tool | Summary |
 |------|---------|
 | `Bash` | the model's `description`, else just the program name |
-| `Read` / `Write` / `Edit` | file path |
+| `Read` / `Write` / `Edit` | file path (long paths keep the filename: `…/dir/file.py`) |
 | `Grep` / `Glob` | pattern and path |
 | `WebFetch` | host and path, without the query |
 | `Agent` | subagent type and description |

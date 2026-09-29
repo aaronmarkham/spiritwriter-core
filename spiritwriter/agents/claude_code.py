@@ -29,6 +29,13 @@ at :data:`SUMMARY_MAX` characters. Prompts and final messages are
 recorded only as a hash and a length. Tool outputs are not recorded,
 apart from an ``ok`` flag and the child id of a spawn.
 
+**Artifacts.** Write tools also record the size of the change
+(``lines_added``, ``lines_removed``, ``bytes_written``, counted from the
+tool input and then discarded) and, once the write succeeds, a
+``artifact_sha256`` of the file on disk. Each version of a file an agent
+produced gets a content-addressed identity without its content ever
+entering the trace.
+
 **Unknown input is kept, not rejected.** The hook payload format belongs
 to Claude Code and changes between versions. Unknown event types are
 recorded as ``hook_event`` with their raw ``hook_event_name``, missing
@@ -38,6 +45,7 @@ failure can never block the agent.
 
 from __future__ import annotations
 
+import difflib
 import hashlib
 import json
 import os
@@ -53,6 +61,9 @@ from spiritwriter.fabric.shard import _canonical_json, _sha256
 MAIN_AGENT = "main"
 SUMMARY_MAX = 120
 SPAWN_TOOLS = frozenset({"Agent", "Task"})
+FILE_TOOLS = frozenset({"Read", "Write", "Edit", "MultiEdit", "NotebookEdit"})
+WRITE_TOOLS = frozenset({"Write", "Edit", "MultiEdit", "NotebookEdit"})
+ARTIFACT_MAX_BYTES = 64 * 1024 * 1024  # larger files are not hashed (keeps each hook fast)
 DEFAULT_TRACE_DIR = os.path.join("~", ".spiritwriter", "claude-code", "traces")
 TRACE_DIR_ENV = "SPIRITWRITER_CLAUDE_CODE_TRACE_DIR"
 
@@ -68,12 +79,18 @@ _EXTRA_SECRET_PATTERNS: list[tuple[str, re.Pattern]] = [
 _SECRET_PATTERNS = REDACT_PATTERNS + DETECT_ONLY_PATTERNS + _EXTRA_SECRET_PATTERNS
 
 
-def scrub(text: str) -> str:
-    """Replace secret-shaped substrings with ``<REDACTED:class fp:…>`` and cap the length."""
+def scrub(text: str, keep: str = "head") -> str:
+    """Replace secret-shaped substrings with ``<REDACTED:class fp:…>`` and cap the length.
+
+    ``keep="tail"`` truncates from the front instead (``…/dir/file.py``), which is what
+    file paths need: the filename is the part that identifies the artifact.
+    """
     for cls, pat in _SECRET_PATTERNS:
         text = pat.sub(lambda m, _c=cls: f"<REDACTED:{_c} fp:{hashlib.sha256(m.group(0).encode()).hexdigest()[:12]}>", text)
     text = " ".join(text.split())  # one line, no control whitespace
-    return text if len(text) <= SUMMARY_MAX else text[: SUMMARY_MAX - 1] + "…"
+    if len(text) <= SUMMARY_MAX:
+        return text
+    return "…" + text[-(SUMMARY_MAX - 1):] if keep == "tail" else text[: SUMMARY_MAX - 1] + "…"
 
 
 def _url_summary(url: str) -> str:
@@ -97,8 +114,8 @@ def summarize_tool_input(tool_name: str, tool_input: Any) -> str:
         else:
             words = str(ti.get("command", "")).split()
             summary = os.path.basename(words[0]) if words else ""
-    elif tool_name in ("Read", "Write", "Edit", "MultiEdit", "NotebookEdit"):
-        summary = str(ti.get("file_path") or ti.get("notebook_path") or "")
+    elif tool_name in FILE_TOOLS:
+        return scrub(str(ti.get("file_path") or ti.get("notebook_path") or ""), keep="tail")
     elif tool_name in ("Glob", "Grep"):
         summary = " in ".join(str(v) for v in (ti.get("pattern"), ti.get("path")) if v)
     elif tool_name == "WebFetch":
@@ -110,6 +127,68 @@ def summarize_tool_input(tool_name: str, tool_input: Any) -> str:
     else:
         summary = "(" + ", ".join(sorted(map(str, ti))) + ")"
     return scrub(summary)
+
+
+def _lines(text: str) -> list[str]:
+    return text.splitlines() if text else []
+
+
+def change_stats(tool_name: str, tool_input: Any) -> dict[str, int]:
+    """Size of a write, from the tool input alone: ``lines_added``, ``lines_removed``, ``bytes_written``.
+
+    Edit and MultiEdit are diffed line by line (old_string → new_string), so the counts are exact
+    for the edited region. Write replaces a whole file, but the previous contents aren't in the
+    input, so it reports only lines added. Content is used to count and then discarded.
+    """
+    ti = tool_input if isinstance(tool_input, dict) else {}
+    if tool_name == "Write":
+        content = str(ti.get("content", ""))
+        return {"lines_added": len(_lines(content)), "lines_removed": 0, "bytes_written": len(content.encode("utf-8"))}
+    if tool_name in ("Edit", "MultiEdit"):
+        edits = ti.get("edits") if tool_name == "MultiEdit" else [ti]
+        added = removed = written = 0
+        for e in edits if isinstance(edits, list) else []:
+            if not isinstance(e, dict):
+                continue
+            old, new = str(e.get("old_string", "")), str(e.get("new_string", ""))
+            for op, i1, i2, j1, j2 in difflib.SequenceMatcher(None, _lines(old), _lines(new), autojunk=False).get_opcodes():
+                if op in ("replace", "delete"):
+                    removed += i2 - i1
+                if op in ("replace", "insert"):
+                    added += j2 - j1
+            written += len(new.encode("utf-8"))
+        return {"lines_added": added, "lines_removed": removed, "bytes_written": written}
+    if tool_name == "NotebookEdit":
+        src = str(ti.get("new_source", ""))
+        return {"lines_added": 0 if ti.get("edit_mode") == "delete" else len(_lines(src)), "lines_removed": 0,
+                "bytes_written": len(src.encode("utf-8"))}
+    return {}
+
+
+def artifact_receipt(payload: dict[str, Any]) -> dict[str, Any]:
+    """Hash the file a successful write tool just produced: ``artifact_sha256`` + ``artifact_bytes``.
+
+    The hash gives each version of an artifact a content-addressed identity, so a trace can show
+    that an agent produced exactly this version of a file. Only regular files up to
+    :data:`ARTIFACT_MAX_BYTES` are hashed; anything else (missing, too large, unreadable) returns {}.
+    Relative paths resolve against the hook's ``cwd``.
+    """
+    ti = payload.get("tool_input") if isinstance(payload.get("tool_input"), dict) else {}
+    path = ti.get("file_path") or ti.get("notebook_path")
+    if not path:
+        return {}
+    path = os.path.join(str(payload.get("cwd") or ""), os.path.expanduser(str(path)))
+    try:
+        st = os.stat(path)
+        if not os.path.isfile(path) or st.st_size > ARTIFACT_MAX_BYTES:
+            return {}
+        h = hashlib.sha256()
+        with open(path, "rb") as f:
+            for chunk in iter(lambda: f.read(1 << 20), b""):
+                h.update(chunk)
+    except OSError:
+        return {}
+    return {"artifact_sha256": h.hexdigest(), "artifact_bytes": st.st_size}
 
 
 def _digest(value: Any) -> str:
@@ -149,6 +228,7 @@ def hook_to_event(payload: dict[str, Any]) -> tuple[str, dict[str, Any]]:
         tool_input = payload.get("tool_input", {})
         fields["args_sha256"] = _digest(tool_input)
         fields["args_summary"] = summarize_tool_input(str(tool), tool_input)
+        fields.update(change_stats(str(tool), tool_input))
         return "tool_call", fields
     if hook == "PostToolUse":
         response = payload.get("tool_response")
@@ -203,6 +283,8 @@ def record(payload: dict[str, Any], trace_dir: str | None = None, signer: Any | 
         # Create owner-only before the first append; traces name files and tools.
         os.close(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600))
     event_type, fields = hook_to_event(payload)
+    if event_type == "tool_result" and fields.get("ok") and payload.get("tool_name") in WRITE_TOOLS:
+        fields.update(artifact_receipt(payload))
     agent_id = fields.pop("agent_id")
     emitter = TraceEmitter(session_id, agent_id, path, signer=signer, concurrent=True)
     return emitter.emit(event_type, **fields)

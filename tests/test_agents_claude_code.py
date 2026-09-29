@@ -187,3 +187,65 @@ class TestMain:
         rc, out = self._run(monkeypatch, capsys, "not json", ["--dir", str(tmp_path)])
         assert rc == 0 and out.out == ""
         assert "spiritwriter-claude-hook" in out.err
+
+
+# === Artifacts ===========================================================
+
+
+class TestArtifacts:
+    def test_long_paths_keep_the_filename(self):
+        path = "/very/" + "deep/" * 40 + "classify.py"
+        s = cc.summarize_tool_input("Edit", {"file_path": path})
+        assert s.startswith("…") and s.endswith("/classify.py") and len(s) <= cc.SUMMARY_MAX
+
+    def test_other_summaries_still_keep_the_head(self):
+        s = cc.summarize_tool_input("Bash", {"description": "x" * 300})
+        assert s.endswith("…") and s.startswith("xxx")
+
+    def test_edit_stats_are_a_line_diff(self):
+        st = cc.change_stats("Edit", {"old_string": "a\nb\nc", "new_string": "a\nB\nc\nd"})
+        assert st == {"lines_added": 2, "lines_removed": 1, "bytes_written": len("a\nB\nc\nd")}
+
+    def test_multiedit_sums_edits(self):
+        st = cc.change_stats("MultiEdit", {"edits": [{"old_string": "x", "new_string": "y"}, {"old_string": "", "new_string": "p\nq"}]})
+        assert st["lines_added"] == 3 and st["lines_removed"] == 1
+
+    def test_write_counts_lines_added_only(self):
+        st = cc.change_stats("Write", {"content": "one\ntwo\nthree\n"})
+        assert st == {"lines_added": 3, "lines_removed": 0, "bytes_written": 14}
+
+    def test_non_write_tools_have_no_stats(self):
+        assert cc.change_stats("Read", {"file_path": "/x"}) == {}
+
+    def test_stats_land_on_tool_call_without_content(self):
+        _, f = cc.hook_to_event({"hook_event_name": "PreToolUse", "tool_name": "Write",
+                                 "tool_input": {"file_path": "/x/y.py", "content": "SECRET_BODY\n"}})
+        assert f["lines_added"] == 1 and "SECRET_BODY" not in json.dumps(f)
+
+    @posix_only
+    def test_write_result_hashes_the_file(self, tmp_path):
+        target = tmp_path / "out.txt"
+        target.write_text("hello\n")
+        base = {"session_id": "s", "tool_name": "Write", "tool_use_id": "t1", "cwd": str(tmp_path),
+                "tool_input": {"file_path": "out.txt", "content": "hello\n"}}
+        evt = cc.record({**base, "hook_event_name": "PostToolUse", "tool_response": {}}, trace_dir=str(tmp_path / "tr"))
+        import hashlib
+        assert evt["artifact_sha256"] == hashlib.sha256(b"hello\n").hexdigest() and evt["artifact_bytes"] == 6
+
+    @posix_only
+    def test_no_hash_for_failed_missing_or_huge(self, tmp_path, monkeypatch):
+        big = tmp_path / "big.bin"
+        big.write_bytes(b"x" * 100)
+        monkeypatch.setattr(cc, "ARTIFACT_MAX_BYTES", 10)
+        tr = str(tmp_path / "tr")
+        for ti, resp in (({"file_path": str(big)}, {}),                        # too large
+                         ({"file_path": str(tmp_path / "nope")}, {}),          # missing
+                         ({"file_path": str(big)}, {"is_error": True})):       # failed write
+            evt = cc.record({"hook_event_name": "PostToolUse", "session_id": "s", "tool_name": "Write",
+                             "tool_input": ti, "tool_response": resp}, trace_dir=tr)
+            assert "artifact_sha256" not in evt
+
+    def test_reads_are_not_hashed(self, tmp_path):
+        (tmp_path / "r.txt").write_text("x")
+        _, f = cc.hook_to_event({"hook_event_name": "PostToolUse", "tool_name": "Read", "tool_input": {"file_path": str(tmp_path / "r.txt")}})
+        assert "artifact_sha256" not in f
