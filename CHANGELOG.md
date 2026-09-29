@@ -13,9 +13,11 @@ Entries before 0.8.0 are not backfilled; consult `git log` for earlier history. 
 - **`TraceChainError`**, raised when a concurrent emit finds a torn or hashless final line, or when a reader finds the file shrank or disappeared. Continuing silently would fork or hide the chain.
 - **`read_events_since(path, offset)`** and **`follow_events(path, offset, ...)`**: byte-offset tailing for live consumers. Partial final lines are never consumed, and yielded offsets are safe to persist and resume from.
 - **`ChainVerifier`**: incremental `verify_chain` for events that arrive one at a time, with `prev_hash=` to resume mid-file.
+- **`spiritwriter.agents.claude_code`** and the **`spiritwriter-claude-hook`** command. They record Claude Code hook payloads as one hash-chained trace per session: tool calls, tool results, subagent start and stop, and `spawn_with_shards` events linking each subagent (`child_agent_id`) to the tool call that spawned it (`tool_use_id`). Raw tool inputs and outputs, prompts, and messages are never written. They become `args_sha256` plus an allowlisted, secret-scrubbed `args_summary`, or a hash and length. Unknown hooks and fields are recorded rather than rejected, and the command always exits 0. Tests pin real captured payloads in `tests/fixtures/claude_code/`.
 
 ### Documentation
 - `docs/tracing.md`: new "Multiple Writers and Live Following" section. "What Tracing Is Not" updated to match.
+- New skill `skills/claude-code/SKILL.md` (hook setup, event mapping, what is never recorded). Listed in `CLAUDE.md`.
 
 ## [0.11.0] — 2026-09-10
 
