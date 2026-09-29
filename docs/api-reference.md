@@ -393,9 +393,9 @@ an orbit digest or with a plain content hash of the same bytes.
 
 ## spiritwriter.fabric.emitter
 
-### `TraceEmitter(run_id, agent_id, out_path, signer=None)`
+### `TraceEmitter(run_id, agent_id, out_path, signer=None, *, cap_id=None, cap_chain=None, subject_thumbprint=None, role=None, concurrent=False)`
 
-Hash-chained JSONL event emitter.
+Hash-chained JSONL event emitter. `concurrent=True` (POSIX) lets many processes or instances append to one file: each `emit()` locks the file and reads the chain head from its last line. See [tracing.md](tracing.md#multiple-writers-and-live-following).
 
 **Core:**
 - `emit(event_type, **kwargs) -> dict` — Emit custom event
@@ -427,6 +427,22 @@ Hash-chained JSONL event emitter.
 ### `verify_chain(events) -> bool`
 
 Verify hash chain integrity. Returns `True` if valid or empty.
+
+### `ChainVerifier(prev_hash=None)`
+
+Incremental `verify_chain`. `feed(evt) -> bool` returns `False` from the first bad event on. Attributes: `ok`, `count`, `prev_hash`.
+
+### `read_events_since(path, offset=0) -> tuple[list[dict], int]`
+
+Complete events appended after byte `offset`, plus the offset to pass next time. A partial final line is not consumed.
+
+### `follow_events(path, offset=0, *, poll_interval=0.25, should_stop=None) -> Iterator[tuple[dict, int]]`
+
+Yield `(event, offset_after_event)` as events are appended. Stops when `should_stop()` returns `True`.
+
+### `TraceChainError`
+
+`ValueError` subclass. Raised for a torn or hashless final line on a concurrent emit, or a trace file that shrank or disappeared under a reader.
 
 ---
 

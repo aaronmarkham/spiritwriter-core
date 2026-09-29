@@ -9,11 +9,27 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import time
 import uuid
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Callable, Iterator
+
+try:
+    import fcntl
+except ImportError:  # Windows — concurrent mode is POSIX-only
+    fcntl = None  # type: ignore[assignment]
 
 from spiritwriter.fabric.shard import _canonical_json, _sha256, _now_iso
+
+
+class TraceChainError(ValueError):
+    """A trace file is in a state that can't be safely extended or read.
+
+    Raised for a torn final line (a writer died mid-append), a final
+    event with no ``hash``, or a file that shrank under a reader. Each
+    of these means the on-disk chain is no longer the append-only log
+    it claims to be, so continuing silently would fork or hide it.
+    """
 
 
 class TraceEmitter:
@@ -32,6 +48,17 @@ class TraceEmitter:
 
     All cap-context fields are optional. Emitters built without them
     produce events identical in shape to the pre-feature version.
+
+    **Concurrent mode (optional, POSIX).** By default the chain head
+    lives in memory, so one emitter owns one file. Pass
+    ``concurrent=True`` when several processes (or several emitter
+    instances) append to the same ``out_path`` — e.g. one short-lived
+    process per agent-hook event. Each ``emit()`` then takes an
+    exclusive ``flock`` on the file, reads the chain head from the
+    file's last line, appends, and fsyncs before releasing, so the
+    file stays a single verifiable chain. It also means a new emitter
+    pointed at an existing file continues that file's chain instead of
+    starting a second one.
     """
 
     def __init__(
@@ -45,11 +72,18 @@ class TraceEmitter:
         cap_chain: list[str] | None = None,
         subject_thumbprint: str | None = None,
         role: str | None = None,
+        concurrent: bool = False,
     ):
+        if concurrent and fcntl is None:
+            raise NotImplementedError(
+                "TraceEmitter(concurrent=True) needs POSIX fcntl.flock; "
+                "on Windows, give each writer its own out_path"
+            )
         self.run_id = run_id
         self.agent_id = agent_id
         self.out_path = out_path
         self.signer = signer  # Optional Ed25519 signer
+        self.concurrent = concurrent
         self.prev_hash: str | None = None
         # Cap context — sticky defaults applied to every emitted event
         # unless overridden per-call.
@@ -70,14 +104,36 @@ class TraceEmitter:
         otherwise a caller like ``emit("x", cap_id=maybe_none)`` would
         silently write ``cap_id: null`` into the event, which is almost
         never what you want.
+
+        In concurrent mode the chain head is read from the file under
+        an exclusive lock rather than taken from ``self.prev_hash``.
         """
+        if not self.concurrent:
+            evt = self._seal(event_type, self.prev_hash, kwargs)
+            self._write(evt)
+        else:
+            with open(self.out_path, "a+b") as f:
+                fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+                try:
+                    evt = self._seal(event_type, _last_event_hash(f), kwargs)
+                    f.seek(0, os.SEEK_END)
+                    f.write((json.dumps(evt, ensure_ascii=False) + "\n").encode("utf-8"))
+                    f.flush()
+                    os.fsync(f.fileno())
+                finally:
+                    fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+        self.prev_hash = evt["hash"]
+        return evt
+
+    def _seal(self, event_type: str, prev_hash: str | None, kwargs: dict[str, Any]) -> dict[str, Any]:
+        """Build, hash, and optionally sign one event linked to ``prev_hash``."""
         evt: dict[str, Any] = {
             "type": event_type,
             "run_id": self.run_id,
             "event_id": kwargs.pop("event_id", str(uuid.uuid4())),
             "ts": _now_iso(),
             "agent_id": self.agent_id,
-            "prev_event_hash": self.prev_hash,
+            "prev_event_hash": prev_hash,
         }
         # Treat None on cap-context kwargs as "absent" so explicit-None
         # doesn't accidentally write null into the event payload (and
@@ -105,8 +161,6 @@ class TraceEmitter:
         if self.signer:
             evt["sig"] = self.signer.sign(h.encode("utf-8"))
 
-        self.prev_hash = h
-        self._write(evt)
         return evt
 
     def current_trace_ref(self) -> str | None:
@@ -347,6 +401,138 @@ class TraceEmitter:
                 return [json.loads(line) for line in f if line.strip()]
         except FileNotFoundError:
             return []
+
+
+def _last_event_hash(f: Any) -> str | None:
+    """Return the ``hash`` of the last event in an open binary trace file.
+
+    Reads backwards from the end so cost is independent of file size.
+    Returns None for an empty file (the next event starts the chain).
+    Raises TraceChainError if the file doesn't end in a newline (a torn
+    append) or the last line isn't an event with a hash.
+    """
+    f.seek(0, os.SEEK_END)
+    end = f.tell()
+    if end == 0:
+        return None
+    f.seek(end - 1)
+    if f.read(1) != b"\n":
+        raise TraceChainError(f"{getattr(f, 'name', 'trace file')}: last line is incomplete (torn append)")
+    # Scan back (excluding the final newline) for the newline that
+    # precedes the last line.
+    pos, tail = end - 1, b""
+    while pos > 0 and b"\n" not in tail:
+        step = min(4096, pos)
+        pos -= step
+        f.seek(pos)
+        tail = f.read(step) + tail
+    last = tail.rsplit(b"\n", 1)[-1]
+    try:
+        h = json.loads(last).get("hash")
+    except (ValueError, AttributeError):
+        h = None
+    if not h:
+        raise TraceChainError(f"{getattr(f, 'name', 'trace file')}: last line is not a hashed trace event")
+    return h
+
+
+# === Following a trace ======================================================
+#
+# Byte-offset tailing for live consumers (dashboards, visualizers). Offsets
+# always land on a line boundary: a partially written final line is left
+# unconsumed until its newline arrives, so a reader never parses half an
+# event and can resume from the offset it last saw.
+
+
+def _read_since(path: str, offset: int) -> tuple[list[tuple[dict[str, Any], int]], int]:
+    """Complete events after ``offset`` as ``(event, end_offset)`` pairs, plus the new offset."""
+    try:
+        f = open(path, "rb")
+    except FileNotFoundError:
+        if offset:
+            raise TraceChainError(f"{path}: trace file disappeared after offset {offset}")
+        return [], 0
+    with f:
+        f.seek(0, os.SEEK_END)
+        size = f.tell()
+        if size < offset:
+            raise TraceChainError(f"{path}: file shrank from {offset} to {size} bytes")
+        f.seek(offset)
+        data = f.read(size - offset)
+    out: list[tuple[dict[str, Any], int]] = []
+    start = 0
+    # Split on b"\n" only; a partial final line (no newline yet) is left
+    # for the next read.
+    while (nl := data.find(b"\n", start)) != -1:
+        line = data[start:nl]
+        start = nl + 1
+        if line.strip():
+            out.append((json.loads(line), offset + start))
+    return out, offset + start
+
+
+def read_events_since(path: str, offset: int = 0) -> tuple[list[dict[str, Any]], int]:
+    """Read complete events appended to ``path`` after byte ``offset``.
+
+    Returns ``(events, new_offset)``. Pass ``new_offset`` back on the
+    next call. A missing file at offset 0 reads as empty (the producer
+    hasn't started yet). Raises TraceChainError if the file shrank below
+    ``offset`` or vanished after being read — trace files are
+    append-only, so either means the log was rewritten.
+    """
+    pairs, new_offset = _read_since(path, offset)
+    return [evt for evt, _ in pairs], new_offset
+
+
+def follow_events(
+    path: str,
+    offset: int = 0,
+    *,
+    poll_interval: float = 0.25,
+    should_stop: Callable[[], bool] | None = None,
+) -> Iterator[tuple[dict[str, Any], int]]:
+    """Yield ``(event, offset_after_event)`` as events are appended to ``path``.
+
+    Polls with :func:`read_events_since`; blocks between polls. Stops
+    when ``should_stop()`` returns True (checked once per poll), or
+    runs until the consumer stops iterating. The yielded offset is safe
+    to persist and pass back as ``offset`` to resume after a restart.
+    """
+    while True:
+        pairs, offset = _read_since(path, offset)
+        yield from pairs
+        if should_stop is not None and should_stop():
+            return
+        if not pairs:
+            time.sleep(poll_interval)
+
+
+class ChainVerifier:
+    """Verify a trace chain one event at a time.
+
+    The incremental form of :func:`verify_chain`, for consumers that
+    see events as they arrive (see :func:`follow_events`). ``feed()``
+    returns True while the chain holds and False from the first bad
+    event on — a broken chain stays broken. To verify from the middle
+    of a file, pass the hash of the event just before the resume point
+    as ``prev_hash``; the default ``None`` means "start of chain".
+    """
+
+    def __init__(self, prev_hash: str | None = None):
+        self.prev_hash = prev_hash
+        self.count = 0
+        self.ok = True
+
+    def feed(self, evt: dict[str, Any]) -> bool:
+        if not self.ok:
+            return False
+        hashable = {k: v for k, v in evt.items() if k not in ("hash", "sig")}
+        if evt.get("hash") != _sha256(_canonical_json(hashable)) or evt.get("prev_event_hash") != self.prev_hash:
+            self.ok = False
+            return False
+        self.prev_hash = evt["hash"]
+        self.count += 1
+        return True
 
 
 # === Provenance queries =====================================================

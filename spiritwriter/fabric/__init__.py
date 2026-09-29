@@ -24,6 +24,10 @@ from spiritwriter.fabric.shard import (
 from spiritwriter.fabric.store import ShardStore
 from spiritwriter.fabric.emitter import (
     TraceEmitter,
+    TraceChainError,
+    ChainVerifier,
+    read_events_since,
+    follow_events,
     verify_chain,
     verify_chain as verify_trace_chain,
     events_by_cap,
@@ -185,6 +189,10 @@ __all__ = [
     "permutation_closure",
     "canonical_under",
     "orbit_digest",
+    "TraceChainError",
+    "ChainVerifier",
+    "read_events_since",
+    "follow_events",
     "verify_chain",
     "verify_trace_chain",
     "events_by_cap",
