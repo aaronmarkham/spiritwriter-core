@@ -249,3 +249,14 @@ class TestArtifacts:
         (tmp_path / "r.txt").write_text("x")
         _, f = cc.hook_to_event({"hook_event_name": "PostToolUse", "tool_name": "Read", "tool_input": {"file_path": str(tmp_path / "r.txt")}})
         assert "artifact_sha256" not in f
+
+
+class TestProject:
+    def test_session_events_carry_project_basename(self):
+        for hook in ("SessionStart", "UserPromptSubmit"):
+            _, f = cc.hook_to_event({"hook_event_name": hook, "cwd": "/workplace/me/AgentCrossing/src/AgentCrossing/"})
+            assert f["project"] == "AgentCrossing"
+
+    def test_no_cwd_no_project_and_tools_never_carry_it(self):
+        assert "project" not in cc.hook_to_event({"hook_event_name": "SessionStart"})[1]
+        assert "project" not in cc.hook_to_event({"hook_event_name": "PreToolUse", "cwd": "/x/y", "tool_name": "Read"})[1]

@@ -201,6 +201,15 @@ def _text_receipt(prefix: str, text: Any) -> dict[str, Any]:
     return {f"{prefix}_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(), f"{prefix}_chars": len(text)}
 
 
+def _project(payload: dict[str, Any]) -> dict[str, Any]:
+    """``project``: the basename of the session's working directory, so viewers can label
+    sessions ("AgentCrossing") instead of showing a session UUID. Only the last path
+    component is kept, not the full path."""
+    cwd = str(payload.get("cwd") or "").rstrip("/\\")
+    name = os.path.basename(cwd) if cwd else ""
+    return {"project": scrub(name)} if name else {}
+
+
 def _tool_ok(tool_response: Any) -> bool:
     if isinstance(tool_response, dict):
         return not any(tool_response.get(k) for k in ("is_error", "isError", "error", "interrupted"))
@@ -253,10 +262,12 @@ def hook_to_event(payload: dict[str, Any]) -> tuple[str, dict[str, Any]]:
         return "agent_completed", fields
     if hook == "UserPromptSubmit":
         fields.update(_text_receipt("prompt", payload.get("prompt")))
+        fields.update(_project(payload))
         return "prompt_submitted", fields
     if hook == "SessionStart":
         if payload.get("source"):
             fields["source"] = payload["source"]
+        fields.update(_project(payload))
         return "session_started", fields
     if hook == "SessionEnd":
         if payload.get("reason"):

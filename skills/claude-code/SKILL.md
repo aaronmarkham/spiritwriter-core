@@ -47,8 +47,8 @@ Traces go to `~/.spiritwriter/claude-code/traces/<session_id>.jsonl`, with the d
 | `PostToolUse` | `tool_result` | `tool_use_id`, `ok`, `duration_ms`; successful write tools add `artifact_sha256`, `artifact_bytes` |
 | `PostToolUse` on `Agent`/`Task` | `spawn_with_shards` | `tool_use_id`, `child_agent_id`, `task`, `model`, `task_prompt_sha256` |
 | `SubagentStart` / `SubagentStop` | `agent_started` / `agent_completed` | `agent_type`, `last_message_sha256` |
-| `UserPromptSubmit` | `prompt_submitted` | `prompt_sha256`, `prompt_chars` |
-| `SessionStart` / `SessionEnd` / `Stop` | `session_started` / `session_ended` / `turn_completed` | `source`, `reason` |
+| `UserPromptSubmit` | `prompt_submitted` | `prompt_sha256`, `prompt_chars`, `project` |
+| `SessionStart` / `SessionEnd` / `Stop` | `session_started` / `session_ended` / `turn_completed` | `source`, `project` (basename of cwd, start only), `reason` |
 | anything else | `hook_event` | raw `hook_event` name only |
 
 Every event also carries `hook_event` (the raw hook name) and `prompt_id` when present. `run_id` is the session id. `agent_id` is the subagent's id, or `main` for the top-level agent.
