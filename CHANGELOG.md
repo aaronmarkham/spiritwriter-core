@@ -9,7 +9,7 @@ Entries before 0.8.0 are not backfilled; consult `git log` for earlier history. 
 **Security fix for the Claude Code recorder's Bash summary.** In 0.12.0, when the model gave a Bash command no `description`, the recorder split the command on whitespace to find the program name. A quoted inline assignment containing a space, such as `DB_PASSWORD='p@ss w0rd!' psql`, was split mid-value, and the part after the space (`w0rd!'`) was written to `args_summary`. Trace files are local and owner-only (0600), but this broke the guarantee that raw tool inputs are never written. Upgrade if you run `spiritwriter-claude-hook`.
 
 ### Fixed
-- `args_summary` for Bash now splits the command the way the shell does (`shlex`), so a quoted value is skipped whole along with its `NAME=` prefix. Flags after a wrapper (`env -i`, `sudo -E`) are skipped too, so the summary is the program name. A command that can't be parsed (an unterminated quote) summarizes to an empty string instead of a guess.
+- `args_summary` for Bash now splits the command the way the shell does (`shlex`), so a quoted value is skipped whole along with its `NAME=` prefix. A flag now stops the search and the summary falls back to the wrapper name reached so far (`sudo -u deploy psql` → `sudo`, `sudo psql` → `psql`): because a wrapper flag's value can be a secret (`sudo -u`, `sudo -p`, `xargs -I`), reporting the wrapper is safe where guessing the program past a flag could return the flag's value. A command that can't be parsed (an unterminated quote) summarizes to an empty string instead of a guess.
 
 ## [0.12.0] — 2026-09-30
 
