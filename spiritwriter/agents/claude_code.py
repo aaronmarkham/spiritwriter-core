@@ -50,6 +50,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import sys
 from typing import Any
 from urllib.parse import urlsplit
@@ -109,15 +110,34 @@ _WRAPPERS = frozenset({"sudo", "env", "time", "nice", "nohup", "exec", "command"
 
 
 def _bash_program(command: str) -> str:
-    """The program a Bash command runs, skipping wrappers and inline VAR=value assignments."""
-    for word in command.split():
-        if "=" in word.split("/", 1)[0]:   # NAME=value (not a path like a/b=c)
+    """The program a Bash command runs, skipping wrappers and inline VAR=value assignments.
+
+    Words are split the way the shell does (``shlex``), so a quoted value with spaces
+    (``DB_PASSWORD='p@ss w0rd' psql``) stays one word and is skipped whole. A command shlex
+    can't parse (an unterminated quote) yields "" rather than a whitespace-split guess, which
+    could hand back part of a quoted secret.
+
+    A flag stops the search: we can't know whether a wrapper flag takes a value
+    (``sudo -u deploy`` → ``deploy``, ``sudo -p 'pw prompt'`` → the prompt), so rather than
+    risk returning a flag's value we report the wrapper name reached so far — a safe, generic
+    label. So ``sudo -u deploy psql`` summarizes as ``sudo``, while ``sudo psql`` is ``psql``.
+    """
+    try:
+        words = shlex.split(command)
+    except ValueError:
+        return ""
+    last_wrapper = ""
+    for word in words:
+        if "=" in word.split("/", 1)[0]:   # NAME=value assignment (not a path like a/b=c)
             continue
+        if word.startswith("-"):           # a flag — its value could be a secret, so stop guessing
+            return last_wrapper
         base = os.path.basename(word)
         if base in _WRAPPERS:
+            last_wrapper = base
             continue
         return base
-    return ""
+    return last_wrapper
 
 
 def summarize_tool_input(tool_name: str, tool_input: Any) -> str:

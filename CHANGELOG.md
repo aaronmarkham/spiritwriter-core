@@ -4,6 +4,13 @@ All notable changes to `spiritwriter` are documented here. The format follows [K
 
 Entries before 0.8.0 are not backfilled; consult `git log` for earlier history. Releases through 0.8.3 were published under the distribution name `spiritwriter-core`.
 
+## [0.12.1] — 2026-10-01
+
+**Security fix for the Claude Code recorder's Bash summary.** In 0.12.0, when the model gave a Bash command no `description`, the recorder split the command on whitespace to find the program name. A quoted inline assignment containing a space, such as `DB_PASSWORD='p@ss w0rd!' psql`, was split mid-value, and the part after the space (`w0rd!'`) was written to `args_summary`. Trace files are local and owner-only (0600), but this broke the guarantee that raw tool inputs are never written. Upgrade if you run `spiritwriter-claude-hook`.
+
+### Fixed
+- `args_summary` for Bash now splits the command the way the shell does (`shlex`), so a quoted value is skipped whole along with its `NAME=` prefix. A flag now stops the search and the summary falls back to the wrapper name reached so far (`sudo -u deploy psql` → `sudo`, `sudo psql` → `psql`): because a wrapper flag's value can be a secret (`sudo -u`, `sudo -p`, `xargs -I`), reporting the wrapper is safe where guessing the program past a flag could return the flag's value. A command that can't be parsed (an unterminated quote) summarizes to an empty string instead of a guess.
+
 ## [0.12.0] — 2026-09-30
 
 **Trace files can now take many writers and be followed live.** A trace written by one process per event (the shape agent hooks produce) used to fork its chain, because each emitter kept the chain head in memory, and the only way to read a trace was to load the whole file. Both are now supported without changing default behaviour. This release also adds a recorder that turns Claude Code hook payloads into one such trace per session. Everything here is additive and opt-in; no existing API changes. Versioned as a minor bump at the maintainer's request. Strictly, the pre-1.0 convention above (minor for breaking changes only) would make this a patch (0.11.1).

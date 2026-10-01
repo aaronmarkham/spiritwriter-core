@@ -269,6 +269,37 @@ class TestSecretLeakFixes:
             assert "=" not in s and "hunter2secret" not in s and "p@ss" not in s and "abc123" not in s
         assert cc.summarize_tool_input("Bash", {"command": "GH_TOKEN=x gh api /user"}) == "gh"
 
+    def test_bash_quoted_env_value_with_spaces_not_leaked(self):
+        # A whitespace split used to return the half of a quoted value after the space.
+        for cmd, prog in (("DB_PASSWORD='p@ss w0rd!' psql -h db", "psql"),
+                          ('X="a secret b" Y=1 make', "make"),
+                          # A flag stops the search, so this falls back to the wrapper name.
+                          ("TOKEN='s3 cr3t' sudo -E env -i python run.py", "sudo")):
+            s = cc.summarize_tool_input("Bash", {"command": cmd})
+            assert s == prog
+            assert "w0rd" not in s and "secret" not in s and "cr3t" not in s
+
+    def test_bash_unparseable_command_summarizes_to_nothing(self):
+        # An unterminated quote can't be split safely, so nothing from it is written.
+        assert cc.summarize_tool_input("Bash", {"command": "PW='half secret psql"}) == ""
+
+    def test_bash_flag_value_not_reported_as_program(self):
+        # A wrapper flag can take a value (sudo -u NAME, sudo -p PROMPT, xargs -I STR). We can't
+        # know a flag's arity, so a flag stops the search and we report the wrapper, never the
+        # flag's value — which could be a username, a password prompt, or any secret.
+        for cmd, out in (("sudo -u deploy psql", "sudo"),
+                         ("sudo -p 'db admin password: ' psql", "sudo"),
+                         ("env -u HOME ls", "env"),
+                         ("xargs -I {} rm {}", "xargs"),
+                         ("nice -n 10 python train.py", "nice")):
+            s = cc.summarize_tool_input("Bash", {"command": cmd})
+            assert s == out
+            assert "deploy" not in s and "password" not in s and "HOME" not in s
+
+    def test_bash_wrapper_flags_skipped(self):
+        # A flag halts the search at the wrapper reached so far, rather than guessing past it.
+        assert cc.summarize_tool_input("Bash", {"command": "env -i TOKEN=abc python run.py"}) == "env"
+
     def test_bash_wrappers_skipped(self):
         assert cc.summarize_tool_input("Bash", {"command": "sudo env FOO=1 /usr/bin/pytest -q"}) == "pytest"
         assert cc.summarize_tool_input("Bash", {"command": "time curl https://x"}) == "curl"
