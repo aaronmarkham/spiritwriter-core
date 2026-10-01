@@ -4,6 +4,22 @@ All notable changes to `spiritwriter` are documented here. The format follows [K
 
 Entries before 0.8.0 are not backfilled; consult `git log` for earlier history. Releases through 0.8.3 were published under the distribution name `spiritwriter-core`.
 
+## [0.12.0] — 2026-09-30
+
+**Trace files can now take many writers and be followed live.** A trace written by one process per event (the shape agent hooks produce) used to fork its chain, because each emitter kept the chain head in memory, and the only way to read a trace was to load the whole file. Both are now supported without changing default behaviour. This release also adds a recorder that turns Claude Code hook payloads into one such trace per session. Everything here is additive and opt-in; no existing API changes. Versioned as a minor bump at the maintainer's request. Strictly, the pre-1.0 convention above (minor for breaking changes only) would make this a patch (0.11.1).
+
+### Added
+- **`TraceEmitter(..., concurrent=True)`** (POSIX). Each `emit()` holds an exclusive `flock` while it reads the chain head from the file's last line, appends, and fsyncs, so any number of processes or instances can append to one file and it stays a single verifiable chain. A concurrent emitter on an existing file continues its chain. On Windows it raises `NotImplementedError`.
+- **`TraceChainError`**, raised when a concurrent emit finds a torn or hashless final line, or when a reader finds the file shrank or disappeared. Continuing silently would fork or hide the chain.
+- **`read_events_since(path, offset)`** and **`follow_events(path, offset, ...)`**: byte-offset tailing for live consumers. Partial final lines are never consumed, and yielded offsets are safe to persist and resume from.
+- **`ChainVerifier`**: incremental `verify_chain` for events that arrive one at a time, with `prev_hash=` to resume mid-file.
+- **Artifact receipts in the Claude Code recorder.** Write tools record `lines_added`, `lines_removed`, and `bytes_written` on `tool_call`. Edit and MultiEdit get an exact line diff of old_string → new_string, and the content is discarded. A successful write's `tool_result` records `artifact_sha256` and `artifact_bytes` of the file on disk: regular files up to 64 MiB only, with relative paths resolved against `cwd`.
+- **`spiritwriter.agents.claude_code`** and the **`spiritwriter-claude-hook`** command. They record Claude Code hook payloads as one hash-chained trace per session: tool calls, tool results, subagent start and stop, and `spawn_with_shards` events linking each subagent (`child_agent_id`) to the tool call that spawned it (`tool_use_id`). Raw tool inputs and outputs, prompts, and messages are never written. They become `args_sha256` plus an allowlisted, secret-scrubbed `args_summary`, or a hash and length. File-path summaries longer than 120 characters truncate from the front (`…/dir/file.py`), so they keep the filename. The recorder also hardens `args_summary` against secret leaks: a Bash command with no description skips inline `NAME=value` assignments and wrappers (`sudo`/`env`/`time`/…) before taking the program name, and `WebFetch` uses the URL host (and port) rather than `netloc`, so a `user:pass@` prefix is never written. A non-dict `tool_input` on a spawn no longer drops the `spawn_with_shards` event. `session_started` and `prompt_submitted` also carry `project`, the basename of the session's working directory (never the full path), so viewers can label sessions. Unknown hooks and fields are recorded rather than rejected, and the command always exits 0. Tests pin real captured payloads in `tests/fixtures/claude_code/`.
+
+### Documentation
+- `docs/tracing.md`: new "Multiple Writers and Live Following" section. "What Tracing Is Not" updated to match.
+- New skill `skills/claude-code/SKILL.md` (hook setup, event mapping, what is never recorded). Listed in `CLAUDE.md`.
+
 ## [0.11.0] — 2026-09-10
 
 **PyMuPDF is now an optional `pdf` extra, not a core dependency.** PDF ingestion is a feature of the `spiritwriter.ingest` path, not of core agent-memory — yet every install pulled `pymupdf`, which (a) is **AGPL-licensed** (dual GNU AGPL-3.0 / Artifex commercial), so it trips corporate license scanners, and (b) ships a large native (MuPDF) wheel that **builds from source and fails** in environments without a prebuilt wheel or a C toolchain. The loader already imported `fitz` lazily behind a clear error, so gating it behind an extra is a natural fit. Minor bump under the pre-1.0 convention because it changes the default install surface.

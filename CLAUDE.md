@@ -6,7 +6,7 @@ Shared Python library for knowledge management, secrets, LLM abstraction, and **
 
 ```bash
 pip install -e .                        # library only
-pip install -e ".[dev,sealed,network]"  # what CI installs — use this to run the tests
+pip install -e ".[dev,sealed,network,pdf]"  # what CI installs — use this to run the tests
 ```
 
 The `dev` extra carries `pytest-asyncio`. Without it the async tests in
@@ -23,6 +23,7 @@ Read the relevant skill for your task:
 | **entitlements** | Encrypt shards, grant scoped access tokens | `skills/entitlements/SKILL.md` |
 | **jobs** | Package and run sub-agent jobs with budget tracking | `skills/jobs/SKILL.md` |
 | **network** | Publish/resolve shards over IPFS, private swarm config | `skills/network/SKILL.md` |
+| **claude-code** | Record Claude Code sessions (main agent, subagents, tool calls, spawn lineage) as hash-chained receipts via hooks | `skills/claude-code/SKILL.md` |
 | **audit** | Traced security audit of Android apps — findings + hash-chain + witness | `skills/audit/SKILL.md` |
 | **sw-vocab** | Validate spiritwriter's own terminology in docs/AI-drafts — catches drift, invented terms, deferred-but-claimed terms | `skills/sw-vocab/SKILL.md` |
 
@@ -41,6 +42,7 @@ spiritwriter/
   llm/         — LLM provider abstraction
   fabric/      — Shards, store, emitter, crypto, entitlements, jobs, network resolver
     backends/  — Network backends (IPFS/Kubo)
+  agents/      — Agent-harness recorders (claude_code: hook payloads → trace events, spiritwriter-claude-hook)
   audit/       — Traced Android APK security audits (provenance, registry, verify)
   sw_vocab/    — Terminology canonicalization for spiritwriter's own docs (dogfoods CanonicalRegistry)
   stopwords.py — Centralized stopword list
@@ -57,10 +59,10 @@ spiritwriter/
 ## Tests
 
 ```bash
-pip install -e ".[dev,sealed,network]"
+pip install -e ".[dev,sealed,network,pdf]"
 python -m pytest tests/ -v
 ```
 
-Expect 948 passed, 11 skipped — the skips are the IPFS tests, which need a
+Expect 1061 passed, 11 skipped — the skips are the IPFS tests, which need a
 local Kubo node. Any other skip means an extra is missing; the skip reason
 names it.

@@ -282,9 +282,39 @@ entitlement_granted
 
 Render this as a [Mermaid diagram](traced-workflows.md#provenance-reports) — the trace JSONL is the source of truth for both the audit log *and* the human-readable provenance report.
 
+## Multiple Writers and Live Following
+
+By default an emitter keeps the chain head in memory, so it must be the only writer to its file. When many short-lived processes append to one trace — one process per agent-hook event, say — pass `concurrent=True`:
+
+```python
+from spiritwriter.fabric import TraceEmitter
+
+# Each hook invocation builds a fresh emitter; the file stays one chain.
+TraceEmitter("session-abc", agent_id, "/var/trace/session-abc.jsonl", concurrent=True).emit(
+    "tool_call", tool_use_id=tool_use_id, tool=tool_name
+)
+```
+
+Each `emit()` takes an exclusive `flock` on the file, reads the chain head from the last line, appends, and fsyncs before releasing. A concurrent emitter pointed at an existing file continues that file's chain rather than starting a second one. If the last line is torn (a writer died mid-append) or isn't a hashed event, `emit()` raises `TraceChainError` instead of forking the chain. Concurrent mode is POSIX-only; on Windows it raises `NotImplementedError`, so give each writer its own file there.
+
+Live consumers tail a trace by byte offset:
+
+```python
+from spiritwriter.fabric import ChainVerifier, follow_events, read_events_since
+
+events, offset = read_events_since(path)            # one-shot; pass offset back next time
+verifier = ChainVerifier()
+for evt, offset in follow_events(path, offset):      # blocks, polling every 0.25s
+    if not verifier.feed(evt):
+        raise RuntimeError(f"chain broken at {evt['event_id']}")
+    render(evt)                                      # persist offset to resume after a restart
+```
+
+Offsets always land on a line boundary: a final line still being written is left unconsumed until its newline arrives. Both readers raise `TraceChainError` if the file shrinks below the offset or disappears after being read, because an append-only log that got shorter was rewritten. `ChainVerifier` is the incremental form of `verify_chain`. To resume verification mid-file, pass the hash of the event just before the resume point as `prev_hash`.
+
 ## What Tracing Is Not
 
-- **Not a database.** No query layer, no indexing, no aggregation across runs. Read the JSONL, filter in Python.
+- **Not a database.** No query layer, no indexing, no aggregation across runs. Read the JSONL (or tail it with `follow_events`), filter in Python.
 - **Not authorization.** A trace event records what happened; it doesn't gate what's allowed. Use [entitlements](entitlements.md) for that.
-- **Not synchronous across writers.** One emitter per file. Multiple processes writing to the same `out_path` will produce interleaved lines that can't be chain-verified — give each producer its own file.
+- **Not multi-writer by default.** A default emitter owns its file; two default emitters on the same `out_path` produce interleaved lines that can't be chain-verified. Use `concurrent=True` (above) or give each producer its own file.
 - **Not encrypted.** Trace events are plaintext JSONL. If event payloads contain sensitive data (decrypted shard content, raw user input), the file itself needs filesystem-level protection.
