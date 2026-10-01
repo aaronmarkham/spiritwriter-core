@@ -260,3 +260,35 @@ class TestProject:
     def test_no_cwd_no_project_and_tools_never_carry_it(self):
         assert "project" not in cc.hook_to_event({"hook_event_name": "SessionStart"})[1]
         assert "project" not in cc.hook_to_event({"hook_event_name": "PreToolUse", "cwd": "/x/y", "tool_name": "Read"})[1]
+
+
+class TestSecretLeakFixes:
+    def test_bash_inline_env_assignment_not_leaked(self):
+        for cmd in ("GH_TOKEN=hunter2secret gh api /user", "DB_PASSWORD='p@ss w0rd' psql -h db", "AWS_SECRET=abc123 aws s3 ls"):
+            s = cc.summarize_tool_input("Bash", {"command": cmd})
+            assert "=" not in s and "hunter2secret" not in s and "p@ss" not in s and "abc123" not in s
+        assert cc.summarize_tool_input("Bash", {"command": "GH_TOKEN=x gh api /user"}) == "gh"
+
+    def test_bash_wrappers_skipped(self):
+        assert cc.summarize_tool_input("Bash", {"command": "sudo env FOO=1 /usr/bin/pytest -q"}) == "pytest"
+        assert cc.summarize_tool_input("Bash", {"command": "time curl https://x"}) == "curl"
+
+    def test_bash_plain_command_unchanged(self):
+        assert cc.summarize_tool_input("Bash", {"command": "/usr/bin/git push"}) == "git"
+        assert cc.summarize_tool_input("Bash", {"command": ""}) == ""
+
+    def test_webfetch_drops_userinfo_and_query(self):
+        s = cc.summarize_tool_input("WebFetch", {"url": "https://admin:SuperSecret123@internal.example.com/api?token=abc#f"})
+        assert "SuperSecret123" not in s and "admin" not in s and "token" not in s
+        assert s == "internal.example.com/api"
+
+    def test_webfetch_keeps_port(self):
+        assert cc.summarize_tool_input("WebFetch", {"url": "http://host.example:8080/p?q=1"}) == "host.example:8080/p"
+
+    def test_webfetch_malformed_url_strips_userinfo(self):
+        assert "secret" not in cc.summarize_tool_input("WebFetch", {"url": "user:secret@nohost/path?x=1"})
+
+    def test_spawn_nondict_tool_input_does_not_crash(self):
+        etype, f = cc.hook_to_event({"hook_event_name": "PostToolUse", "tool_name": "Agent",
+                                     "tool_input": ["not", "a", "dict"], "tool_response": {"agentId": "kid"}})
+        assert etype == "spawn_with_shards" and f["child_agent_id"] == "kid" and f["task"] == ""

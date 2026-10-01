@@ -94,9 +94,30 @@ def scrub(text: str, keep: str = "head") -> str:
 
 
 def _url_summary(url: str) -> str:
-    # Query strings and fragments are where tokens live; keep host + path.
+    # Query strings and fragments are where tokens live — drop them. Use hostname (+port), never
+    # netloc, so a "user:pass@" prefix never reaches the summary.
     parts = urlsplit(url)
-    return f"{parts.netloc}{parts.path}" if parts.netloc else url.split("?", 1)[0]
+    if not parts.hostname:
+        return url.split("?", 1)[0].split("@")[-1]
+    host = parts.hostname + (f":{parts.port}" if parts.port else "")
+    return f"{host}{parts.path}"
+
+
+# Command prefixes that aren't the program: wrappers, and inline NAME=value assignments (which can
+# carry secrets like `GH_TOKEN=… cmd`). Skip them so the summary is the actual program name, never a secret.
+_WRAPPERS = frozenset({"sudo", "env", "time", "nice", "nohup", "exec", "command", "builtin", "doas", "xargs", "stdbuf", "setsid", "then", "do"})
+
+
+def _bash_program(command: str) -> str:
+    """The program a Bash command runs, skipping wrappers and inline VAR=value assignments."""
+    for word in command.split():
+        if "=" in word.split("/", 1)[0]:   # NAME=value (not a path like a/b=c)
+            continue
+        base = os.path.basename(word)
+        if base in _WRAPPERS:
+            continue
+        return base
+    return ""
 
 
 def summarize_tool_input(tool_name: str, tool_input: Any) -> str:
@@ -112,8 +133,7 @@ def summarize_tool_input(tool_name: str, tool_input: Any) -> str:
         if desc:
             summary = str(desc)
         else:
-            words = str(ti.get("command", "")).split()
-            summary = os.path.basename(words[0]) if words else ""
+            summary = _bash_program(str(ti.get("command", "")))
     elif tool_name in FILE_TOOLS:
         return scrub(str(ti.get("file_path") or ti.get("notebook_path") or ""), keep="tail")
     elif tool_name in ("Glob", "Grep"):
@@ -244,7 +264,8 @@ def hook_to_event(payload: dict[str, Any]) -> tuple[str, dict[str, Any]]:
         fields["ok"] = _tool_ok(response)
         child = response.get("agentId") if isinstance(response, dict) else None
         if tool in SPAWN_TOOLS and child:
-            tool_input = payload.get("tool_input") or {}
+            ti = payload.get("tool_input")
+            tool_input = ti if isinstance(ti, dict) else {}
             fields.update(
                 child_agent_id=child,
                 shard_refs=[],
