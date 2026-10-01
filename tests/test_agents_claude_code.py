@@ -269,6 +269,22 @@ class TestSecretLeakFixes:
             assert "=" not in s and "hunter2secret" not in s and "p@ss" not in s and "abc123" not in s
         assert cc.summarize_tool_input("Bash", {"command": "GH_TOKEN=x gh api /user"}) == "gh"
 
+    def test_bash_quoted_env_value_with_spaces_not_leaked(self):
+        # A whitespace split used to return the half of a quoted value after the space.
+        for cmd, prog in (("DB_PASSWORD='p@ss w0rd!' psql -h db", "psql"),
+                          ('X="a secret b" Y=1 make', "make"),
+                          ("TOKEN='s3 cr3t' sudo -E env -i python run.py", "python")):
+            s = cc.summarize_tool_input("Bash", {"command": cmd})
+            assert s == prog
+            assert "w0rd" not in s and "secret" not in s and "cr3t" not in s
+
+    def test_bash_unparseable_command_summarizes_to_nothing(self):
+        # An unterminated quote can't be split safely, so nothing from it is written.
+        assert cc.summarize_tool_input("Bash", {"command": "PW='half secret psql"}) == ""
+
+    def test_bash_wrapper_flags_skipped(self):
+        assert cc.summarize_tool_input("Bash", {"command": "env -i TOKEN=abc python run.py"}) == "python"
+
     def test_bash_wrappers_skipped(self):
         assert cc.summarize_tool_input("Bash", {"command": "sudo env FOO=1 /usr/bin/pytest -q"}) == "pytest"
         assert cc.summarize_tool_input("Bash", {"command": "time curl https://x"}) == "curl"

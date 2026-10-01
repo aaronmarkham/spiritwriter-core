@@ -63,6 +63,6 @@ pip install -e ".[dev,sealed,network,pdf]"
 python -m pytest tests/ -v
 ```
 
-Expect 1061 passed, 11 skipped — the skips are the IPFS tests, which need a
+Expect 1071 passed, 11 skipped — the skips are the IPFS tests, which need a
 local Kubo node. Any other skip means an extra is missing; the skip reason
 names it.

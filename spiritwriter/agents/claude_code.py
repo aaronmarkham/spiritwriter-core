@@ -50,6 +50,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import sys
 from typing import Any
 from urllib.parse import urlsplit
@@ -109,9 +110,21 @@ _WRAPPERS = frozenset({"sudo", "env", "time", "nice", "nohup", "exec", "command"
 
 
 def _bash_program(command: str) -> str:
-    """The program a Bash command runs, skipping wrappers and inline VAR=value assignments."""
-    for word in command.split():
+    """The program a Bash command runs, skipping wrappers, their flags, and inline VAR=value assignments.
+
+    Words are split the way the shell does (``shlex``), so a quoted value with spaces
+    (``DB_PASSWORD='p@ss w0rd' psql``) stays one word and is skipped whole. A command shlex
+    can't parse (an unterminated quote) yields "" rather than a whitespace-split guess, which
+    could hand back part of a quoted secret.
+    """
+    try:
+        words = shlex.split(command)
+    except ValueError:
+        return ""
+    for word in words:
         if "=" in word.split("/", 1)[0]:   # NAME=value (not a path like a/b=c)
+            continue
+        if word.startswith("-"):           # a wrapper's flag (`env -i`, `sudo -E`), not the program
             continue
         base = os.path.basename(word)
         if base in _WRAPPERS:
