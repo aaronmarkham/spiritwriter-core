@@ -757,3 +757,146 @@ def test_verify_trace_chain_aliases_emitter_verify_chain():
     from spiritwriter.fabric.emitter import verify_chain as emitter_verify_chain
     assert verify_trace_chain is emitter_verify_chain
     assert verify_trace_chain is fabric_verify_chain
+
+
+# === Delegation attenuation =============================================
+
+
+def _attn_root(sk, pk, **kw):
+    fields = dict(
+        token_id="r", granted_to="orchestrator", granted_by="operator",
+        shard_keys={}, scopes=["sw:team:*"], capabilities=["shard:read"],
+        secrets=["API_KEY"], budget_usd=1.0, created_at="2026-10-09T00:00:00Z",
+        subject_pubkey=pk,
+    )
+    fields.update(kw)
+    t = EntitlementToken(**fields)
+    t.sign(sk)
+    return t
+
+
+def _forged_child(root, root_sk, child_pk, **kw):
+    """Hand-build a signed child, bypassing issue_delegated's mint-time check."""
+    fields = dict(
+        token_id="c", granted_to="subagent", granted_by=root.granted_to,
+        shard_keys={}, scopes=list(root.scopes),
+        capabilities=list(root.capabilities), secrets=list(root.secrets),
+        budget_usd=root.budget_usd, created_at="2026-10-09T00:00:01Z",
+        expires_at=root.expires_at, subject_pubkey=child_pk,
+        issuer_pubkey=root.subject_pubkey, parent_cap_id=root.cap_id,
+    )
+    fields.update(kw)
+    t = EntitlementToken(**fields)
+    t.sign(root_sk)
+    return t
+
+
+class TestDelegationAttenuation:
+    def setup_method(self):
+        self.root_sk, self.root_pk = generate_signing_keypair()
+        _, self.child_pk = generate_signing_keypair()
+
+    def _mint(self, root, **kw):
+        return issue_delegated(
+            root, self.root_sk, subject_pubkey=self.child_pk,
+            granted_to="subagent", **kw,
+        )
+
+    def test_regression_broadening_child_is_refused_and_fails_verify(self):
+        root = _attn_root(self.root_sk, self.root_pk)
+        with pytest.raises(ValueError):
+            self._mint(
+                root,
+                capabilities=["shard:read", "shard:write", "exec:run"],
+                scopes=["*"], budget_usd=1000.0,
+            )
+        forged = _forged_child(
+            root, self.root_sk, self.child_pk,
+            capabilities=["shard:read", "shard:write", "exec:run"],
+            scopes=["*"], budget_usd=1000.0,
+        )
+        with pytest.raises(ValueError):
+            verify_cap_chain([root, forged], root_pubkeys=[self.root_pk])
+
+    def _both_fail(self, field, value, match, **root_kw):
+        root = _attn_root(self.root_sk, self.root_pk, **root_kw)
+        with pytest.raises(ValueError, match=match):
+            self._mint(root, **{field: value})
+        forged = _forged_child(root, self.root_sk, self.child_pk, **{field: value})
+        with pytest.raises(ValueError, match=match):
+            verify_cap_chain([root, forged], root_pubkeys=[self.root_pk])
+
+    def test_capabilities_cannot_widen(self):
+        self._both_fail("capabilities", ["shard:read", "exec:run"], "capabilities")
+
+    def test_secrets_cannot_widen(self):
+        self._both_fail("secrets", ["API_KEY", "DB_PASSWORD"], "secrets")
+
+    @pytest.mark.parametrize("scope", ["*", "sw:*", "other:thing", "sw:team*"])
+    def test_scopes_cannot_widen(self, scope):
+        self._both_fail("scopes", [scope], "scopes")
+
+    def test_scope_with_single_char_wildcard_parent_needs_exact_match(self):
+        # Parent "sw:?" must not be treated as covering child text "sw:*".
+        self._both_fail("scopes", ["sw:*"], "scopes", scopes=["sw:?"])
+
+    def test_budget_cannot_increase(self):
+        self._both_fail("budget_usd", 1.5, "budget_usd")
+
+    def test_budget_nan_is_refused(self):
+        self._both_fail("budget_usd", float("nan"), "budget_usd")
+
+    def test_expiry_cannot_be_later(self):
+        self._both_fail(
+            "expires_at", "2030-01-02T00:00:00Z", "expires_at",
+            expires_at="2030-01-01T00:00:00Z",
+        )
+
+    def test_expiry_cannot_be_dropped(self):
+        root = _attn_root(self.root_sk, self.root_pk, expires_at="2030-01-01T00:00:00Z")
+        with pytest.raises(ValueError, match="expires_at"):
+            self._mint(root, expires_at=None)
+        forged = _forged_child(root, self.root_sk, self.child_pk, expires_at=None)
+        with pytest.raises(ValueError, match="expires_at"):
+            verify_cap_chain([root, forged], root_pubkeys=[self.root_pk])
+
+    def test_expiry_requires_z_utc(self):
+        root = _attn_root(self.root_sk, self.root_pk, expires_at="2030-01-01T00:00:00Z")
+        with pytest.raises(ValueError, match="expires_at"):
+            self._mint(root, expires_at="2029-01-01T00:00:00+00:00")
+
+    def test_narrower_child_mints_and_verifies(self):
+        root = _attn_root(
+            self.root_sk, self.root_pk, expires_at="2030-01-01T00:00:00Z",
+            capabilities=["shard:read", "shard:write"],
+        )
+        child = self._mint(
+            root,
+            capabilities=["shard:read"], secrets=[],
+            scopes=["sw:team:a:*", "sw:team:*"], budget_usd=0.5,
+            expires_at="2029-06-01T00:00:00Z",
+        )
+        assert verify_cap_chain([root, child], root_pubkeys=[self.root_pk]) is True
+
+    def test_equal_authority_and_inherited_defaults_still_work(self):
+        root = _attn_root(self.root_sk, self.root_pk)
+        child = self._mint(root, budget_usd=1.0)
+        assert verify_cap_chain([root, child], root_pubkeys=[self.root_pk]) is True
+        inherited = self._mint(root)
+        assert inherited.scopes == root.scopes
+        assert inherited.budget_usd == 0.0
+        assert verify_cap_chain([root, inherited], root_pubkeys=[self.root_pk]) is True
+
+    def test_widening_deep_in_chain_fails(self):
+        mid_sk, mid_pk = generate_signing_keypair()
+        root = _attn_root(self.root_sk, self.root_pk)
+        mid = issue_delegated(
+            root, self.root_sk, subject_pubkey=mid_pk, granted_to="mid",
+            scopes=["sw:team:a:*"], budget_usd=0.5,
+        )
+        leaf = _forged_child(
+            mid, mid_sk, self.child_pk, parent_cap_id=mid.cap_id,
+            scopes=["sw:team:b:*"],
+        )
+        with pytest.raises(ValueError, match="scopes"):
+            verify_cap_chain([root, mid, leaf], root_pubkeys=[self.root_pk])
