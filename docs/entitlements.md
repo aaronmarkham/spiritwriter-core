@@ -174,6 +174,24 @@ emitter.shard_decrypted(
 
 See [tracing.md](tracing.md#entitlement-and-budget-events) for the full set of trace event helpers.
 
+## Delegation and Attenuation
+
+A holder of a delegable token can issue a child with `issue_delegated`. Authority only narrows down a chain:
+
+| Field | Rule for a child, relative to its parent |
+|---|---|
+| `capabilities` | subset of the parent's |
+| `secrets` | subset of the parent's |
+| `scopes` | every child pattern is covered by a parent pattern |
+| `shard_keys` | every shard id and key is held, with the same key, by the parent |
+| `budget_usd` | less than or equal to the parent's (a per-token limit; it does not cap the combined spend of siblings) |
+| `expires_at` | if the parent has one, the child must have one, no later than the parent's |
+| `caveats` | intersect: the leaf is limited by every caveat in its chain |
+
+A pattern is covered if it is identical to a parent pattern, or if a parent pattern whose only metacharacter is `*` matches the child pattern as literal text. `sw:team:a:*` is covered by `sw:team:*`; `*` is not. When unsure, the check denies. Parent patterns containing `?`, `[` or `]` cover only an identical pattern. Coverage uses the same matcher as `validate_scope`.
+
+The rules are enforced twice. `issue_delegated` raises `ValueError` before signing an over-broad child, and `verify_cap_chain` checks every parent and child link, so a hand-built or legacy chain that broadens authority fails verification. Omitted `scopes`, `capabilities`, `secrets` and `expires_at` inherit the parent's values; `budget_usd` defaults to 0.0.
+
 ## Serialization
 
 Tokens are JSON, designed to round-trip through any text channel — task prompts, environment variables, file contents, HTTP headers:
@@ -195,7 +213,7 @@ For wire-format integrity beyond what `verify_chain` provides, sign the token wi
 
 What entitlements protect against:
 
-- **Sub-agent escalation.** A sub-agent that exfiltrates its token still can't reach shards outside `scopes`, invoke capabilities outside `capabilities`, or spend past `budget_usd`.
+- **Sub-agent escalation.** A sub-agent that exfiltrates its token still can't reach shards outside `scopes`, invoke capabilities outside `capabilities`, or spend past `budget_usd`. A sub-agent that is itself allowed to delegate can't mint a child with more authority than its own token: capabilities, scopes, secrets, shard keys, budget and expiry attenuate down the chain (see [Delegation and Attenuation](#delegation-and-attenuation)), and `verify_cap_chain` rejects chains that broaden them.
 - **Long-lived credential drift.** `expires_at` bounds the blast radius of a token that ends up somewhere it shouldn't.
 - **Cross-tenant leakage.** Per-tenant scope prefixes turn store-wide compromise into per-tenant compromise.
 - **Silent overspend.** `BudgetTracker.record()` raises rather than letting a runaway sub-agent burn through the budget.

@@ -4,6 +4,17 @@ All notable changes to `spiritwriter` are documented here. The format follows [K
 
 Entries before 0.8.0 are not backfilled; consult `git log` for earlier history. Releases through 0.8.3 were published under the distribution name `spiritwriter-core`.
 
+## [0.12.2] — 2026-10-09
+
+**Delegation now attenuates authority.** Only `caveats` composed down a delegation chain; a child token's `capabilities`, `scopes`, `secrets`, `shard_keys`, `budget_usd` and `expires_at` were read from the leaf alone and never compared with its parent's, so a holder of a delegable token could mint a child with more authority than it held, and the result passed `verify_cap_chain`. This contradicted the guarantee in `docs/entitlements.md`.
+
+### Fixed
+- `issue_delegated` raises `ValueError` before signing if the child exceeds its parent: `capabilities` and `secrets` must be subsets, `shard_keys` must be held (same id, same key) by the parent, every child `scopes` pattern must be covered by a parent pattern, `budget_usd` must be <= the parent's, and if the parent has `expires_at` the child must have one that is not later. Omitted `scopes`, `capabilities`, `secrets` and `expires_at` inherit the parent's (an omitted `expires_at` under an expiring parent inherits it rather than failing); the `budget_usd` default of 0.0 is unchanged.
+- `verify_cap_chain` applies the same check to every (parent, child) link, after the link's signature is verified, so hand-built or previously issued chains are checked too.
+
+### Changed
+- **Behaviour change:** a chain that broadens authority at any link now fails `verify_cap_chain` with `ValueError`. Scope coverage is deliberately conservative: a child pattern is covered if it equals a parent pattern, or if the parent pattern's only wildcard is `*` and it matches the child pattern's text (`sw:team:a:*` is covered by `sw:team:*`; `*` is not). `budget_usd` is a per-token limit and does not cap combined sibling spend. Parent patterns containing `?`, `[` or `]` cover only an identical pattern. The signing payload and `cap_id` derivation are unchanged.
+
 ## [0.12.1] — 2026-10-01
 
 **Security fix for the Claude Code recorder's Bash summary.** In 0.12.0, when the model gave a Bash command no `description`, the recorder split the command on whitespace to find the program name. A quoted inline assignment containing a space, such as `DB_PASSWORD='p@ss w0rd!' psql`, was split mid-value, and the part after the space (`w0rd!'`) was written to `args_summary`. Trace files are local and owner-only (0600), but this broke the guarantee that raw tool inputs are never written. Upgrade if you run `spiritwriter-claude-hook`.
