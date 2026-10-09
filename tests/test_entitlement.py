@@ -854,8 +854,8 @@ class TestDelegationAttenuation:
 
     def test_expiry_cannot_be_dropped(self):
         root = _attn_root(self.root_sk, self.root_pk, expires_at="2030-01-01T00:00:00Z")
-        with pytest.raises(ValueError, match="expires_at"):
-            self._mint(root, expires_at=None)
+        # Omitting expires_at at mint time inherits the parent's (see
+        # test_omitted_expiry_inherits_parent); a hand-built child with none fails.
         forged = _forged_child(root, self.root_sk, self.child_pk, expires_at=None)
         with pytest.raises(ValueError, match="expires_at"):
             verify_cap_chain([root, forged], root_pubkeys=[self.root_pk])
@@ -900,3 +900,58 @@ class TestDelegationAttenuation:
         )
         with pytest.raises(ValueError, match="scopes"):
             verify_cap_chain([root, mid, leaf], root_pubkeys=[self.root_pk])
+
+    # ---- review follow-ups ----
+
+    @pytest.mark.parametrize("parent_scope,child_scope", [
+        ("sw:*]", "sw:[a]"),
+        ("**]", "[?b]"),
+        ("sw:?", "sw:*"),
+    ])
+    def test_glob_metacharacters_in_parent_do_not_cover(self, parent_scope, child_scope):
+        self._both_fail("scopes", [child_scope], "scopes", scopes=[parent_scope])
+
+    def test_identical_pattern_with_metacharacters_is_covered(self):
+        root = _attn_root(self.root_sk, self.root_pk, scopes=["sw:[ab]*]"])
+        child = self._mint(root, scopes=["sw:[ab]*]"])
+        assert verify_cap_chain([root, child], root_pubkeys=[self.root_pk]) is True
+
+    def test_shard_keys_cannot_be_added(self):
+        key = generate_job_key()
+        root = _attn_root(self.root_sk, self.root_pk)
+        with pytest.raises(ValueError, match="shard_keys"):
+            self._mint(root, shard_keys={"secret-shard": key})
+        forged = _forged_child(
+            root, self.root_sk, self.child_pk, shard_keys={"secret-shard": "AAAA"}
+        )
+        with pytest.raises(ValueError, match="shard_keys"):
+            verify_cap_chain([root, forged], root_pubkeys=[self.root_pk])
+
+    def test_shard_keys_must_match_parent_bytes(self):
+        k1, k2 = generate_job_key(), generate_job_key()
+        root = create_entitlement(
+            granted_to="o", granted_by="op", shard_keys={"s1": k1},
+            scopes=["*"], capabilities=["shard:read"], secrets=[], budget_usd=1.0,
+        )
+        root.subject_pubkey = self.root_pk
+        root.sign(self.root_sk)
+        with pytest.raises(ValueError, match="shard_keys"):
+            self._mint(root, shard_keys={"s1": k2})
+        child = self._mint(root, shard_keys={"s1": k1})
+        assert verify_cap_chain([root, child], root_pubkeys=[self.root_pk]) is True
+
+    def test_omitted_expiry_inherits_parent(self):
+        root = _attn_root(self.root_sk, self.root_pk, expires_at="2030-01-01T00:00:00Z")
+        child = self._mint(root)
+        assert child.expires_at == "2030-01-01T00:00:00Z"
+        assert verify_cap_chain([root, child], root_pubkeys=[self.root_pk]) is True
+
+    def test_signature_is_checked_before_attenuation(self):
+        root = _attn_root(self.root_sk, self.root_pk, expires_at="2030-01-01T00:00:00Z")
+        forged = _forged_child(
+            root, self.root_sk, self.child_pk, expires_at="2029-01-01T00:00:00Z"
+        )
+        forged.expires_at = "garbage"  # tamper after signing
+        with pytest.raises(Exception) as exc:
+            verify_cap_chain([root, forged], root_pubkeys=[self.root_pk])
+        assert "expires_at" not in str(exc.value)

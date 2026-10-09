@@ -96,6 +96,11 @@ class Caveat:
         return cls(type=d["type"], value=d["value"])
 
 
+def _scope_matches(scope: str, pattern: str) -> bool:
+    """The single glob matcher for scopes: authorization and attenuation both use it."""
+    return fnmatch.fnmatch(scope, pattern)
+
+
 def _require_z_utc(value: object, *, label: str) -> str:
     """Validate an ISO 8601 timestamp is in canonical Z-suffixed UTC form.
 
@@ -158,7 +163,7 @@ def validate_caveat(
     if caveat.type == CaveatType.SCOPE_LIMIT:
         if scope is None:
             return True
-        return fnmatch.fnmatch(scope, caveat.value)
+        return _scope_matches(scope, caveat.value)
 
     if caveat.type == CaveatType.MAX_DELEGATION_DEPTH:
         return delegation_depth <= caveat.value
@@ -335,7 +340,7 @@ def validate_capability(token: EntitlementToken, action: str) -> bool:
 
 
 def validate_scope(token: EntitlementToken, scope: str) -> bool:
-    return any(fnmatch.fnmatch(scope, pattern) for pattern in token.scopes)
+    return any(_scope_matches(scope, pattern) for pattern in token.scopes)
 
 
 def validate_budget(token: EntitlementToken, spent: float) -> bool:
@@ -432,20 +437,23 @@ def _scope_covered(child_pattern: str, parent_patterns: list[str]) -> bool:
 
     - A child pattern equal to a parent pattern is covered.
     - Otherwise the child pattern text is matched, as a literal string,
-      against each parent pattern with ``fnmatch.fnmatchcase``. This is
-      only trusted when the parent pattern's sole wildcard is ``*``
+      against each parent pattern with :func:`_scope_matches`. This is
+      only trusted when the parent pattern's sole metacharacter is ``*``
       (``sw:team:a:*`` is covered by ``sw:team:*``; ``*`` is not). A
-      parent containing ``?`` or ``[`` could match a wildcard character
-      in the child's text without covering what that wildcard expands
-      to (``sw:?`` matches the text ``sw:*``), so such parents cover
-      only an identical pattern.
+      parent containing ``?``, ``[`` or ``]`` could match a
+      metacharacter in the child's text without covering what that
+      metacharacter expands to (``sw:?`` matches the text ``sw:*``;
+      ``sw:*]`` matches the text ``sw:[a]``, which as a pattern matches
+      ``sw:a``), so such parents cover only an identical pattern.
+      Matching uses :func:`_scope_matches`, the same matcher as
+      :func:`validate_scope`.
     """
     for parent_pattern in parent_patterns:
         if child_pattern == parent_pattern:
             return True
-        if "?" in parent_pattern or "[" in parent_pattern:
+        if any(ch in parent_pattern for ch in "?[]"):
             continue
-        if fnmatch.fnmatchcase(child_pattern, parent_pattern):
+        if _scope_matches(child_pattern, parent_pattern):
             return True
     return False
 
@@ -470,7 +478,11 @@ def _check_attenuation(parent: EntitlementToken, child: EntitlementToken) -> Non
       (identical, or matched as literal text by a parent pattern whose
       only wildcard is ``*``; see :func:`_scope_covered`). Anything else
       is denied, so ``*`` is not covered by ``sw:team:*``.
-    - ``budget_usd``: child is <= the parent's.
+    - ``shard_keys``: every (shard id, key) in the child must appear
+      identically in the parent. Keys grant decrypt access, so a child
+      cannot hold a key no ancestor held.
+    - ``budget_usd``: child is <= the parent's. This is a per-token
+      limit; it does not cap the total spent by siblings.
     - ``expires_at``: if the parent has one, the child must have one and
       it must not be later than the parent's (Z-suffixed UTC required).
 
@@ -485,6 +497,15 @@ def _check_attenuation(parent: EntitlementToken, child: EntitlementToken) -> Non
     if extra_secrets:
         raise ValueError(
             f"Child secrets exceed parent's: {extra_secrets} not granted by parent"
+        )
+    extra_keys = sorted(
+        sid for sid, key in child.shard_keys.items()
+        if sid not in parent.shard_keys or parent.shard_keys[sid] != key
+    )
+    if extra_keys:
+        raise ValueError(
+            f"Child shard_keys exceed parent's: {extra_keys} not held "
+            f"(with the same key) by parent"
         )
     wide_scopes = [
         sc for sc in child.scopes if not _scope_covered(sc, list(parent.scopes))
@@ -529,8 +550,8 @@ def verify_cap_chain(
       - The root's ``issuer_pubkey`` is in ``root_pubkeys``.
       - The root has ``parent_cap_id is None``.
       - Authority attenuates: each link's ``capabilities``, ``secrets``,
-        ``scopes``, ``budget_usd`` and ``expires_at`` are no broader than
-        its parent's (see :func:`_check_attenuation`). A chain that
+        ``scopes``, ``shard_keys``, ``budget_usd`` and ``expires_at`` are
+        no broader than its parent's (see :func:`_check_attenuation`). A chain that
         broadens authority at any link fails with ``ValueError``.
 
     Does NOT validate caveats — that's :func:`authorize_chain`, which
@@ -577,8 +598,8 @@ def verify_cap_chain(
                 f"{(link.parent_cap_id or '')[:12]}… "
                 f"!= parent.cap_id {parent.cap_id[:12]}…"
             )
-        _check_attenuation(parent, link)
         link.verify()
+        _check_attenuation(parent, link)
 
     return True
 
@@ -648,8 +669,9 @@ def issue_delegated(
     Authority attenuates: the child's ``capabilities``, ``secrets``,
     ``scopes``, ``budget_usd`` and ``expires_at`` must be no broader than
     the parent's, else ``ValueError`` is raised before signing (see
-    :func:`_check_attenuation`). Omitted ``scopes``, ``capabilities`` and
-    ``secrets`` inherit the parent's; ``budget_usd`` defaults to 0.0.
+    :func:`_check_attenuation`), and ``shard_keys`` must be a subset of
+    the parent's. Omitted ``scopes``, ``capabilities``, ``secrets`` and
+    ``expires_at`` inherit the parent's; ``budget_usd`` defaults to 0.0.
 
     Caveats from the parent are NOT auto-inherited — the parent's
     caveats still apply via chain intersection at authorize time. This
@@ -694,7 +716,7 @@ def issue_delegated(
         secrets=secrets if secrets is not None else list(parent.secrets),
         budget_usd=budget_usd,
         created_at=_now_iso(),
-        expires_at=expires_at,
+        expires_at=expires_at if expires_at is not None else parent.expires_at,
         subject_pubkey=subject_pubkey,
         issuer_pubkey=parent.subject_pubkey,
         parent_cap_id=parent.cap_id,
