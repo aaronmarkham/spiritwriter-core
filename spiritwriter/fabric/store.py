@@ -15,8 +15,13 @@ network resolution when a shard_id isn't found locally.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
+import tempfile
+import threading
+import time
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
 
@@ -27,6 +32,14 @@ from spiritwriter.fabric.entitlement import (
     is_expired, get_shard_key, Capability,
 )
 from spiritwriter.fabric.network import NetworkResolver
+
+try:  # POSIX
+    import fcntl
+except ImportError:  # pragma: no cover - Windows
+    fcntl = None  # type: ignore[assignment]
+    import msvcrt
+
+logger = logging.getLogger(__name__)
 
 
 # Chars disallowed in Windows filenames (NTFS/FAT), plus control chars and
@@ -90,6 +103,9 @@ class ShardStore:
         self.refs_dir = self.root / "refs"
         self.index_path = self.root / "index.json"
         self._resolver = resolver
+        self._lock_path = self.root / "index.json.lock"
+        self._lock_guard = threading.RLock()
+        self._lock_depth = 0
         self.shards_dir.mkdir(parents=True, exist_ok=True)
         self.refs_dir.mkdir(parents=True, exist_ok=True)
 
@@ -97,17 +113,119 @@ class ShardStore:
         """Git-style object path: ab/cd1234...json"""
         return self.shards_dir / shard_id[:2] / f"{shard_id[2:]}.json"
 
+    @contextmanager
+    def _index_lock(self) -> Iterator[None]:
+        """Exclusive advisory lock around index read-modify-write cycles.
+
+        Serializes writers across processes (and threads) via a sidecar
+        ``index.json.lock`` file: ``fcntl.flock`` on POSIX, ``msvcrt.locking``
+        on Windows. Reentrant within a thread, so a mutator may call another.
+        The lock file is never deleted — removing it would let two processes
+        lock different inodes.
+        """
+        with self._lock_guard:
+            if self._lock_depth:
+                self._lock_depth += 1
+                try:
+                    yield
+                finally:
+                    self._lock_depth -= 1
+                return
+            with open(self._lock_path, "a+b") as f:
+                if fcntl is not None:
+                    fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+                else:  # pragma: no cover - Windows
+                    # LK_LOCK gives up after ~10s; retry until acquired.
+                    while True:
+                        try:
+                            f.seek(0)
+                            msvcrt.locking(f.fileno(), msvcrt.LK_LOCK, 1)
+                            break
+                        except OSError:
+                            time.sleep(0.05)
+                self._lock_depth = 1
+                try:
+                    yield
+                finally:
+                    self._lock_depth = 0
+                    if fcntl is not None:
+                        fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+                    else:  # pragma: no cover - Windows
+                        f.seek(0)
+                        msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
+
     def _load_index(self) -> dict[str, list[str]]:
-        """Load scope → [shard_id] index."""
-        if self.index_path.exists():
+        """Load scope → [shard_id] index.
+
+        A corrupt index (e.g. torn by a writer from before atomic saves) is
+        rebuilt from the shard files on disk rather than failing every call.
+        """
+        if not self.index_path.exists():
+            return {}
+        try:
             return json.loads(self.index_path.read_text(encoding="utf-8"))
-        return {}
+        except json.JSONDecodeError:
+            pass
+        with self._index_lock():
+            try:  # another process may have repaired it while we waited
+                return json.loads(self.index_path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                pass
+            logger.warning(
+                "Shard index %s is corrupt; rebuilding from shard files",
+                self.index_path,
+            )
+            index = self._rebuild_index()
+            self._save_index(index)
+            return index
+
+    def _rebuild_index(self) -> dict[str, list[str]]:
+        """Reconstruct the index by scanning shard files.
+
+        Plaintext, encrypted and sealed shards all carry a top-level
+        ``scope``. Within a scope, ids are sorted — original insertion order
+        is not recoverable.
+        """
+        index: dict[str, list[str]] = {}
+        for prefix_dir in sorted(self.shards_dir.iterdir()):
+            if not prefix_dir.is_dir():
+                continue
+            for shard_file in sorted(prefix_dir.iterdir()):
+                name = shard_file.name
+                if not name.endswith(".json"):
+                    continue
+                stem = name[: -len(".json")]
+                for suffix in (".enc", ".sealed"):
+                    if stem.endswith(suffix):
+                        stem = stem[: -len(suffix)]
+                        break
+                try:
+                    scope = json.loads(shard_file.read_text(encoding="utf-8"))["scope"]
+                except (OSError, ValueError, KeyError, TypeError):
+                    continue
+                shard_id = prefix_dir.name + stem
+                scope_shards = index.setdefault(scope, [])
+                if shard_id not in scope_shards:
+                    scope_shards.append(shard_id)
+        return index
 
     def _save_index(self, index: dict[str, list[str]]) -> None:
-        self.index_path.write_text(
-            json.dumps(index, indent=2, ensure_ascii=False),
-            encoding="utf-8",
+        """Write the index atomically: temp file, fsync, then os.replace."""
+        fd, tmp = tempfile.mkstemp(
+            dir=self.root, prefix="index.json.", suffix=".tmp"
         )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(json.dumps(index, indent=2, ensure_ascii=False))
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp, self.index_path)
+        except BaseException:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise
 
     # === Core Operations ===
 
@@ -121,11 +239,12 @@ class ShardStore:
             path.write_text(shard.to_json(), encoding="utf-8")
 
             # Update index
-            index = self._load_index()
-            scope_shards = index.setdefault(shard.scope, [])
-            if shard_id not in scope_shards:
-                scope_shards.append(shard_id)
-            self._save_index(index)
+            with self._index_lock():
+                index = self._load_index()
+                scope_shards = index.setdefault(shard.scope, [])
+                if shard_id not in scope_shards:
+                    scope_shards.append(shard_id)
+                self._save_index(index)
 
         return shard.ref
 
@@ -170,13 +289,14 @@ class ShardStore:
         # Load shard to get scope for index cleanup
         try:
             shard = MemoryShard.from_json(path.read_text(encoding="utf-8"))
-            index = self._load_index()
-            scope_shards = index.get(shard.scope, [])
-            if shard_id in scope_shards:
-                scope_shards.remove(shard_id)
-                if not scope_shards:
-                    del index[shard.scope]
-                self._save_index(index)
+            with self._index_lock():
+                index = self._load_index()
+                scope_shards = index.get(shard.scope, [])
+                if shard_id in scope_shards:
+                    scope_shards.remove(shard_id)
+                    if not scope_shards:
+                        del index[shard.scope]
+                    self._save_index(index)
         except Exception:
             pass
         path.unlink()
@@ -421,11 +541,12 @@ class ShardStore:
             path.write_text(encrypted.to_json(), encoding="utf-8")
 
             # Update index (scope visible even when encrypted)
-            index = self._load_index()
-            scope_shards = index.setdefault(encrypted.scope, [])
-            if encrypted.shard_id not in scope_shards:
-                scope_shards.append(encrypted.shard_id)
-            self._save_index(index)
+            with self._index_lock():
+                index = self._load_index()
+                scope_shards = index.setdefault(encrypted.scope, [])
+                if encrypted.shard_id not in scope_shards:
+                    scope_shards.append(encrypted.shard_id)
+                self._save_index(index)
 
         return encrypted.shard_id
 
@@ -528,11 +649,12 @@ class ShardStore:
             path.write_text(sealed.to_json(), encoding="utf-8")
 
             # Update index (scope visible even when sealed)
-            index = self._load_index()
-            scope_shards = index.setdefault(sealed.scope, [])
-            if sealed.shard_id not in scope_shards:
-                scope_shards.append(sealed.shard_id)
-            self._save_index(index)
+            with self._index_lock():
+                index = self._load_index()
+                scope_shards = index.setdefault(sealed.scope, [])
+                if sealed.shard_id not in scope_shards:
+                    scope_shards.append(sealed.shard_id)
+                self._save_index(index)
 
         return sealed.shard_id
 
