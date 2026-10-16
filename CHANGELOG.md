@@ -4,6 +4,21 @@ All notable changes to `spiritwriter` are documented here. The format follows [K
 
 Entries before 0.8.0 are not backfilled; consult `git log` for earlier history. Releases through 0.8.3 were published under the distribution name `spiritwriter-core`.
 
+## [0.12.3] — 2026-10-16
+
+**`ShardStore` index writes are safe with several writer processes.** `index.json` was rewritten in place, and every mutator did an unlocked load/modify/save. With concurrent writers (for example several agent hooks curating at once), updates were lost, and a shorter write over a longer file left trailing bytes, so every later load failed with `Extra data`.
+
+### Fixed
+- The index is written through a temp file, `fsync` and `os.replace`, and `put`, `delete`, `put_encrypted` and `put_sealed` hold an advisory lock on `index.json.lock` around the read-modify-write (`fcntl.flock`; `msvcrt.locking` on Windows, retried only on contention).
+- A corrupt index (bad JSON, bad UTF-8, or not an object) is rebuilt from the shard files with a warning. Readers rebuild in memory without locking or writing; write paths persist the healed index.
+- Shard files are written atomically, and a shard is always indexed, whether or not its file already existed.
+- `delete()` updates the index first, lets errors propagate, and unlinks the shard only after the index is saved.
+- New files get the umask default mode and existing modes are kept; the directory is fsynced after `os.replace`; stale temp files are swept.
+- Lock reentrancy is keyed on the resolved lock path and reset after `fork`.
+
+### Added
+- `ShardStore.reindex()` and `ShardStore.verify_index()` to heal and check drift between the index and the shard files.
+
 ## [0.12.2] — 2026-10-09
 
 **Delegation now attenuates authority.** Only `caveats` composed down a delegation chain; a child token's `capabilities`, `scopes`, `secrets`, `shard_keys`, `budget_usd` and `expires_at` were read from the leaf alone and never compared with its parent's, so a holder of a delegable token could mint a child with more authority than it held, and the result passed `verify_cap_chain`. This contradicted the guarantee in `docs/entitlements.md`.
