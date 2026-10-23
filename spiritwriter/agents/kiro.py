@@ -21,11 +21,11 @@ existing readers and verifiers work unchanged. Frames carry
   stalls, for example on a lock held by a crashed writer.
 - It never blocks a ``PreToolUse`` tool call: it has no decision output.
 
-**Partly undocumented payloads.** Kiro documents ``hook_event_name``,
-``cwd``, ``session_id``, ``tool_name`` and ``tool_input`` and, for
-Prompt Submit, the ``USER_PROMPT`` environment variable. The
-``PostToolUse`` result fields and the ``Stop``/``SessionEnd`` payloads are
-not documented. Every field here is optional: unknown fields are ignored,
+**Partly undocumented payloads.** The payload always has
+``session_id``, ``hook_event_name`` and ``cwd``; the rest depends on the trigger (``prompt``,
+``tool_name``/``tool_input``/``tool_response``, ``user_decision``, ``reason``, ``spec_name``/
+``task_name``/``task_success``, ``file_path``). The shape of ``tool_response`` varies by tool.
+Every field here is optional: unknown fields are ignored,
 missing fields are omitted, an unknown trigger is recorded as
 ``hook_event``. To discover what Kiro really sends, turn on raw capture
 (``SPIRITWRITER_KIRO_RAW=1`` or ``--raw``), which appends a redacted copy
@@ -40,8 +40,14 @@ when Kiro does not supply a session id.
 **What is recorded, and what never is.** As in the Claude Code recorder,
 tool inputs become ``args_sha256`` plus a short ``args_summary`` built
 from an allowlist of low-risk fields and scrubbed of secret shapes.
-Prompts are recorded as a hash and a length only. Tool outputs are not
-recorded.
+Prompts are recorded as a hash and a length only. A tool's
+``tool_response`` is recorded redacted and capped at :data:`RESPONSE_MAX` characters.
+
+**Lineage (unverified for subagents).** Kiro runs every hook with ``KIRO_SESSION_ID`` set to the
+root conversation id. It is recorded as ``root_session_id``. When it differs from the payload
+``session_id`` the trace is keyed by the root and ``agent_id`` is the payload ``session_id``, so a
+child conversation nests under its root. Whether Kiro really gives subagents their own
+``session_id`` has not been confirmed with a raw capture of a subagent call.
 """
 
 from __future__ import annotations
@@ -81,11 +87,15 @@ DEBUG_ENV = "SPIRITWRITER_KIRO_DEBUG"
 DEFAULT_RAW_FILE = os.path.join("~", ".spiritwriter", "kiro", "raw-capture.jsonl")
 HOOK_FILE_NAME = "spiritwriter.json"
 HOOK_NAME_PREFIX = "spiritwriter-"
+HOOK_COMMAND_GUARD = " >/dev/null 2>&1 || true"
 HOOK_TIMEOUT_SECONDS = 10     # Kiro-side timeout written into the hook file (Kiro's default is 60)
 WATCHDOG_SECONDS = 5          # self-imposed; shorter than the Kiro-side timeout
 STDIN_MAX_BYTES = 8 * 1024 * 1024
 STDIN_DEADLINE_SECONDS = 2.0  # a host that never closes stdin must not stall the agent
 RAW_STRING_MAX = 4000
+RESPONSE_MAX = 2000           # cap on the stored (redacted) tool_response
+KIRO_SESSION_ENV = "KIRO_SESSION_ID"  # Kiro sets this to the root conversation id
+MCP_ID_MAX = 64               # Kiro caps tool ids at 64 characters
 ERROR_LOG_MAX_BYTES = 256 * 1024
 
 # Kiro trigger -> the Claude-style hook name the trace format uses. Keys are normalized with
@@ -101,10 +111,20 @@ _TRIGGER_ALIASES: dict[str, str] = {
     "stop": "Stop",
     "agentstop": "Stop",
     "sessionend": "SessionEnd",
+    "pretaskexec": "PreTaskExec",
+    "posttaskexec": "PostTaskExec",
+    "postfilecreate": "PostFileCreate",
+    "postfilesave": "PostFileSave",
+    "postfiledelete": "PostFileDelete",
+    "manual": "Manual",
 }
 
 # Triggers the installer registers, in Kiro's PascalCase spelling.
 INSTALL_TRIGGERS = ("SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop", "SessionEnd")
+# Triggers that are mapped to typed events but not installed by default; pass them to
+# ``install --triggers``.
+EXTRA_TRIGGERS = ("PreTaskExec", "PostTaskExec", "PostFileCreate", "PostFileSave", "PostFileDelete", "Manual")
+_FILE_EVENTS = {"PostFileCreate": "file_created", "PostFileSave": "file_saved", "PostFileDelete": "file_deleted"}
 _TOOL_TRIGGERS = frozenset({"PreToolUse", "PostToolUse"})
 
 _BUILTIN_CATEGORIES = frozenset({"read", "write", "shell", "web", "spec"})
@@ -145,27 +165,105 @@ def normalize_trigger(name: Any) -> str:
     return _TRIGGER_ALIASES.get(_norm_trigger(name), scrub_name(name))
 
 
-def classify_tool(tool_name: Any, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+def normalize_mcp_server(name: str) -> str:
+    """A configured MCP server name as Kiro writes it into tool ids: whitespace and ``-`` become
+    ``_``, anything outside ``[a-zA-Z0-9_]`` is dropped, then lowercase."""
+    return re.sub(r"[^a-zA-Z0-9_]", "", re.sub(r"[\s-]", "_", name)).lower()
+
+
+_MCP_CONFIG_CACHE: dict[str, tuple[Any, frozenset]] = {}
+
+
+def _mcp_config_servers(path: str) -> frozenset:
+    """Normalized server names in one ``mcp.json`` (cached by mtime and size). Fails soft: a
+    missing, unreadable or malformed file gives an empty set."""
+    try:
+        st = os.stat(path)
+    except OSError:
+        return frozenset()
+    stamp = (st.st_mtime_ns, st.st_size)
+    cached = _MCP_CONFIG_CACHE.get(path)
+    if cached and cached[0] == stamp:
+        return cached[1]
+    names: frozenset = frozenset()
+    try:
+        with open(path, encoding="utf-8") as f:
+            doc = json.load(f)
+        servers = doc.get("mcpServers") if isinstance(doc, dict) else None
+        if isinstance(servers, dict):
+            names = frozenset(n for n in (normalize_mcp_server(str(k)) for k in servers) if n)
+    except (OSError, ValueError):
+        pass
+    _MCP_CONFIG_CACHE[path] = (stamp, names)
+    return names
+
+
+def configured_mcp_servers(cwd: Any = None) -> frozenset:
+    """Normalized MCP server names from ``<cwd>/.kiro/settings/mcp.json`` and
+    ``~/.kiro/settings/mcp.json``. Never raises."""
+    paths = []
+    if isinstance(cwd, str) and cwd:
+        paths.append(os.path.join(cwd, ".kiro", "settings", "mcp.json"))
+    try:
+        paths.append(os.path.join(os.path.expanduser("~"), ".kiro", "settings", "mcp.json"))
+    except Exception:  # noqa: BLE001 - no home directory
+        pass
+    names: frozenset = frozenset()
+    for p in paths:
+        try:
+            names |= _mcp_config_servers(p)
+        except Exception:  # noqa: BLE001 - fail soft
+            continue
+    return names
+
+
+def split_mcp_id(tool_id: str, servers: Any) -> tuple[str, str] | None:
+    """Split a Kiro ``mcp_<server>_<tool>`` id using the configured (normalized) server names.
+
+    Kiro builds the id as ``mcp_`` + lowercase(``<server>_<tool>`` with whitespace and ``-``
+    turned into ``_`` and other characters dropped), capped at 64 characters, with ``_1``, ``_2``
+    ... appended on a collision. That is not reversible without the server list, so the longest
+    configured server that prefixes the id wins. Returns None when nothing matches, or when the id
+    looks truncated (64 or more characters) or carries a collision suffix (``_<digits>`` at the
+    end): a wrong server name is worse than none.
+    """
+    if len(tool_id) >= MCP_ID_MAX or re.search(r"_\d+$", tool_id):
+        return None
+    rest = tool_id[len("mcp_"):]
+    for server in sorted(servers or (), key=len, reverse=True):
+        if rest.startswith(server + "_") and len(rest) > len(server) + 1:
+            return server, rest[len(server) + 1:]
+    return None
+
+
+def classify_tool(tool_name: Any, payload: dict[str, Any] | None = None, mcp_servers: Any = None) -> dict[str, Any]:
     """Tool id -> ``{tool_kind, ...}``.
 
     ``tool_kind`` is one of ``read``, ``write``, ``shell``, ``web``, ``spec``, ``mcp`` or ``other``.
-    ``mcp_<server>_<tool>`` yields ``mcp_server`` and ``mcp_tool``. The server is the text up to the
-    first underscore after ``mcp_``; Kiro's id does not delimit server names containing an
-    underscore, so such a server name is split early. ``mcp__server__tool`` and ``@server/tool``
-    spellings are also split. A Power is marked ``power: true`` only when the payload says so
-    (``power``, ``power_name``, ``powerName`` or ``tool_source``); the id format does not show it.
+    A Kiro ``mcp_<server>_<tool>`` id always yields ``mcp_id`` (the raw id). ``mcp_server`` and
+    ``mcp_tool`` are set only when ``mcp_servers`` (normalized configured server names, see
+    :func:`configured_mcp_servers`) contains a prefix of the id; see :func:`split_mcp_id`. The
+    delimited ``mcp__server__tool`` and ``@server/tool`` spellings are unambiguous and are split
+    directly. A Power is marked ``power: true`` only when the payload says so (``power``,
+    ``power_name``, ``powerName`` or ``tool_source``); the id format does not show it.
     """
     out: dict[str, Any] = {}
     name = tool_name if isinstance(tool_name, str) else ""
     server = tool = None
+    kiro_id = False
     if name.startswith("mcp__") and name.count("__") >= 2:
         _, server, tool = name.split("__", 2)
     elif name.startswith("mcp_") and "_" in name[4:]:
-        server, tool = name[4:].split("_", 1)
+        kiro_id = True
     elif name.startswith("@") and "/" in name:
         server, tool = name[1:].split("/", 1)
-    if server and tool:
-        out.update(tool_kind="mcp", mcp_server=scrub_name(server), mcp_tool=scrub_name(tool))
+    if kiro_id:
+        out.update(tool_kind="mcp", mcp_id=scrub_name(name))
+        split = split_mcp_id(name, mcp_servers)
+        if split:
+            out.update(mcp_server=scrub_name(split[0]), mcp_tool=scrub_name(split[1]))
+    elif server and tool:
+        out.update(tool_kind="mcp", mcp_id=scrub_name(name), mcp_server=scrub_name(server), mcp_tool=scrub_name(tool))
     else:
         words = {w.lower() for w in re.findall(r"[A-Z]?[a-z]+|[A-Z]+(?![a-z])|\d+", name)}
         kind = "other"
@@ -266,13 +364,45 @@ def _tool_ok(payload: dict[str, Any]) -> bool | None:
     if isinstance(result, dict):
         if result.get("success") is False:
             return False
-        return not any(result.get(k) for k in ("is_error", "isError", "error", "interrupted"))
+        if any(result.get(k) for k in ("is_error", "isError", "error", "interrupted")):
+            return False
+        for k in ("exit_code", "exitCode", "returncode", "return_code"):
+            code = result.get(k)
+            if isinstance(code, int) and not isinstance(code, bool):
+                return code == 0
+        status = result.get("status")
+        if isinstance(status, str):
+            if status.lower() in ("error", "failed", "failure", "fail", "timeout", "cancelled", "canceled"):
+                return False
+            if status.lower() in ("success", "succeeded", "ok", "completed"):
+                return True
+        return True
     return True
 
 
+def bounded_response(value: Any) -> Any:
+    """A ``tool_response`` fit for a trace frame: secret shapes redacted, secret-named keys
+    blanked, and at most :data:`RESPONSE_MAX` characters (longer values become a truncated text
+    excerpt of their JSON form)."""
+    red = redact_value(value)
+    if isinstance(red, str):
+        text = red
+        return text if len(text) <= RESPONSE_MAX else text[:RESPONSE_MAX] + f"...<TRUNCATED:{len(text)} chars>"
+    try:
+        dumped = json.dumps(red, ensure_ascii=False, default=str)
+    except (TypeError, ValueError):
+        return "<UNSERIALIZABLE>"
+    if len(dumped) <= RESPONSE_MAX:
+        return red
+    return dumped[:RESPONSE_MAX] + f"...<TRUNCATED:{len(dumped)} chars>"
+
+
 def _prompt_text(payload: dict[str, Any], env: Any = None) -> str | None:
+    """The submitted prompt. Kiro's hook payload carries it as ``prompt`` (also accepted:
+    ``user_prompt``); the ``USER_PROMPT`` environment variable is only set on Kiro's legacy hook
+    path, so it is the fallback."""
     env = os.environ if env is None else env
-    for v in (env.get("USER_PROMPT"), payload.get("prompt"), payload.get("user_prompt")):
+    for v in (payload.get("prompt"), payload.get("user_prompt"), env.get("USER_PROMPT")):
         if isinstance(v, str):
             return v
     return None
@@ -289,6 +419,32 @@ def session_key(payload: dict[str, Any], today: _dt.date | None = None) -> str:
     cwd = str(payload.get("cwd") or "")
     day = (today or _dt.date.today()).strftime("%Y%m%d")
     return f"kiro-{hashlib.sha256(cwd.encode('utf-8')).hexdigest()[:12]}-{day}"
+
+
+def kiro_root_session(env: Any = None) -> str:
+    """The root conversation id Kiro puts in ``KIRO_SESSION_ID``, or "" if unset."""
+    env = os.environ if env is None else env
+    v = env.get(KIRO_SESSION_ENV)
+    return v.strip() if isinstance(v, str) and v.strip() else ""
+
+
+def lineage(payload: dict[str, Any], env: Any = None) -> tuple[str, str, str]:
+    """``(trace_key, agent_id, root_session_id)`` for one hook call.
+
+    The trace is keyed by the root conversation id when ``KIRO_SESSION_ID`` is set and differs
+    from the payload ``session_id``; the payload ``session_id`` then names the agent, so a child
+    conversation nests under its root. Otherwise the key is :func:`session_key` and the agent is
+    ``main``. Unverified for subagents: it assumes Kiro gives a subagent's hooks a ``session_id``
+    different from the root id, which needs a raw capture of a real subagent call to confirm.
+    """
+    root = kiro_root_session(env)
+    own = payload.get("session_id")
+    own = str(own) if isinstance(own, (str, int)) and not isinstance(own, bool) and str(own).strip() else ""
+    if root and own and own != root:
+        return root, _id_str(own) or MAIN_AGENT, root
+    if root and not own:
+        return root, MAIN_AGENT, root
+    return session_key(payload), MAIN_AGENT, root
 
 
 # === Mapping ==============================================================
@@ -311,11 +467,14 @@ def hook_to_event(payload: dict[str, Any], event: str | None = None, env: Any = 
     """
     raw_name = payload.get("hook_event_name") or event
     hook = normalize_trigger(raw_name)
+    _, lineage_agent, root = lineage(payload, env)
     fields: dict[str, Any] = {
         "source": SOURCE,
         "hook_event": hook,
-        "agent_id": _id_str(payload.get("agent_id")) or MAIN_AGENT,
+        "agent_id": _id_str(payload.get("agent_id")) or lineage_agent,
     }
+    if root:
+        fields["root_session_id"] = _id_str(root)
     if isinstance(raw_name, str) and raw_name:
         fields["kiro_trigger"] = scrub_name(raw_name)
     if _id_str(payload.get("agent_type")):
@@ -331,7 +490,8 @@ def hook_to_event(payload: dict[str, Any], event: str | None = None, env: Any = 
     tool_input = payload.get("tool_input")
     if isinstance(tool, str) and tool:
         fields["tool_name"] = scrub_name(tool)
-        fields.update(classify_tool(tool, payload))
+        servers = configured_mcp_servers(payload.get("cwd")) if tool.startswith("mcp_") else None
+        fields.update(classify_tool(tool, payload, servers))
 
     if hook == "PreToolUse":
         if tool_input is not None:
@@ -343,9 +503,12 @@ def hook_to_event(payload: dict[str, Any], event: str | None = None, env: Any = 
     if hook == "PostToolUse":
         ok = _tool_ok(payload)
         if ok is None:
-            fields["ok_unknown"] = True  # Kiro's PostToolUse result fields are undocumented
+            fields["ok_unknown"] = True  # the response shape did not say whether the tool worked
         else:
             fields["ok"] = ok
+        response = _result_of(payload)
+        if response is not None:
+            fields["tool_response"] = bounded_response(response)
         if tool_input is not None:
             fields["args_sha256"] = _digest(tool_input)  # lets readers pair a result with its call
         return "tool_result", fields
@@ -366,7 +529,27 @@ def hook_to_event(payload: dict[str, Any], event: str | None = None, env: Any = 
             fields["reason"] = scrub(payload["reason"])
         return "session_ended", fields
     if hook == "Stop":
+        decision = payload.get("user_decision")
+        if isinstance(decision, bool):
+            fields["user_decision"] = decision
+        elif isinstance(decision, str):
+            fields["user_decision"] = scrub(decision)
         return "turn_completed", fields
+    if hook in ("PreTaskExec", "PostTaskExec"):
+        fields["tool_kind"] = "spec"
+        for key in ("spec_name", "task_name"):
+            if isinstance(payload.get(key), str) and payload[key]:
+                fields[key] = scrub(payload[key])
+        if isinstance(payload.get("task_success"), bool):
+            fields["task_success"] = payload["task_success"]
+        return ("spec_task_started" if hook == "PreTaskExec" else "spec_task_completed"), fields
+    if hook in _FILE_EVENTS:
+        if isinstance(payload.get("file_path"), str) and payload["file_path"]:
+            fields["file_path"] = scrub(payload["file_path"], keep="tail")
+        return _FILE_EVENTS[hook], fields
+    if hook == "Manual":
+        fields.update(_project(payload))
+        return "manual_trigger", fields
     return "hook_event", fields
 
 
@@ -394,7 +577,7 @@ def record(
     env: Any = None,
 ) -> dict[str, Any]:
     """Append one hook payload to its session's trace. Returns the emitted event."""
-    session_id = session_key(payload)
+    session_id, _, _ = lineage(payload, env)
     path = trace_path(session_id, trace_dir)
     os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
     if not os.path.exists(path):
@@ -466,9 +649,10 @@ def capture_raw(
     """Append one redacted raw record to the capture file (JSONL, 0600, flock-guarded). Returns it.
 
     Holds: the redacted stdin JSON (or, if it did not parse, a redacted text excerpt), the trigger
-    name, whether ``USER_PROMPT`` was set and its length, and the names (never values) of
-    ``KIRO*`` environment variables. Prompt text (the ``USER_PROMPT`` variable and ``prompt`` /
-    ``user_prompt`` payload fields) is included, redacted, only when ``SPIRITWRITER_KIRO_RAW_PROMPTS=1``.
+    name, whether a prompt arrived (the payload ``prompt`` field, else the legacy ``USER_PROMPT``
+    variable; ``prompt_source`` says which) and its length, and the names (never values) of
+    ``KIRO*`` environment variables. Prompt text (``prompt`` / ``user_prompt`` payload fields and
+    the ``USER_PROMPT`` variable) is included, redacted, only when ``SPIRITWRITER_KIRO_RAW_PROMPTS=1``.
     Tool inputs are captured (redacted and capped), so the file is private.
     """
     env = os.environ if env is None else env
@@ -479,8 +663,9 @@ def capture_raw(
         "env_keys": sorted(k for k in env if k.upper().startswith("KIRO")),
     }
     with_prompts = str(env.get(RAW_PROMPTS_ENV, "")).strip().lower() in ("1", "true", "yes", "on")
+    payload_obj: Any = None
     try:
-        payload = json.loads(stdin_text or "{}")
+        payload = payload_obj = json.loads(stdin_text or "{}")
         rec["payload"] = redact_value(payload, prompts=with_prompts)
         if isinstance(payload, dict):
             rec["payload_keys"] = sorted(map(str, payload))
@@ -488,12 +673,20 @@ def capture_raw(
     except ValueError as exc:
         rec["parse_error"] = type(exc).__name__
         rec["stdin_excerpt"] = redact_value((stdin_text or "")[:2000])
-    prompt = env.get("USER_PROMPT")
-    rec["user_prompt_present"] = isinstance(prompt, str)
-    if isinstance(prompt, str):
-        rec["user_prompt_chars"] = len(prompt)
-        if with_prompts:
-            rec["user_prompt_redacted"] = redact_value(prompt)
+    prompt, source = None, None
+    if isinstance(payload_obj, dict):
+        for key in ("prompt", "user_prompt"):
+            if isinstance(payload_obj.get(key), str):
+                prompt, source = payload_obj[key], "payload"
+                break
+    if prompt is None and isinstance(env.get("USER_PROMPT"), str):
+        prompt, source = env["USER_PROMPT"], "env"
+    rec["prompt_present"] = prompt is not None
+    rec["prompt_source"] = source
+    if prompt is not None:
+        rec["prompt_chars"] = len(prompt)
+        if with_prompts and source == "env":  # a payload prompt is already in rec["payload"]
+            rec["prompt_redacted"] = redact_value(prompt)
     path = raw_path(raw_file)
     os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
     line = (json.dumps(rec, ensure_ascii=False) + "\n").encode("utf-8")
@@ -617,6 +810,9 @@ def _run_hook(argv: list[str]) -> None:
     _arm_watchdog(WATCHDOG_SECONDS)
     try:
         stdin_text = _read_stdin()
+        # The watchdog bounds only the stdin read. Once the payload is in, nothing may interrupt a
+        # write: a SIGALRM inside os.write could leave a torn final line and break the hash chain.
+        _disarm_watchdog()
         if raw_enabled("--raw" in argv):
             try:
                 capture_raw(stdin_text, event, raw_file, argv=argv)
@@ -635,13 +831,19 @@ def _run_hook(argv: list[str]) -> None:
 
 
 def hook_command(command: str | None = None, event: str | None = None, raw: bool = False) -> str:
-    """The shell command a hook runs. Uses an absolute path to the executable."""
+    """The shell command a hook runs. Uses an absolute path to the executable.
+
+    The command is guarded with ``>/dev/null 2>&1 || true`` so the shell always exits 0 and prints
+    nothing, even when Python cannot start or import this module (a removed interpreter, a
+    half-uninstalled package). Kiro reads a ``Stop`` hook that exits 1 as "keep working" and hands
+    the agent its stderr as the reason.
+    """
     parts = command or default_executable()
     if event:
         parts += f" --event {event}"
     if raw:
         parts += " --raw"
-    return parts
+    return parts + HOOK_COMMAND_GUARD
 
 
 def default_executable() -> str:
@@ -752,7 +954,8 @@ def run_install(argv: list[str], out: Any = None) -> int:
     ap.add_argument("--uninstall", action="store_true", help="remove the spiritwriter hooks")
     ap.add_argument("--raw", action="store_true", help="register hooks with raw capture on")
     ap.add_argument("--command", help="hook command to register (default: absolute path of this executable)")
-    ap.add_argument("--triggers", help=f"comma-separated subset of: {', '.join(INSTALL_TRIGGERS)}")
+    ap.add_argument("--triggers", help=f"comma-separated triggers (default: {', '.join(INSTALL_TRIGGERS)}); "
+                    f"also accepted, off by default: {', '.join(EXTRA_TRIGGERS)}")
     try:
         ns = ap.parse_args(argv)
     except SystemExit as exc:
@@ -767,9 +970,9 @@ def run_install(argv: list[str], out: Any = None) -> int:
     triggers = INSTALL_TRIGGERS
     if ns.triggers:
         triggers = tuple(t.strip() for t in ns.triggers.split(",") if t.strip())
-        bad = [t for t in triggers if t not in INSTALL_TRIGGERS]
+        bad = [t for t in triggers if t not in INSTALL_TRIGGERS + EXTRA_TRIGGERS]
         if bad or not triggers:
-            print(f"error: unknown trigger(s) {bad}; choose from {', '.join(INSTALL_TRIGGERS)}", file=sys.stderr)
+            print(f"error: unknown trigger(s) {bad}; choose from {', '.join(INSTALL_TRIGGERS + EXTRA_TRIGGERS)}", file=sys.stderr)
             return 2
     if ns.workspace and not os.path.isdir(os.path.expanduser(ns.workspace)):
         print(f"error: workspace {ns.workspace!r} is not a directory", file=sys.stderr)

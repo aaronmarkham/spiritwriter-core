@@ -30,6 +30,12 @@ AWS_KEY = "AKIA" + "IOSFODNN7EXAMPLE"
 ANT_KEY = "sk-ant-" + "api03-abcdefghijklmnopqrstuvwxyz0123"
 
 
+def _mcp_config(ws, *names):
+    d = Path(ws) / ".kiro" / "settings"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "mcp.json").write_text(json.dumps({"mcpServers": {n: {"command": "x"} for n in names}}))
+
+
 def _payloads():
     return [json.loads(line) for line in FIXTURE.read_text(encoding="utf-8").splitlines() if line.strip()]
 
@@ -42,7 +48,7 @@ def _read(path):
 def _isolate(tmp_path, monkeypatch):
     """Keep every test off the real home directory and the real environment."""
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
-    for var in (kiro.TRACE_DIR_ENV, kiro.RAW_ENV, kiro.RAW_FILE_ENV, kiro.RAW_PROMPTS_ENV, kiro.DEBUG_ENV, "USER_PROMPT"):
+    for var in (kiro.TRACE_DIR_ENV, kiro.RAW_ENV, kiro.RAW_FILE_ENV, kiro.RAW_PROMPTS_ENV, kiro.DEBUG_ENV, kiro.KIRO_SESSION_ENV, "USER_PROMPT"):
         monkeypatch.delenv(var, raising=False)
 
 
@@ -81,6 +87,10 @@ class TestHookToEvent:
         assert len(f["prompt_sha256"]) == 64
         assert "secret plan" not in json.dumps(f)
 
+    def test_prompt_from_payload_wins_over_env(self):
+        _, f = kiro.hook_to_event({"hook_event_name": "UserPromptSubmit", "prompt": "from payload"}, env={"USER_PROMPT": "from env, longer"})
+        assert f["prompt_present"] is True and f["prompt_chars"] == len("from payload")
+
     def test_prompt_absent(self):
         _, f = kiro.hook_to_event({"hook_event_name": "UserPromptSubmit"}, env={})
         assert f["prompt_present"] is False and "prompt_sha256" not in f
@@ -106,21 +116,74 @@ class TestHookToEvent:
     def test_tool_kinds(self, tool, kind):
         assert kiro.classify_tool(tool)["tool_kind"] == kind
 
-    def test_mcp_tool_id_is_split(self):
-        etype, f = kiro.hook_to_event({"hook_event_name": "PreToolUse", "tool_name": "mcp_postgres_query",
+    def test_mcp_tool_id_is_split_when_server_is_configured(self, tmp_path):
+        _mcp_config(tmp_path, "postgres")
+        etype, f = kiro.hook_to_event({"hook_event_name": "PreToolUse", "tool_name": "mcp_postgres_query", "cwd": str(tmp_path),
                                        "tool_input": {"sql": "select 1", "password": "hunter2"}})
         assert etype == "tool_call"
-        assert (f["tool_kind"], f["mcp_server"], f["mcp_tool"]) == ("mcp", "postgres", "query")
+        assert (f["tool_kind"], f["mcp_id"], f["mcp_server"], f["mcp_tool"]) == ("mcp", "mcp_postgres_query", "postgres", "query")
         assert f["args_summary"] == "(password, sql)"  # names only
         assert "hunter2" not in json.dumps(f) and "select 1" not in json.dumps(f)
 
     def test_mcp_tool_name_with_underscores_and_other_spellings(self):
-        assert kiro.classify_tool("mcp_github_create_issue")["mcp_tool"] == "create_issue"
+        assert kiro.classify_tool("mcp_github_create_issue", None, {"github"})["mcp_tool"] == "create_issue"
         c = kiro.classify_tool("mcp__github__create_issue")
         assert (c["mcp_server"], c["mcp_tool"]) == ("github", "create_issue")
         c = kiro.classify_tool("@github/create_issue")
         assert (c["mcp_server"], c["mcp_tool"]) == ("github", "create_issue")
         assert kiro.classify_tool("mcp_lonely")["tool_kind"] == "other"
+
+    def test_mcp_unconfigured_server_keeps_only_the_raw_id(self, tmp_path):
+        c = kiro.classify_tool("mcp_github_create_issue")
+        assert c == {"tool_kind": "mcp", "mcp_id": "mcp_github_create_issue"}
+        _, f = kiro.hook_to_event({"hook_event_name": "PreToolUse", "tool_name": "mcp_github_create_issue", "cwd": str(tmp_path)})
+        assert f["mcp_id"] == "mcp_github_create_issue" and "mcp_server" not in f and "mcp_tool" not in f
+
+    def test_mcp_hyphenated_servers_split_like_kiro_names_them(self, tmp_path):
+        _mcp_config(tmp_path, "my-docs-server", "Acme Tools", "acme", "my.weird/Server")
+        cwd = str(tmp_path)
+
+        def split(tool):
+            _, f = kiro.hook_to_event({"hook_event_name": "PreToolUse", "tool_name": tool, "cwd": cwd})
+            return f.get("mcp_server"), f.get("mcp_tool"), f["mcp_id"]
+        assert split("mcp_my_docs_server_search_docs") == ("my_docs_server", "search_docs", "mcp_my_docs_server_search_docs")
+        assert split("mcp_acme_tools_run") == ("acme_tools", "run", "mcp_acme_tools_run")  # longest match beats "acme"
+        assert split("mcp_acme_other")[:2] == ("acme", "other")
+        assert split("mcp_myweirdserver_ping")[:2] == ("myweirdserver", "ping")
+        assert split("mcp_unknown_server_tool")[:2] == (None, None)
+
+    def test_mcp_truncated_or_collision_suffixed_ids_are_not_split(self, tmp_path):
+        _mcp_config(tmp_path, "acme-tools")
+        cwd = str(tmp_path)
+        long_id = "mcp_acme_tools_" + "x" * 49
+        assert len(long_id) == 64
+        for tool in (long_id, "mcp_acme_tools_run_1", "mcp_acme_tools_run_12"):
+            _, f = kiro.hook_to_event({"hook_event_name": "PreToolUse", "tool_name": tool, "cwd": cwd})
+            assert f["mcp_id"] == tool and "mcp_server" not in f
+
+    def test_mcp_servers_come_from_home_config_too_and_fail_soft(self, tmp_path):
+        home = tmp_path / "home" / ".kiro" / "settings"
+        home.mkdir(parents=True)
+        (home / "mcp.json").write_text(json.dumps({"mcpServers": {"my-docs-server": {}}}))
+        assert kiro.configured_mcp_servers(None) == {"my_docs_server"}
+        bad = tmp_path / "ws" / ".kiro" / "settings"
+        bad.mkdir(parents=True)
+        for text in ("not json", "[1]", '{"mcpServers": []}', '{"mcpServers": {"": {}}}'):
+            (bad / "mcp.json").write_text(text)
+            assert kiro.configured_mcp_servers(str(tmp_path / "ws")) == {"my_docs_server"}
+        assert kiro.configured_mcp_servers(123) == {"my_docs_server"}
+
+    def test_mcp_config_is_cached_until_it_changes(self, tmp_path, monkeypatch):
+        _mcp_config(tmp_path, "one-server")
+        assert kiro.configured_mcp_servers(str(tmp_path)) == {"one_server"}
+        opens = []
+        real_open = open
+        monkeypatch.setattr("builtins.open", lambda *a, **k: (opens.append(a[0]), real_open(*a, **k))[1])
+        assert kiro.configured_mcp_servers(str(tmp_path)) == {"one_server"}
+        assert not [o for o in opens if str(o).endswith("mcp.json")]
+        monkeypatch.undo()
+        _mcp_config(tmp_path, "one-server", "two-server")
+        assert kiro.configured_mcp_servers(str(tmp_path)) == {"one_server", "two_server"}
 
     def test_power_marked_only_when_payload_says_so(self):
         assert "power" not in kiro.classify_tool("mcp_stripe_charge", {"tool_name": "mcp_stripe_charge"})
@@ -148,8 +211,8 @@ class TestHookToEvent:
         assert etype == "tool_call" and "brand_new_field" not in f and "future" not in f
 
     def test_unknown_trigger_is_recorded_as_hook_event(self):
-        etype, f = kiro.hook_to_event({"hook_event_name": "PostFileSave", "cwd": "/w"})
-        assert etype == "hook_event" and f["hook_event"] == "PostFileSave"
+        etype, f = kiro.hook_to_event({"hook_event_name": "SomeFutureTrigger", "cwd": "/w"})
+        assert etype == "hook_event" and f["hook_event"] == "SomeFutureTrigger"
 
     def test_identity_fields_are_scrubbed_and_type_checked(self):
         _, f = kiro.hook_to_event({"hook_event_name": "Stop", "agent_id": f"a:{ANT_KEY}", "agent_type": ["x"],
@@ -411,10 +474,30 @@ class TestMain:
     def test_watchdog_ends_a_stalled_hook(self, tmp_path, monkeypatch, capsys):
         import time
         monkeypatch.setattr(kiro, "WATCHDOG_SECONDS", 1)
-        monkeypatch.setattr(kiro, "record", lambda *a, **k: time.sleep(10))
+        monkeypatch.setattr(kiro, "_read_stdin", lambda: time.sleep(10))
         t0 = time.time()
         rc, out = self._run(monkeypatch, capsys, '{"session_id": "s"}', ["--dir", str(tmp_path)])
         assert rc == 0 and out.out == "" and time.time() - t0 < 5
+
+    @posix_only
+    def test_watchdog_is_cancelled_before_the_trace_is_written(self, tmp_path, monkeypatch, capsys):
+        """A SIGALRM inside the emit could tear the last line and break the chain, so the alarm
+        must be gone once stdin has been read."""
+        import signal
+        remaining = []
+        monkeypatch.setattr(kiro, "record", lambda *a, **k: remaining.append(signal.alarm(0)))
+        rc, _ = self._run(monkeypatch, capsys, '{"session_id": "s"}', ["--dir", str(tmp_path)])
+        assert rc == 0 and remaining == [0]
+        monkeypatch.undo()
+        signal.alarm(0)
+
+    @posix_only
+    def test_watchdog_is_armed_during_the_stdin_read(self, tmp_path, monkeypatch, capsys):
+        import signal
+        seen = []
+        monkeypatch.setattr(kiro, "_read_stdin", lambda: (seen.append(signal.alarm(0)), "{}")[1])
+        self._run(monkeypatch, capsys, "{}", ["--dir", str(tmp_path)])
+        assert seen and seen[0] > 0
 
     @posix_only
     def test_stdin_that_never_closes_does_not_stall_the_hook(self, tmp_path):
@@ -478,7 +561,7 @@ class TestRawCapture:
         self._run(monkeypatch, '{"hook_event_name": "UserPromptSubmit"}', ["--raw", "--raw-file", str(raw), "--dir", str(tmp_path / "t")],
                   USER_PROMPT=f"private plan {AWS_KEY}")
         (rec,) = _read(raw)
-        assert rec["user_prompt_present"] is True and rec["user_prompt_chars"] > 0
+        assert rec["prompt_present"] is True and rec["prompt_source"] == "env" and rec["prompt_chars"] > 0
         assert "private plan" not in raw.read_text() and AWS_KEY not in raw.read_text()
 
     def test_prompt_content_only_redacted_and_opt_in(self, tmp_path, monkeypatch):
@@ -486,12 +569,20 @@ class TestRawCapture:
         self._run(monkeypatch, "{}", ["--raw", "--raw-file", str(raw), "--dir", str(tmp_path / "t")],
                   USER_PROMPT=f"plan {AWS_KEY}", **{kiro.RAW_PROMPTS_ENV: "1"})
         (rec,) = _read(raw)
-        assert rec["user_prompt_redacted"].startswith("plan ") and AWS_KEY not in raw.read_text()
+        assert rec["prompt_redacted"].startswith("plan ") and AWS_KEY not in raw.read_text()
 
     def test_no_prompt_env(self, tmp_path, monkeypatch):
         raw = tmp_path / "raw.jsonl"
         self._run(monkeypatch, "{}", ["--raw", "--raw-file", str(raw), "--dir", str(tmp_path / "t")])
-        assert _read(raw)[0]["user_prompt_present"] is False
+        assert _read(raw)[0]["prompt_present"] is False
+
+    def test_payload_prompt_counts_as_present(self, tmp_path, monkeypatch):
+        raw = tmp_path / "raw.jsonl"
+        self._run(monkeypatch, json.dumps({"hook_event_name": "UserPromptSubmit", "prompt": "refactor the parser"}),
+                  ["--raw", "--raw-file", str(raw), "--dir", str(tmp_path / "t")])
+        (rec,) = _read(raw)
+        assert rec["prompt_present"] is True and rec["prompt_source"] == "payload" and rec["prompt_chars"] == len("refactor the parser")
+        assert "refactor" not in raw.read_text()
 
     def test_prompt_fields_in_payload_are_omitted_unless_opted_in(self, tmp_path, monkeypatch):
         raw = tmp_path / "raw.jsonl"
@@ -549,7 +640,7 @@ class TestInstaller:
         for h in doc["hooks"]:
             assert h["name"].startswith("spiritwriter-") and h["enabled"] is True
             assert h["action"]["type"] == "command"
-            assert h["action"]["command"] == f"/opt/bin/spiritwriter-kiro-hook --event {h['trigger']}"
+            assert h["action"]["command"] == f"/opt/bin/spiritwriter-kiro-hook --event {h['trigger']} >/dev/null 2>&1 || true"
             assert 0 < h["timeout"] <= 10
             assert ("matcher" in h) == (h["trigger"] in ("PreToolUse", "PostToolUse"))
             assert h.get("matcher", "") == ""
@@ -664,7 +755,8 @@ class TestInstaller:
             argv = shlex.split(h["action"]["command"])
             exe = argv[0]
             assert os.path.isabs(exe)
-            assert argv[-2:] == ["--event", h["trigger"]] or "-m" in argv
+            assert h["action"]["command"].endswith(" >/dev/null 2>&1 || true")
+            assert "--event" in argv and h["trigger"] in argv or "-m" in argv
 
     def test_installed_command_runs_and_records(self, tmp_path):
         """End to end: take the command the installer wrote, run it with a payload, verify the trace."""
@@ -683,3 +775,170 @@ class TestInstaller:
     def test_main_dispatches_install(self, tmp_path, capsys):
         assert kiro.main(["install", str(tmp_path), "--dry-run", "--command", "/x/hook"]) == 0
         assert "would create" in capsys.readouterr().out
+
+
+# === Hook command guard, lineage, extra triggers =========================
+
+
+class TestCommandGuard:
+    def test_every_generated_command_ends_with_or_true(self):
+        for raw in (False, True):
+            hooks = kiro.build_hooks("/opt/bin/spiritwriter-kiro-hook", raw=raw, triggers=kiro.INSTALL_TRIGGERS + kiro.EXTRA_TRIGGERS)
+            assert len(hooks) == len(kiro.INSTALL_TRIGGERS) + len(kiro.EXTRA_TRIGGERS)
+            for h in hooks:
+                assert h["action"]["command"].endswith(" >/dev/null 2>&1 || true")
+        assert kiro.build_hooks()[0]["action"]["command"].endswith("|| true")  # default executable too
+
+    def test_broken_interpreter_exits_zero_and_prints_nothing(self, tmp_path):
+        cmd = kiro.hook_command("/nonexistent/python -m spiritwriter.agents.kiro", "Stop")
+        r = subprocess.run(cmd, shell=True, input="{}", text=True, capture_output=True, timeout=60)
+        assert r.returncode == 0 and r.stdout == "" and r.stderr == ""
+        r = subprocess.run(kiro.hook_command(shlex_quote(sys.executable) + " -c 'import no_such_module_xyz'", "Stop"),
+                           shell=True, text=True, capture_output=True, timeout=60)
+        assert r.returncode == 0 and r.stdout == "" and r.stderr == ""
+
+    def _old_form_file(self, tmp_path, extra=()):
+        hooks = tmp_path / ".kiro" / "hooks"
+        hooks.mkdir(parents=True)
+        old = [{"name": "spiritwriter-" + t, "description": "old", "trigger": t,
+                "action": {"type": "command", "command": f"/opt/bin/spiritwriter-kiro-hook --event {t}"}, "timeout": 10, "enabled": True}
+               for t in kiro.INSTALL_TRIGGERS]
+        doc = {"version": "v1", "hooks": old + list(extra)}
+        (hooks / "spiritwriter.json").write_text(json.dumps(doc))
+        return hooks / "spiritwriter.json"
+
+    def test_upgrade_replaces_old_form_hooks_without_duplicates(self, tmp_path):
+        path = self._old_form_file(tmp_path)
+        rc, out = _install(tmp_path)
+        assert rc == 0 and "updated" in out
+        hooks = json.loads(path.read_text())["hooks"]
+        assert [h["name"] for h in hooks] == ["spiritwriter-" + t for t in kiro.INSTALL_TRIGGERS]
+        assert all(h["action"]["command"].endswith("|| true") for h in hooks)
+        assert "already up to date" in _install(tmp_path)[1]
+
+    def test_uninstall_removes_old_form_hooks_and_keeps_foreign_ones(self, tmp_path):
+        mine = {"name": "user-hook", "trigger": "Stop", "action": {"type": "command", "command": "echo hi"}}
+        path = self._old_form_file(tmp_path, extra=[mine])
+        assert _install(tmp_path, "--uninstall")[0] == 0
+        assert json.loads(path.read_text())["hooks"] == [mine]
+        only_ours = tmp_path / "other"
+        only_ours.mkdir()
+        path2 = self._old_form_file(only_ours)
+        assert _install(only_ours, "--uninstall")[0] == 0 and not path2.exists()
+
+
+def shlex_quote(text):
+    import shlex
+    return shlex.quote(text)
+
+
+class TestLineage:
+    def test_no_root_env_means_main_keyed_by_payload(self):
+        _, f = kiro.hook_to_event({"hook_event_name": "Stop", "session_id": "s1"}, env={})
+        assert f["agent_id"] == kiro.MAIN_AGENT and "root_session_id" not in f
+        assert kiro.lineage({"session_id": "s1"}, {}) == ("s1", kiro.MAIN_AGENT, "")
+
+    def test_same_id_is_main_and_records_root(self):
+        _, f = kiro.hook_to_event({"hook_event_name": "Stop", "session_id": "s1"}, env={"KIRO_SESSION_ID": "s1"})
+        assert f["agent_id"] == kiro.MAIN_AGENT and f["root_session_id"] == "s1"
+        assert kiro.lineage({"session_id": "s1"}, {"KIRO_SESSION_ID": "s1"})[0] == "s1"
+
+    def test_child_conversation_keys_by_root_with_agent_id(self):
+        env = {"KIRO_SESSION_ID": "root-1"}
+        key, agent, root = kiro.lineage({"session_id": "child-9"}, env)
+        assert (key, agent, root) == ("root-1", "child-9", "root-1")
+        _, f = kiro.hook_to_event({"hook_event_name": "PreToolUse", "session_id": "child-9", "tool_name": "readFile"}, env=env)
+        assert f["agent_id"] == "child-9" and f["root_session_id"] == "root-1"
+
+    def test_missing_payload_session_falls_back_to_root(self):
+        assert kiro.lineage({}, {"KIRO_SESSION_ID": "root-1"})[:2] == ("root-1", kiro.MAIN_AGENT)
+
+    @posix_only
+    def test_root_and_child_events_share_one_chain(self, tmp_path):
+        env = {"KIRO_SESSION_ID": "root-1"}
+        kiro.record({"hook_event_name": "SessionStart", "session_id": "root-1"}, trace_dir=str(tmp_path), env=env)
+        kiro.record({"hook_event_name": "PreToolUse", "session_id": "child-9", "tool_name": "readFile"}, trace_dir=str(tmp_path), env=env)
+        kiro.record({"hook_event_name": "Stop", "session_id": "root-1"}, trace_dir=str(tmp_path), env=env)
+        (trace,) = list(tmp_path.glob("*.jsonl"))
+        assert trace.name == "root-1.jsonl"
+        events = _read(trace)
+        assert [e["run_id"] for e in events] == ["root-1"] * 3
+        assert [e["agent_id"] for e in events] == [kiro.MAIN_AGENT, "child-9", kiro.MAIN_AGENT]
+        assert all(e["root_session_id"] == "root-1" for e in events) and verify_chain(events)
+
+    def test_env_is_read_from_the_process_environment_by_default(self, monkeypatch):
+        monkeypatch.setenv("KIRO_SESSION_ID", "root-2")
+        assert kiro.lineage({"session_id": "c"})[:2] == ("root-2", "c")
+
+
+class TestExtraTriggers:
+    def test_task_events(self):
+        etype, f = kiro.hook_to_event({"hook_event_name": "PreTaskExec", "spec_name": "my-feature", "task_name": "1.2 Add parser"})
+        assert etype == "spec_task_started" and f["tool_kind"] == "spec"
+        assert f["spec_name"] == "my-feature" and f["task_name"] == "1.2 Add parser" and "task_success" not in f
+        etype, f = kiro.hook_to_event({"hook_event_name": "PostTaskExec", "spec_name": "s", "task_name": "t", "task_success": False})
+        assert etype == "spec_task_completed" and f["task_success"] is False and f["hook_event"] == "PostTaskExec"
+
+    @pytest.mark.parametrize("trigger,etype", [("PostFileCreate", "file_created"), ("PostFileSave", "file_saved"), ("PostFileDelete", "file_deleted")])
+    def test_file_events(self, trigger, etype):
+        got, f = kiro.hook_to_event({"hook_event_name": trigger, "file_path": "/w/demo/src/a.py"})
+        assert got == etype and f["hook_event"] == trigger and f["file_path"].endswith("a.py")
+
+    def test_manual(self):
+        etype, f = kiro.hook_to_event({"hook_event_name": "Manual", "cwd": "/w/demo-app"})
+        assert etype == "manual_trigger" and f["hook_event"] == "Manual" and f["project"] == "demo-app"
+
+    def test_stop_user_decision_and_session_end_reason(self):
+        _, f = kiro.hook_to_event({"hook_event_name": "Stop", "user_decision": "accepted"})
+        assert f["user_decision"] == "accepted"
+        _, f = kiro.hook_to_event({"hook_event_name": "Stop"})
+        assert "user_decision" not in f
+        _, f = kiro.hook_to_event({"hook_event_name": "SessionEnd", "reason": "user_exit"})
+        assert f["reason"] == "user_exit"
+
+    def test_installer_accepts_extra_triggers_but_does_not_install_them_by_default(self, tmp_path):
+        _install(tmp_path)
+        path = tmp_path / ".kiro" / "hooks" / "spiritwriter.json"
+        assert not {h["trigger"] for h in json.loads(path.read_text())["hooks"]} & set(kiro.EXTRA_TRIGGERS)
+        assert _install(tmp_path, "--triggers", ",".join(kiro.INSTALL_TRIGGERS + kiro.EXTRA_TRIGGERS))[0] == 0
+        assert [h["trigger"] for h in json.loads(path.read_text())["hooks"]][-6:] == list(kiro.EXTRA_TRIGGERS)
+        assert all("matcher" not in h for h in json.loads(path.read_text())["hooks"] if h["trigger"] in kiro.EXTRA_TRIGGERS)
+
+    @posix_only
+    def test_extra_triggers_record_a_valid_chain(self, tmp_path):
+        for p in ({"hook_event_name": "PreTaskExec", "session_id": "x", "spec_name": "s", "task_name": "t"},
+                  {"hook_event_name": "PostFileSave", "session_id": "x", "file_path": "a.py"},
+                  {"hook_event_name": "Manual", "session_id": "x"}):
+            kiro.record(p, trace_dir=str(tmp_path))
+        events = _read(tmp_path / "x.jsonl")
+        assert [e["type"] for e in events] == ["spec_task_started", "file_saved", "manual_trigger"] and verify_chain(events)
+
+
+class TestToolResponse:
+    def _post(self, response, **extra):
+        return kiro.hook_to_event({"hook_event_name": "PostToolUse", "tool_name": "executeBash", "tool_response": response, **extra})[1]
+
+    def test_response_is_recorded_and_ok_derived(self):
+        f = self._post({"success": True, "stdout": "done"})
+        assert f["ok"] is True and "ok_unknown" not in f and f["tool_response"] == {"success": True, "stdout": "done"}
+
+    @pytest.mark.parametrize("response,ok", [
+        ({"exit_code": 0}, True), ({"exit_code": 1}, False), ({"exitCode": 2}, False),
+        ({"status": "error"}, False), ({"status": "success"}, True),
+        ({"isError": True}, False), ({"error": "boom"}, False), ("plain text", True),
+    ])
+    def test_ok_from_response_shape(self, response, ok):
+        f = self._post(response)
+        assert f["ok"] is ok and "ok_unknown" not in f
+
+    def test_no_response_stays_unknown_without_tool_response(self):
+        _, f = kiro.hook_to_event({"hook_event_name": "PostToolUse", "tool_name": "readFile"})
+        assert f["ok_unknown"] is True and "ok" not in f and "tool_response" not in f
+
+    def test_response_is_redacted_and_capped(self):
+        f = self._post({"stdout": f"key {AWS_KEY}", "password": "hunter2"})
+        assert AWS_KEY not in json.dumps(f) and "hunter2" not in json.dumps(f)
+        big = self._post("x" * 50_000)["tool_response"]
+        assert len(big) < kiro.RESPONSE_MAX + 100 and "TRUNCATED" in big
+        big = self._post({"rows": ["y" * 100] * 500})["tool_response"]
+        assert isinstance(big, str) and len(big) < kiro.RESPONSE_MAX + 100 and "TRUNCATED" in big
