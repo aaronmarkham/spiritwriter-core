@@ -7,4 +7,5 @@ receipt with parent/child lineage.
 
 Modules:
     claude_code — Claude Code hooks (``spiritwriter-claude-hook``)
+    kiro        — Kiro IDE/CLI hooks (``spiritwriter-kiro-hook``)
 """

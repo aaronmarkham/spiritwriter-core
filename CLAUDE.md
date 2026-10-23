@@ -24,6 +24,7 @@ Read the relevant skill for your task:
 | **jobs** | Package and run sub-agent jobs with budget tracking | `skills/jobs/SKILL.md` |
 | **network** | Publish/resolve shards over IPFS, private swarm config | `skills/network/SKILL.md` |
 | **claude-code** | Record Claude Code sessions (main agent, subagents, tool calls, spawn lineage) as hash-chained receipts via hooks | `skills/claude-code/SKILL.md` |
+| **kiro** | Record Kiro (IDE and CLI) sessions as hash-chained traces via command hooks; install, raw capture, known gaps | `skills/kiro/SKILL.md` |
 | **audit** | Traced security audit of Android apps — findings + hash-chain + witness | `skills/audit/SKILL.md` |
 | **sw-vocab** | Validate spiritwriter's own terminology in docs/AI-drafts — catches drift, invented terms, deferred-but-claimed terms | `skills/sw-vocab/SKILL.md` |
 
@@ -42,7 +43,7 @@ spiritwriter/
   llm/         — LLM provider abstraction
   fabric/      — Shards, store, emitter, crypto, entitlements, jobs, network resolver
     backends/  — Network backends (IPFS/Kubo)
-  agents/      — Agent-harness recorders (claude_code: hook payloads → trace events, spiritwriter-claude-hook)
+  agents/      — Agent-harness recorders (claude_code: spiritwriter-claude-hook; kiro: spiritwriter-kiro-hook, installer)
   audit/       — Traced Android APK security audits (provenance, registry, verify)
   sw_vocab/    — Terminology canonicalization for spiritwriter's own docs (dogfoods CanonicalRegistry)
   stopwords.py — Centralized stopword list
@@ -63,6 +64,6 @@ pip install -e ".[dev,sealed,network,pdf]"
 python -m pytest tests/ -v
 ```
 
-Expect 1072 passed, 11 skipped — the skips are the IPFS tests, which need a
+Expect 1234 passed, 11 skipped — the skips are the IPFS tests, which need a
 local Kubo node. Any other skip means an extra is missing; the skip reason
 names it.

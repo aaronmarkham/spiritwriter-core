@@ -271,6 +271,7 @@ spiritwriter/
 │       ├── ipfs.py      # IPFS / Kubo backend
 │       └── s3.py        # S3 backend (AWS object storage)
 ├── geo/            # Geographic types and view shards (experimental)
+├── agents/         # Agent-harness recorders (Claude Code, Kiro hooks to traces)
 ├── ingest/         # Document ingestion (PDF)
 ├── integrations/   # Third-party memory-provider adapters (mempalace, ...)
 ├── kb/             # Knowledge base CRUD
@@ -288,6 +289,38 @@ spiritwriter ships a pluggable memory-provider protocol (`spiritwriter/integrati
 - **[mempalace](https://github.com/aaronmarkham/mempalace)** — atomic memory store with decay-based recall and contextual entity weighting. The `spiritwriter/integrations/mempalace/` adapter wires it to the shard store and entity registry.
 
 The same protocol can plug in **Mem0**, **Zep**, **Mastra**, or any custom memory layer — implement `MemoryProvider` and `MemoryBackend`, and spiritwriter handles shard storage, entity resolution, encryption, and tracing underneath.
+
+## Recording Kiro sessions
+
+`spiritwriter-kiro-hook` records [Kiro](https://kiro.dev) sessions (IDE and CLI) as hash-chained traces in the same frame schema as the Claude Code recorder, so existing readers and `verify_chain` work unchanged. Every frame carries `source: "kiro"`. Needs POSIX (Linux, macOS).
+
+```bash
+pip install spiritwriter                 # provides the spiritwriter-kiro-hook command
+cd /path/to/your/workspace
+spiritwriter-kiro-hook install --dry-run # show what would be written
+spiritwriter-kiro-hook install           # writes .kiro/hooks/spiritwriter.json
+```
+
+`install` writes one command hook per trigger (`SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `Stop`, `SessionEnd`; an empty matcher means all tools), each with an absolute path to the executable so Kiro's shell `PATH` does not matter. It only touches `spiritwriter.json`, is idempotent, and `--uninstall` removes only its own hooks. `--triggers A,B` registers a subset.
+
+| Where | Command | Notes |
+|-------|---------|-------|
+| Kiro IDE | `spiritwriter-kiro-hook install [WORKSPACE]` | The IDE reads workspace hooks from `.kiro/hooks/`. Run it once per workspace. |
+| Kiro CLI | `spiritwriter-kiro-hook install --global` | Writes `~/.kiro/hooks/` (CLI V3 loads global hooks; workspace hooks work too). |
+
+**Trace location.** `~/.spiritwriter/kiro/traces/<session_id>.jsonl` (directory 0700, files 0600). Override with `--dir DIR` or `SPIRITWRITER_KIRO_TRACE_DIR`. When a payload has no `session_id`, the session key is `kiro-<sha256(cwd)[:12]>-<YYYYMMDD>`, so one workspace's events for one local day share a trace.
+
+**Event mapping.** The trace uses Claude-style event names: `SessionStart` (alias `agentSpawn`) to `session_started`, `UserPromptSubmit` to `prompt_submitted`, `PreToolUse` to `tool_call`, `PostToolUse` to `tool_result`, `Stop` to `turn_completed`, `SessionEnd` to `session_ended`; anything else is a `hook_event`. Tool ids get a `tool_kind` (`read`, `write`, `shell`, `web`, `spec`, `mcp`, `other`); `mcp_<server>_<tool>` also gets `mcp_server` and `mcp_tool`. Raw tool inputs and prompts are never written, only hashes, lengths and a scrubbed short summary.
+
+**The hook never interferes with Kiro.** It always exits 0, prints nothing to stdout (Kiro adds a successful hook's stdout to the agent's context) or stderr, has no way to block a tool call, ends itself after 8 seconds, and registers with a 10 second Kiro-side timeout. Failures go to `~/.spiritwriter/kiro/errors.log`; set `SPIRITWRITER_KIRO_DEBUG=1` to also print them to stderr.
+
+**Raw capture (opt-in).** Kiro does not document the `PostToolUse` result fields or the `Stop` and `SessionEnd` payloads, and recorded traces only keep fields the adapter knows. To see what Kiro really sends, set `SPIRITWRITER_KIRO_RAW=1` in the environment Kiro runs in, or install with `spiritwriter-kiro-hook install --raw`. Each hook call then appends one line to `~/.spiritwriter/kiro/raw-capture.jsonl` (override with `SPIRITWRITER_KIRO_RAW_FILE`): the stdin JSON, the trigger, the payload's keys, whether `USER_PROMPT` was set and its length, and the names (not values) of `KIRO*` environment variables. Secret shapes and secret-named keys are redacted, long strings are capped, and prompt text is left out unless you also set `SPIRITWRITER_KIRO_RAW_PROMPTS=1` (then it is included, redacted). Still, the file holds your tool inputs, so treat it as private and delete it when done.
+
+**Known gaps.**
+- `PostToolUse` result fields are undocumented. The adapter looks for `tool_response`, `tool_result`, `tool_output`, `result` and `success`; if none is present the frame has `ok_unknown: true` instead of a guessed `ok`. Results are paired to calls by `tool_use_id` when Kiro sends one, else by `args_sha256`.
+- `Stop` and `SessionEnd` payloads are undocumented; they are recorded with whatever common fields they carry. `SessionEnd` is documented for CLI V3 only, and the IDE may not fire it.
+- Built-in tool ids are not documented, so `tool_kind` is a name heuristic. Power tools are marked only if the payload says so. An MCP server name containing an underscore is split at the first one.
+- No subagent lineage: Kiro's payloads document no agent id, so every frame is attributed to `main`.
 
 ## Used By
 

@@ -4,6 +4,17 @@ All notable changes to `spiritwriter` are documented here. The format follows [K
 
 Entries before 0.8.0 are not backfilled; consult `git log` for earlier history. Releases through 0.8.3 were published under the distribution name `spiritwriter-core`.
 
+## [0.12.4] — 2026-10-23
+
+**Kiro sessions can be recorded as traces.** `spiritwriter.agents.kiro` turns Kiro (IDE and CLI) command-hook payloads into the same hash-chained frames the Claude Code recorder writes, so existing readers and `verify_chain` work unchanged.
+
+### Added
+- `spiritwriter-kiro-hook` console script and `spiritwriter.agents.kiro`: maps `SessionStart` (alias `agentSpawn`), `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `Stop` and `SessionEnd` to `session_started`, `prompt_submitted`, `tool_call`, `tool_result`, `turn_completed` and `session_ended`. Frames carry `source: "kiro"`, `kiro_trigger` and a `tool_kind` (`read`, `write`, `shell`, `web`, `spec`, `mcp`, `other`); `mcp_<server>_<tool>` ids are split into `mcp_server` and `mcp_tool`. Traces go to `~/.spiritwriter/kiro/traces` (`--dir` or `SPIRITWRITER_KIRO_TRACE_DIR`). Payloads are partly undocumented, so unknown fields are ignored and missing ones omitted; a missing `session_id` falls back to `kiro-<sha256(cwd)[:12]>-<YYYYMMDD>`.
+- `spiritwriter-kiro-hook install [WORKSPACE] [--global] [--dry-run] [--uninstall] [--raw] [--triggers ...]` writes `.kiro/hooks/spiritwriter.json` (or `~/.kiro/hooks/spiritwriter.json`) with one command hook per trigger and an absolute executable path. It is idempotent, touches only `spiritwriter-*` hooks in that one file, and refuses to overwrite a file it cannot parse.
+- Opt-in raw capture (`SPIRITWRITER_KIRO_RAW=1`, `--raw`, or `install --raw`) appends the redacted stdin JSON, trigger, payload keys and `USER_PROMPT` presence to `~/.spiritwriter/kiro/raw-capture.jsonl`, to discover Kiro's undocumented `PostToolUse`, `Stop` and `SessionEnd` fields. Prompt text is included, redacted, only with `SPIRITWRITER_KIRO_RAW_PROMPTS=1`.
+- Same secret handling as the Claude Code recorder: tool inputs and prompts are stored as hashes and lengths plus a scrubbed, allowlisted summary.
+- The hook always exits 0, writes nothing to stdout or stderr (Kiro puts a successful hook's stdout in the agent's context), and ends itself after 8 seconds. Errors go to `~/.spiritwriter/kiro/errors.log`.
+
 ## [0.12.3] — 2026-10-16
 
 **`ShardStore` index writes are safe with several writer processes.** `index.json` was rewritten in place, and every mutator did an unlocked load/modify/save. With concurrent writers (for example several agent hooks curating at once), updates were lost, and a shorter write over a longer file left trailing bytes, so every later load failed with `Extra data`.
