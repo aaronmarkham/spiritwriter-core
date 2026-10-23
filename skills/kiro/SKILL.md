@@ -16,7 +16,7 @@ Options: `--raw` (register with raw capture on), `--triggers SessionStart,Stop` 
 
 ## Behaviour
 
-The hook reads the payload on stdin, appends one event, prints nothing and always exits 0. Kiro adds a successful hook's stdout to the agent's context, so stdout stays empty. Errors go to `~/.spiritwriter/kiro/errors.log` (`SPIRITWRITER_KIRO_DEBUG=1` also prints to stderr).
+The hook reads the payload on stdin, appends one event, prints nothing and always exits 0. Kiro adds a successful hook's stdout to the agent's context, so stdout stays empty. Errors go to `errors.log` in the trace directory (`SPIRITWRITER_KIRO_DEBUG=1` also prints to stderr).
 
 Traces: `~/.spiritwriter/kiro/traces/<session_id>.jsonl` (`--dir`, `SPIRITWRITER_KIRO_TRACE_DIR`). No `session_id` in the payload: `kiro-<sha256(cwd)[:12]>-<YYYYMMDD>`.
 

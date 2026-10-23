@@ -101,6 +101,7 @@ class TestHookToEvent:
         ("executeBash", "shell"), ("execute_bash", "shell"),
         ("webFetch", "web"), ("remote_web_search", "web"),
         ("use_aws", "other"), ("somethingNew", "other"),
+        ("codegen", "other"), ("credit", "other"), ("tools_x", "other"), ("openai_helper", "other"), ("readCode", "read"),
     ])
     def test_tool_kinds(self, tool, kind):
         assert kiro.classify_tool(tool)["tool_kind"] == kind
@@ -149,6 +150,20 @@ class TestHookToEvent:
     def test_unknown_trigger_is_recorded_as_hook_event(self):
         etype, f = kiro.hook_to_event({"hook_event_name": "PostFileSave", "cwd": "/w"})
         assert etype == "hook_event" and f["hook_event"] == "PostFileSave"
+
+    def test_identity_fields_are_scrubbed_and_type_checked(self):
+        _, f = kiro.hook_to_event({"hook_event_name": "Stop", "agent_id": f"a:{ANT_KEY}", "agent_type": ["x"],
+                                   "tool_use_id": f"t:{AWS_KEY}", "duration_ms": "fast"})
+        text = json.dumps(f)
+        assert ANT_KEY not in text and AWS_KEY not in text
+        assert "agent_type" not in f and "duration_ms" not in f
+        _, f = kiro.hook_to_event({"hook_event_name": "Stop", "agent_id": {"x": 1}, "duration_ms": 12})
+        assert f["agent_id"] == kiro.MAIN_AGENT and f["duration_ms"] == 12
+
+    def test_invalid_url_port_does_not_drop_the_event(self):
+        etype, f = kiro.hook_to_event({"hook_event_name": "PreToolUse", "tool_name": "webFetch",
+                                       "tool_input": {"url": "http://host:99999999/x"}})
+        assert etype == "tool_call" and f["args_summary"] == "(unparseable url)"
 
     def test_event_argument_fills_a_missing_hook_event_name(self):
         etype, f = kiro.hook_to_event({"session_id": "s"}, event="Stop")
@@ -310,6 +325,12 @@ class TestRecord:
             assert os.path.dirname(p) == str(tmp_path)
             assert not os.path.basename(p).startswith(".")
 
+    def test_distinct_session_ids_never_share_a_file(self, tmp_path):
+        d = str(tmp_path)
+        assert kiro.trace_path("a/b", d) != kiro.trace_path("a_b", d)
+        assert kiro.trace_path("x" * 300 + "1", d) != kiro.trace_path("x" * 300 + "2", d)
+        assert kiro.trace_path("clean-id_1.x", d) == str(tmp_path / "clean-id_1.x.jsonl")
+
     def test_default_dir_is_kiro_and_env_overrides(self, tmp_path, monkeypatch):
         assert kiro.trace_path("s") == str(tmp_path / "home" / ".spiritwriter" / "kiro" / "traces" / "s.jsonl")
         monkeypatch.setenv(kiro.TRACE_DIR_ENV, str(tmp_path / "x"))
@@ -359,13 +380,27 @@ class TestMain:
 
     def test_failure_is_logged_not_printed(self, tmp_path, monkeypatch, capsys):
         self._run(monkeypatch, capsys, "not json", ["--dir", str(tmp_path)])
-        log = tmp_path / "home" / ".spiritwriter" / "kiro" / "errors.log"
+        log = tmp_path / "errors.log"  # next to the traces in use
         assert log.exists() and "JSONDecodeError" in log.read_text()
 
     def test_debug_env_prints_to_stderr_only(self, tmp_path, monkeypatch, capsys):
         monkeypatch.setenv(kiro.DEBUG_ENV, "1")
         rc, out = self._run(monkeypatch, capsys, "not json", ["--dir", str(tmp_path)])
         assert rc == 0 and out.out == "" and "spiritwriter-kiro-hook" in out.err
+
+    def test_flag_values_are_not_swallowed(self, tmp_path, monkeypatch, capsys):
+        raw = tmp_path / "raw.jsonl"
+        rc, _ = self._run(monkeypatch, capsys, '{"session_id": "s", "hook_event_name": "Stop"}',
+                          ["--event", "--raw", "--raw-file", str(raw), "--dir", str(tmp_path / "t")])
+        assert rc == 0 and kiro._opt(["--event", "--raw"], "--event") is None
+        assert not (Path.cwd() / "--raw").exists()
+
+    def test_alarm_firing_inside_the_error_handler_still_exits_zero(self, tmp_path, monkeypatch, capsys):
+        def boom(*a, **k):
+            raise TimeoutError("late watchdog")
+        monkeypatch.setattr(kiro, "_log_error", boom)
+        rc, out = self._run(monkeypatch, capsys, "not json", ["--dir", str(tmp_path)])
+        assert rc == 0 and out.out == "" and out.err == ""
 
     def test_oversized_stdin_is_rejected_quietly(self, tmp_path, monkeypatch, capsys):
         monkeypatch.setattr(kiro, "STDIN_MAX_BYTES", 10)
@@ -457,6 +492,16 @@ class TestRawCapture:
         raw = tmp_path / "raw.jsonl"
         self._run(monkeypatch, "{}", ["--raw", "--raw-file", str(raw), "--dir", str(tmp_path / "t")])
         assert _read(raw)[0]["user_prompt_present"] is False
+
+    def test_prompt_fields_in_payload_are_omitted_unless_opted_in(self, tmp_path, monkeypatch):
+        raw = tmp_path / "raw.jsonl"
+        payload = json.dumps({"hook_event_name": "UserPromptSubmit", "prompt": "refactor my private module", "user_prompt": "also this"})
+        self._run(monkeypatch, payload, ["--raw", "--raw-file", str(raw), "--dir", str(tmp_path / "t")])
+        text = raw.read_text()
+        assert "private module" not in text and "also this" not in text and "OMITTED:prompt" in text
+        raw.unlink()
+        self._run(monkeypatch, payload, ["--raw", "--raw-file", str(raw), "--dir", str(tmp_path / "t")], **{kiro.RAW_PROMPTS_ENV: "1"})
+        assert "private module" in raw.read_text()
 
     def test_unparseable_stdin_is_captured_redacted(self, tmp_path, monkeypatch):
         raw = tmp_path / "raw.jsonl"
@@ -585,6 +630,10 @@ class TestInstaller:
         (tmp_path / ".kiro" / "hooks").write_text("x")
         assert _install(tmp_path)[0] == 1
         assert (tmp_path / ".kiro" / "hooks").read_text() == "x"
+
+    def test_refuses_without_posix_locking(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(kiro, "fcntl", None)
+        assert _install(tmp_path)[0] == 1 and not (tmp_path / ".kiro").exists()
 
     def test_workspace_must_exist(self, tmp_path):
         assert kiro.run_install([str(tmp_path / "nope")], out=io.StringIO()) == 2

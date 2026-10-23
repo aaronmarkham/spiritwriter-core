@@ -108,14 +108,15 @@ INSTALL_TRIGGERS = ("SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolU
 _TOOL_TRIGGERS = frozenset({"PreToolUse", "PostToolUse"})
 
 _BUILTIN_CATEGORIES = frozenset({"read", "write", "shell", "web", "spec"})
-# Substring heuristics over the normalized tool id; first match wins. Built-in tool ids are not
-# documented, so these cover the names seen in Kiro IDE and CLI (fsWrite, strReplace, executeBash,
-# fs_read, grepSearch, webFetch, remote_web_search ...). Anything else is kind "other".
-_KIND_HINTS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("shell", ("bash", "shell", "execute", "terminal", "command")),
-    ("web", ("web", "http", "fetch", "browse")),
-    ("write", ("write", "replace", "edit", "delete", "create", "append", "rename", "patch", "remove", "move")),
-    ("read", ("read", "grep", "glob", "list", "find", "search", "view", "open", "ls", "code")),
+# Whole-word hints over the tokens of the tool id (split on case changes, digits and
+# punctuation); first match wins. Built-in tool ids are not documented, so these cover the names
+# seen in Kiro IDE and CLI (fsWrite, strReplace, executeBash, fs_read, grepSearch, webFetch,
+# remote_web_search ...). Whole words, not substrings, so "codegen" or "credit" stay "other".
+_KIND_HINTS: tuple[tuple[str, frozenset], ...] = (
+    ("shell", frozenset({"bash", "shell", "execute", "exec", "terminal", "command"})),
+    ("web", frozenset({"web", "http", "https", "fetch", "browse", "url"})),
+    ("write", frozenset({"write", "replace", "edit", "delete", "create", "append", "rename", "patch", "remove", "move"})),
+    ("read", frozenset({"read", "grep", "glob", "list", "find", "search", "view", "open", "ls", "code"})),
 )
 _PATH_KEYS = ("path", "file_path", "filePath", "filepath", "file", "target_file", "targetFile", "notebook_path")
 _NESTED_KEYS = ("operations", "paths", "files", "edits", "ops")
@@ -166,13 +167,13 @@ def classify_tool(tool_name: Any, payload: dict[str, Any] | None = None) -> dict
     if server and tool:
         out.update(tool_kind="mcp", mcp_server=scrub_name(server), mcp_tool=scrub_name(tool))
     else:
-        key = re.sub(r"[^a-z0-9]", "", name.lower())
+        words = {w.lower() for w in re.findall(r"[A-Z]?[a-z]+|[A-Z]+(?![a-z])|\d+", name)}
         kind = "other"
         if name.lower() in _BUILTIN_CATEGORIES:
             kind = name.lower()
         else:
             for k, hints in _KIND_HINTS:
-                if any(h in key for h in hints):
+                if words & hints:
                     kind = k
                     break
         out["tool_kind"] = kind
@@ -221,7 +222,10 @@ def summarize_tool_input(tool_name: Any, tool_input: Any) -> str:
             return scrub(str(ti.get("pattern") or ti.get("query")))
     if kind == "web":
         if ti.get("url"):
-            return scrub(_url_summary(str(ti["url"])))
+            try:
+                return scrub(_url_summary(str(ti["url"])))
+            except ValueError:  # e.g. an out-of-range port
+                return "(unparseable url)"
         if ti.get("query"):
             return scrub(str(ti["query"]))
     return scrub("(" + ", ".join(sorted(map(str, ti))) + ")")
@@ -290,6 +294,13 @@ def session_key(payload: dict[str, Any], today: _dt.date | None = None) -> str:
 # === Mapping ==============================================================
 
 
+def _id_str(value: Any) -> str:
+    """An identifier from a payload: a scrubbed string, or "" for anything that is not str/int."""
+    if isinstance(value, bool) or not isinstance(value, (str, int)) or not str(value).strip():
+        return ""
+    return scrub_name(str(value))
+
+
 def hook_to_event(payload: dict[str, Any], event: str | None = None, env: Any = None) -> tuple[str, dict[str, Any]]:
     """Map one Kiro hook payload to ``(event_type, fields)`` for :meth:`TraceEmitter.emit`.
 
@@ -303,16 +314,18 @@ def hook_to_event(payload: dict[str, Any], event: str | None = None, env: Any = 
     fields: dict[str, Any] = {
         "source": SOURCE,
         "hook_event": hook,
-        "agent_id": payload.get("agent_id") or MAIN_AGENT,
+        "agent_id": _id_str(payload.get("agent_id")) or MAIN_AGENT,
     }
     if isinstance(raw_name, str) and raw_name:
         fields["kiro_trigger"] = scrub_name(raw_name)
-    for key in ("agent_type", "duration_ms"):
-        if payload.get(key) is not None:
-            fields[key] = payload[key]
+    if _id_str(payload.get("agent_type")):
+        fields["agent_type"] = _id_str(payload["agent_type"])
+    dur = payload.get("duration_ms")
+    if isinstance(dur, (int, float)) and not isinstance(dur, bool):
+        fields["duration_ms"] = dur
     for key in ("tool_use_id", "toolUseId", "tool_call_id"):
-        if isinstance(payload.get(key), str) and payload[key]:
-            fields["tool_use_id"] = payload[key]
+        if _id_str(payload.get(key)):
+            fields["tool_use_id"] = _id_str(payload[key])
             break
     tool = payload.get("tool_name")
     tool_input = payload.get("tool_input")
@@ -366,7 +379,10 @@ def _base_dir(trace_dir: str | None) -> str:
 
 def trace_path(session_id: str, trace_dir: str | None = None) -> str:
     """Where a session's trace lives. ``session_id`` is reduced to a safe filename."""
-    safe = re.sub(r"[^A-Za-z0-9_.-]", "_", session_id).lstrip(".")[:200] or "unknown"
+    safe = re.sub(r"[^A-Za-z0-9_.-]", "_", session_id).lstrip(".")
+    if safe != session_id or len(safe) > 150:
+        # Sanitized or truncated: add a hash so distinct ids never share a file (and a chain).
+        safe = (safe[:150] or "unknown") + "-" + hashlib.sha256(session_id.encode("utf-8")).hexdigest()[:8]
     return os.path.join(_base_dir(trace_dir), safe + ".jsonl")
 
 
@@ -403,20 +419,31 @@ def redact_text(text: str) -> str:
     return text
 
 
-def redact_value(value: Any, depth: int = 0) -> Any:
-    """Deep copy of a JSON value with secret shapes redacted, secret-named keys blanked, strings capped."""
+_PROMPT_KEY = re.compile(r"^(user[_-]?)?prompt$", re.I)
+
+
+def redact_value(value: Any, depth: int = 0, prompts: bool = True) -> Any:
+    """Deep copy of a JSON value with secret shapes redacted, secret-named keys blanked, strings capped.
+
+    With ``prompts=False``, values under ``prompt`` / ``user_prompt`` keys are replaced by a length marker.
+    """
     if depth > 20:
         return "<TRUNCATED:depth>"
     if isinstance(value, str):
         text = redact_text(value)
         return text if len(text) <= RAW_STRING_MAX else text[:RAW_STRING_MAX] + f"...<TRUNCATED:{len(text)} chars>"
     if isinstance(value, dict):
-        return {
-            str(k): ("<REDACTED:key>" if _SENSITIVE_KEY.search(str(k)) and not isinstance(v, (dict, list)) else redact_value(v, depth + 1))
-            for k, v in value.items()
-        }
+        out = {}
+        for k, v in value.items():
+            if _SENSITIVE_KEY.search(str(k)) and not isinstance(v, (dict, list)):
+                out[str(k)] = "<REDACTED:key>"
+            elif not prompts and _PROMPT_KEY.match(str(k)) and isinstance(v, str):
+                out[str(k)] = f"<OMITTED:prompt {len(v)} chars>"
+            else:
+                out[str(k)] = redact_value(v, depth + 1, prompts)
+        return out
     if isinstance(value, list):
-        return [redact_value(v, depth + 1) for v in value[:200]]
+        return [redact_value(v, depth + 1, prompts) for v in value[:200]]
     return value
 
 
@@ -440,8 +467,9 @@ def capture_raw(
 
     Holds: the redacted stdin JSON (or, if it did not parse, a redacted text excerpt), the trigger
     name, whether ``USER_PROMPT`` was set and its length, and the names (never values) of
-    ``KIRO*`` environment variables. Prompt text is included, redacted, only when
-    ``SPIRITWRITER_KIRO_RAW_PROMPTS=1``.
+    ``KIRO*`` environment variables. Prompt text (the ``USER_PROMPT`` variable and ``prompt`` /
+    ``user_prompt`` payload fields) is included, redacted, only when ``SPIRITWRITER_KIRO_RAW_PROMPTS=1``.
+    Tool inputs are captured (redacted and capped), so the file is private.
     """
     env = os.environ if env is None else env
     rec: dict[str, Any] = {
@@ -450,9 +478,10 @@ def capture_raw(
         "argv": [redact_text(a) for a in (argv or [])],
         "env_keys": sorted(k for k in env if k.upper().startswith("KIRO")),
     }
+    with_prompts = str(env.get(RAW_PROMPTS_ENV, "")).strip().lower() in ("1", "true", "yes", "on")
     try:
         payload = json.loads(stdin_text or "{}")
-        rec["payload"] = redact_value(payload)
+        rec["payload"] = redact_value(payload, prompts=with_prompts)
         if isinstance(payload, dict):
             rec["payload_keys"] = sorted(map(str, payload))
             rec["hook_event_name"] = redact_value(payload.get("hook_event_name"))
@@ -463,7 +492,7 @@ def capture_raw(
     rec["user_prompt_present"] = isinstance(prompt, str)
     if isinstance(prompt, str):
         rec["user_prompt_chars"] = len(prompt)
-        if str(env.get(RAW_PROMPTS_ENV, "")).strip().lower() in ("1", "true", "yes", "on"):
+        if with_prompts:
             rec["user_prompt_redacted"] = redact_value(prompt)
     path = raw_path(raw_file)
     os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
@@ -481,32 +510,39 @@ def capture_raw(
 # === Hook entry point =====================================================
 
 
-def _log_error(message: str) -> None:
-    """Best-effort one-line error log; never raises, never touches stdout."""
+def _log_error(message: str, trace_dir: str | None = None) -> None:
+    """Best-effort one-line error log in the trace directory in use (else the default Kiro
+    directory); never raises, never touches stdout."""
     try:
-        path = os.path.join(os.path.dirname(_base_dir(None)), "errors.log")
-        os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
-        if os.path.exists(path) and os.path.getsize(path) > ERROR_LOG_MAX_BYTES:
-            return
-        stamp = _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds")
-        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
-        try:
-            os.write(fd, f"{stamp} {redact_text(message)[:500]}\n".encode("utf-8"))
-        finally:
-            os.close(fd)
-    except Exception:
+        text = f"{_dt.datetime.now(_dt.timezone.utc).isoformat(timespec='seconds')} {redact_text(message)[:500]}\n".encode("utf-8")
+        for d in (_base_dir(trace_dir), os.path.dirname(_base_dir(None))):
+            try:
+                os.makedirs(d, mode=0o700, exist_ok=True)
+                path = os.path.join(d, "errors.log")
+                if os.path.exists(path) and os.path.getsize(path) > ERROR_LOG_MAX_BYTES:
+                    break
+                fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+                try:
+                    os.write(fd, text)
+                finally:
+                    os.close(fd)
+                break
+            except OSError:
+                continue
+    except BaseException:
         pass
     if os.environ.get(DEBUG_ENV):
         try:
             print(f"spiritwriter-kiro-hook: {message}", file=sys.stderr)
-        except Exception:
+        except BaseException:
             pass
 
 
 def _opt(args: list[str], name: str) -> str | None:
     if name in args:
         i = args.index(name)
-        return args[i + 1] if i + 1 < len(args) else None
+        value = args[i + 1] if i + 1 < len(args) else None
+        return None if value is None or value.startswith("--") else value
     return None
 
 
@@ -531,7 +567,8 @@ def _read_stdin() -> str:
         fd = sys.stdin.fileno()
         import select
         import time
-    except (AttributeError, OSError, ValueError, ImportError):  # not a real fd (tests, odd hosts)
+        select.select([fd], [], [], 0)  # raises on Windows pipes, where select only takes sockets
+    except (AttributeError, OSError, ValueError, ImportError):  # not a selectable fd (tests, Windows)
         data = sys.stdin.read(STDIN_MAX_BYTES + 1)
         if len(data) > STDIN_MAX_BYTES:
             raise ValueError("stdin payload too large")
@@ -555,10 +592,28 @@ def _read_stdin() -> str:
 
 def run_hook(argv: list[str]) -> int:
     """Record the hook payload on stdin. Always returns 0 and writes nothing to stdout."""
+    try:
+        _run_hook(argv)
+    except BaseException:  # e.g. the watchdog firing while an error is being handled
+        pass
+    finally:
+        _disarm_watchdog()
+    return 0
+
+
+def _disarm_watchdog() -> None:
+    try:
+        import signal
+
+        signal.alarm(0)
+    except BaseException:
+        pass
+
+
+def _run_hook(argv: list[str]) -> None:
     event = _opt(argv, "--event")
     trace_dir = _opt(argv, "--dir")
     raw_file = _opt(argv, "--raw-file")
-    stdin_text = ""
     _arm_watchdog(WATCHDOG_SECONDS)
     try:
         stdin_text = _read_stdin()
@@ -566,21 +621,14 @@ def run_hook(argv: list[str]) -> int:
             try:
                 capture_raw(stdin_text, event, raw_file, argv=argv)
             except Exception as exc:
-                _log_error(f"raw capture failed: {type(exc).__name__}: {exc}")
+                _log_error(f"raw capture failed: {type(exc).__name__}: {exc}", trace_dir)
         payload = json.loads(stdin_text or "{}")
         if not isinstance(payload, dict):
             raise ValueError("hook payload is not a JSON object")
         record(payload, trace_dir, event=event)
     except BaseException as exc:  # never fail the hook (includes the watchdog's TimeoutError)
-        _log_error(f"{type(exc).__name__}: {exc}")
-    finally:
-        try:
-            import signal
-
-            signal.alarm(0)
-        except Exception:
-            pass
-    return 0
+        _disarm_watchdog()
+        _log_error(f"{type(exc).__name__}: {exc}", trace_dir)
 
 
 # === Installer ============================================================
@@ -709,6 +757,10 @@ def run_install(argv: list[str], out: Any = None) -> int:
         ns = ap.parse_args(argv)
     except SystemExit as exc:
         return int(exc.code or 0) if exc.code != 0 else 0
+    if fcntl is None:
+        print("error: the Kiro recorder needs POSIX file locking (Linux or macOS); not installing hooks that could not record",
+              file=sys.stderr)
+        return 1
     if ns.global_ and ns.workspace:
         print("error: give a workspace or --global, not both", file=sys.stderr)
         return 2
