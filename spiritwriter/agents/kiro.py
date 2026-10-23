@@ -82,8 +82,9 @@ DEFAULT_RAW_FILE = os.path.join("~", ".spiritwriter", "kiro", "raw-capture.jsonl
 HOOK_FILE_NAME = "spiritwriter.json"
 HOOK_NAME_PREFIX = "spiritwriter-"
 HOOK_TIMEOUT_SECONDS = 10     # Kiro-side timeout written into the hook file (Kiro's default is 60)
-WATCHDOG_SECONDS = 8          # self-imposed; shorter than the Kiro-side timeout
+WATCHDOG_SECONDS = 5          # self-imposed; shorter than the Kiro-side timeout
 STDIN_MAX_BYTES = 8 * 1024 * 1024
+STDIN_DEADLINE_SECONDS = 2.0  # a host that never closes stdin must not stall the agent
 RAW_STRING_MAX = 4000
 ERROR_LOG_MAX_BYTES = 256 * 1024
 
@@ -523,12 +524,33 @@ def _arm_watchdog(seconds: int) -> None:
 
 
 def _read_stdin() -> str:
+    """Read stdin to EOF, but give up after :data:`STDIN_DEADLINE_SECONDS` and use what arrived."""
     if sys.stdin is None or sys.stdin.isatty():
         return ""
-    data = sys.stdin.read(STDIN_MAX_BYTES + 1)
-    if len(data) > STDIN_MAX_BYTES:
-        raise ValueError("stdin payload too large")
-    return data
+    try:
+        fd = sys.stdin.fileno()
+        import select
+        import time
+    except (AttributeError, OSError, ValueError, ImportError):  # not a real fd (tests, odd hosts)
+        data = sys.stdin.read(STDIN_MAX_BYTES + 1)
+        if len(data) > STDIN_MAX_BYTES:
+            raise ValueError("stdin payload too large")
+        return data
+    chunks: list[bytes] = []
+    size = 0
+    deadline = time.monotonic() + STDIN_DEADLINE_SECONDS
+    while True:
+        wait = deadline - time.monotonic()
+        if wait <= 0 or not select.select([fd], [], [], wait)[0]:
+            break
+        chunk = os.read(fd, 1 << 16)
+        if not chunk:
+            break
+        chunks.append(chunk)
+        size += len(chunk)
+        if size > STDIN_MAX_BYTES:
+            raise ValueError("stdin payload too large")
+    return b"".join(chunks).decode("utf-8", errors="replace")
 
 
 def run_hook(argv: list[str]) -> int:
@@ -591,7 +613,7 @@ def build_hooks(command: str | None = None, raw: bool = False, triggers: tuple[s
     for trig in triggers:
         hook: dict[str, Any] = {
             "name": HOOK_NAME_PREFIX + trig,
-            "description": f"Managed by spiritwriter: record {trig} to a local signed trace.",
+            "description": f"Managed by spiritwriter: record {trig} to a local hash-chained trace.",
             "trigger": trig,
         }
         if trig in _TOOL_TRIGGERS:
@@ -703,16 +725,20 @@ def run_install(argv: list[str], out: Any = None) -> int:
     path = hook_file_path(ns.workspace, ns.global_)
     try:
         action, text = plan_install(path, ns.uninstall, ns.command, ns.raw, triggers)
-    except ValueError as exc:
+    except (ValueError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     verb = {"create": "would create", "update": "would update", "unchanged": "already up to date",
             "remove": "would remove", "absent": "nothing to remove"}[action]
     if not ns.dry_run:
-        if text is not None:
-            _atomic_write(path, text)
-        elif action == "remove":
-            os.unlink(path)
+        try:
+            if text is not None:
+                _atomic_write(path, text)
+            elif action == "remove":
+                os.unlink(path)
+        except OSError as exc:
+            print(f"error: cannot write {path}: {exc}", file=sys.stderr)
+            return 1
         verb = {"create": "created", "update": "updated", "unchanged": "already up to date",
                 "remove": "removed", "absent": "nothing to remove"}[action]
     print(f"{verb}: {path}", file=out)

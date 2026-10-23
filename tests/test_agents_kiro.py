@@ -381,6 +381,23 @@ class TestMain:
         rc, out = self._run(monkeypatch, capsys, '{"session_id": "s"}', ["--dir", str(tmp_path)])
         assert rc == 0 and out.out == "" and time.time() - t0 < 5
 
+    @posix_only
+    def test_stdin_that_never_closes_does_not_stall_the_hook(self, tmp_path):
+        import time
+        env = dict(os.environ, HOME=str(tmp_path / "h"))
+        p = subprocess.Popen([sys.executable, "-m", "spiritwriter.agents.kiro", "--dir", str(tmp_path)],
+                             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
+        try:
+            t0 = time.time()
+            p.stdin.write(b'{"hook_event_name": "Stop", "session_id": "open-pipe"}')
+            p.stdin.flush()  # payload sent, but the pipe stays open
+            out, err = p.stdout.read(), p.stderr.read()
+            assert p.wait(timeout=10) == 0 and out == b"" and err == b""
+            assert time.time() - t0 < kiro.WATCHDOG_SECONDS
+        finally:
+            p.kill()
+        assert (tmp_path / "open-pipe.jsonl").exists()
+
     def test_subprocess_exit_zero_and_empty_stdout(self, tmp_path):
         env = dict(os.environ, HOME=str(tmp_path / "h"))
         r = subprocess.run([sys.executable, "-m", "spiritwriter.agents.kiro", "--event", "SessionStart", "--dir", str(tmp_path)],
@@ -562,6 +579,12 @@ class TestInstaller:
         rc, _ = _install(tmp_path)
         assert rc == 1 and (hooks / "spiritwriter.json").read_text() == content
         assert _install(tmp_path, "--uninstall")[0] == 1
+
+    def test_hooks_dir_that_is_a_file_is_an_error_not_a_traceback(self, tmp_path):
+        (tmp_path / ".kiro").mkdir()
+        (tmp_path / ".kiro" / "hooks").write_text("x")
+        assert _install(tmp_path)[0] == 1
+        assert (tmp_path / ".kiro" / "hooks").read_text() == "x"
 
     def test_workspace_must_exist(self, tmp_path):
         assert kiro.run_install([str(tmp_path / "nope")], out=io.StringIO()) == 2

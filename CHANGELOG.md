@@ -13,7 +13,7 @@ Entries before 0.8.0 are not backfilled; consult `git log` for earlier history. 
 - `spiritwriter-kiro-hook install [WORKSPACE] [--global] [--dry-run] [--uninstall] [--raw] [--triggers ...]` writes `.kiro/hooks/spiritwriter.json` (or `~/.kiro/hooks/spiritwriter.json`) with one command hook per trigger and an absolute executable path. It is idempotent, touches only `spiritwriter-*` hooks in that one file, and refuses to overwrite a file it cannot parse.
 - Opt-in raw capture (`SPIRITWRITER_KIRO_RAW=1`, `--raw`, or `install --raw`) appends the redacted stdin JSON, trigger, payload keys and `USER_PROMPT` presence to `~/.spiritwriter/kiro/raw-capture.jsonl`, to discover Kiro's undocumented `PostToolUse`, `Stop` and `SessionEnd` fields. Prompt text is included, redacted, only with `SPIRITWRITER_KIRO_RAW_PROMPTS=1`.
 - Same secret handling as the Claude Code recorder: tool inputs and prompts are stored as hashes and lengths plus a scrubbed, allowlisted summary.
-- The hook always exits 0, writes nothing to stdout or stderr (Kiro puts a successful hook's stdout in the agent's context), and ends itself after 8 seconds. Errors go to `~/.spiritwriter/kiro/errors.log`.
+- The hook always exits 0, writes nothing to stdout or stderr (Kiro puts a successful hook's stdout in the agent's context), and gives up on a stdin that never closes after 2 seconds, and ends itself after 5 seconds. Errors go to `~/.spiritwriter/kiro/errors.log`.
 
 ## [0.12.3] — 2026-10-16
 
