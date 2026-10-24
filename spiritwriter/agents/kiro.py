@@ -222,22 +222,23 @@ def configured_mcp_servers(cwd: Any = None) -> frozenset:
     return names
 
 
-def split_mcp_id(tool_id: str, servers: Any) -> tuple[str, str] | None:
+def split_mcp_id(tool_id: str, servers: Any) -> tuple[str, str, bool] | None:
     """Split a Kiro ``mcp_<server>_<tool>`` id using the configured (normalized) server names.
 
     Kiro builds the id as ``mcp_`` + lowercase(``<server>_<tool>`` with whitespace and ``-``
     turned into ``_`` and other characters dropped), capped at 64 characters, with ``_1``, ``_2``
     ... appended on a collision. That is not reversible without the server list, so the longest
-    configured server that prefixes the id wins. Returns None when nothing matches, or when the id
-    looks truncated (64 or more characters) or carries a collision suffix (``_<digits>`` at the
-    end): a wrong server name is worse than none.
+    configured server that prefixes the id wins. Returns ``(server, tool, exact)``, or None when
+    no configured server matches. The server prefix is trustworthy even then, but the tool part is
+    not when the id looks truncated (64 or more characters) or carries a collision suffix
+    (``_<digits>`` at the end, which may be part of a real tool name such as ``get_page_2``);
+    ``exact`` is False in those two cases.
     """
-    if len(tool_id) >= MCP_ID_MAX or re.search(r"_\d+$", tool_id):
-        return None
     rest = tool_id[len("mcp_"):]
     for server in sorted(servers or (), key=len, reverse=True):
         if rest.startswith(server + "_") and len(rest) > len(server) + 1:
-            return server, rest[len(server) + 1:]
+            exact = not (len(tool_id) >= MCP_ID_MAX or re.search(r"_\d+$", tool_id))
+            return server, rest[len(server) + 1:], exact
     return None
 
 
@@ -247,7 +248,9 @@ def classify_tool(tool_name: Any, payload: dict[str, Any] | None = None, mcp_ser
     ``tool_kind`` is one of ``read``, ``write``, ``shell``, ``web``, ``spec``, ``spawn``, ``mcp`` or ``other``.
     A Kiro ``mcp_<server>_<tool>`` id always yields ``mcp_id`` (the raw id). ``mcp_server`` and
     ``mcp_tool`` are set only when ``mcp_servers`` (normalized configured server names, see
-    :func:`configured_mcp_servers`) contains a prefix of the id; see :func:`split_mcp_id`. The
+    :func:`configured_mcp_servers`) contains a prefix of the id; see :func:`split_mcp_id`. When the id is 64 or more characters or ends
+    in ``_<digits>`` the split is still made but ``mcp_tool_exact`` is False (the field is omitted
+    when the tool part is trustworthy). The
     delimited ``mcp__server__tool`` and ``@server/tool`` spellings are unambiguous and are split
     directly. A Power is marked ``power: true`` only when the payload says so (``power``,
     ``power_name``, ``powerName`` or ``tool_source``); the id format does not show it.
@@ -267,6 +270,8 @@ def classify_tool(tool_name: Any, payload: dict[str, Any] | None = None, mcp_ser
         split = split_mcp_id(name, mcp_servers)
         if split:
             out.update(mcp_server=scrub_name(split[0]), mcp_tool=scrub_name(split[1]))
+            if not split[2]:
+                out["mcp_tool_exact"] = False  # truncated id or collision suffix: the tool part may be off
     elif server and tool:
         out.update(tool_kind="mcp", mcp_id=scrub_name(name), mcp_server=scrub_name(server), mcp_tool=scrub_name(tool))
     else:

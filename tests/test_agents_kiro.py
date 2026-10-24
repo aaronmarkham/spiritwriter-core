@@ -153,14 +153,36 @@ class TestHookToEvent:
         assert split("mcp_myweirdserver_ping")[:2] == ("myweirdserver", "ping")
         assert split("mcp_unknown_server_tool")[:2] == (None, None)
 
-    def test_mcp_truncated_or_collision_suffixed_ids_are_not_split(self, tmp_path):
+    def _mcp(self, tmp_path, tool):
+        return kiro.hook_to_event({"hook_event_name": "PreToolUse", "tool_name": tool, "cwd": str(tmp_path)})[1]
+
+    def test_mcp_exact_match_has_no_exact_flag(self, tmp_path):
         _mcp_config(tmp_path, "acme-tools")
-        cwd = str(tmp_path)
+        f = self._mcp(tmp_path, "mcp_acme_tools_get_page")
+        assert (f["mcp_server"], f["mcp_tool"], f["mcp_id"]) == ("acme_tools", "get_page", "mcp_acme_tools_get_page")
+        assert "mcp_tool_exact" not in f
+
+    def test_mcp_truncated_id_still_splits_but_is_not_exact(self, tmp_path):
+        _mcp_config(tmp_path, "acme-tools")
         long_id = "mcp_acme_tools_" + "x" * 49
         assert len(long_id) == 64
-        for tool in (long_id, "mcp_acme_tools_run_1", "mcp_acme_tools_run_12"):
-            _, f = kiro.hook_to_event({"hook_event_name": "PreToolUse", "tool_name": tool, "cwd": cwd})
-            assert f["mcp_id"] == tool and "mcp_server" not in f
+        f = self._mcp(tmp_path, long_id)
+        assert f["mcp_id"] == long_id and f["mcp_server"] == "acme_tools" and f["mcp_tool"] == "x" * 49
+        assert f["mcp_tool_exact"] is False
+
+    @pytest.mark.parametrize("tool,remainder", [("mcp_acme_tools_get_page_2", "get_page_2"), ("mcp_acme_tools_run_1", "run_1"),
+                                                ("mcp_acme_tools_run_12", "run_12")])
+    def test_mcp_numeric_suffix_still_splits_but_is_not_exact(self, tmp_path, tool, remainder):
+        _mcp_config(tmp_path, "acme-tools")
+        f = self._mcp(tmp_path, tool)
+        assert f["mcp_server"] == "acme_tools" and f["mcp_tool"] == remainder and f["mcp_tool_exact"] is False
+
+    def test_mcp_no_configured_server_records_only_the_id(self, tmp_path):
+        _mcp_config(tmp_path, "other-server")
+        for tool in ("mcp_acme_tools_get_page", "mcp_acme_tools_get_page_2", "mcp_acme_tools_" + "x" * 49):
+            f = self._mcp(tmp_path, tool)
+            assert f["mcp_id"] == tool
+            assert not {"mcp_server", "mcp_tool", "mcp_tool_exact"} & set(f)
 
     def test_mcp_servers_come_from_home_config_too_and_fail_soft(self, tmp_path):
         home = tmp_path / "home" / ".kiro" / "settings"
