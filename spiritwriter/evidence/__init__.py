@@ -1,0 +1,75 @@
+"""Portable, immutable evidence records and deterministic bundles.
+
+This package defines a new evidence identity namespace. It does not import,
+reuse, or alter legacy ``fabric`` shard IDs.
+"""
+
+from .canonical import (
+    MAX_SAFE_INTEGER,
+    MIN_SAFE_INTEGER,
+    CanonicalJsonError,
+    JsonScalar,
+    JsonValue,
+    canonical_json_bytes,
+    domain_digest,
+    parse_canonical_json_bytes,
+    sha256_hex,
+    validate_json_value,
+)
+from .models import (
+    EVIDENCE_DOMAIN,
+    SOURCE_DOMAIN,
+    EvidenceUnit,
+    EvidenceValidationError,
+    Locator,
+    SourceSnapshot,
+)
+from .pack import (
+    CONTRACT_VERSION,
+    EVIDENCE_NAME,
+    MANIFEST_NAME,
+    PACK_DOMAIN,
+    SOURCES_NAME,
+    EvidencePack,
+    VerificationIssue,
+    VerificationReport,
+)
+from .protocols import (
+    LocatorResolver,
+    ProtocolValidationError,
+    SourceAdapter,
+    require_locator_resolver,
+    require_source_adapter,
+)
+
+__all__ = [
+    "CONTRACT_VERSION",
+    "EVIDENCE_DOMAIN",
+    "EVIDENCE_NAME",
+    "MANIFEST_NAME",
+    "MAX_SAFE_INTEGER",
+    "MIN_SAFE_INTEGER",
+    "PACK_DOMAIN",
+    "SOURCE_DOMAIN",
+    "SOURCES_NAME",
+    "CanonicalJsonError",
+    "EvidencePack",
+    "EvidenceUnit",
+    "EvidenceValidationError",
+    "JsonScalar",
+    "JsonValue",
+    "Locator",
+    "LocatorResolver",
+    "ProtocolValidationError",
+    "SourceAdapter",
+    "SourceSnapshot",
+    "VerificationIssue",
+    "VerificationReport",
+    "canonical_json_bytes",
+    "domain_digest",
+    "parse_canonical_json_bytes",
+    "require_locator_resolver",
+    "require_source_adapter",
+    "sha256_hex",
+    "validate_json_value",
+]
