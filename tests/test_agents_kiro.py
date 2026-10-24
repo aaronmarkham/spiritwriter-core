@@ -667,7 +667,8 @@ class TestInstaller:
         assert doc["version"] == "v1"
         assert [h["trigger"] for h in doc["hooks"]] == ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop", "SessionEnd"]
         for h in doc["hooks"]:
-            assert h["name"].startswith("spiritwriter-") and h["enabled"] is True
+            assert h["name"].startswith("spiritwriter-")
+            assert h["enabled"] is (h["trigger"] not in ("PreToolUse", "PostToolUse"))  # tool hooks are off by default
             assert h["action"]["type"] == "command"
             assert h["action"]["command"] == f"/opt/bin/spiritwriter-kiro-hook --event {h['trigger']} >/dev/null 2>&1 || true"
             assert 0 < h["timeout"] <= 10
@@ -943,12 +944,40 @@ class TestExtraTriggers:
 
 
 class TestToolResponse:
-    def _post(self, response, **extra):
-        return kiro.hook_to_event({"hook_event_name": "PostToolUse", "tool_name": "executeBash", "tool_response": response, **extra})[1]
+    def _post(self, response, responses=True, **extra):
+        return kiro.hook_to_event({"hook_event_name": "PostToolUse", "tool_name": "executeBash", "tool_response": response, **extra},
+                                  env={}, responses=responses)[1]
 
     def test_response_is_recorded_and_ok_derived(self):
         f = self._post({"success": True, "stdout": "done"})
         assert f["ok"] is True and "ok_unknown" not in f and f["tool_response"] == {"success": True, "stdout": "done"}
+
+    def test_body_is_off_by_default_but_ok_is_still_derived(self):
+        f = self._post({"success": True, "stdout": "private output"}, responses=False)
+        assert f["ok"] is True and "tool_response" not in f and "private output" not in json.dumps(f)
+        assert self._post({"error": "boom"}, responses=False)["ok"] is False
+
+    def test_env_opt_in_keeps_the_body(self):
+        f = kiro.hook_to_event({"hook_event_name": "PostToolUse", "tool_name": "x", "tool_response": {"success": True}},
+                               env={kiro.RESPONSES_ENV: "1"})[1]
+        assert f["tool_response"] == {"success": True}
+
+    def test_hook_flag_and_installer_option(self, tmp_path):
+        assert kiro.hook_command("/x/hook", "PostToolUse", responses=True).startswith("/x/hook --event PostToolUse --responses")
+        _install(tmp_path, "--with-responses")
+        doc = json.loads((tmp_path / ".kiro" / "hooks" / "spiritwriter.json").read_text())
+        assert all(" --responses" in h["action"]["command"] for h in doc["hooks"])
+        _install(tmp_path)
+        doc = json.loads((tmp_path / ".kiro" / "hooks" / "spiritwriter.json").read_text())
+        assert not any("--responses" in h["action"]["command"] for h in doc["hooks"])
+
+    @posix_only
+    def test_recorded_frame_has_body_only_with_the_flag(self, tmp_path):
+        p = {"hook_event_name": "PostToolUse", "session_id": "r", "tool_name": "x", "tool_response": {"success": True, "stdout": "hi"}}
+        kiro.record(p, trace_dir=str(tmp_path), env={})
+        kiro.record(p, trace_dir=str(tmp_path), env={}, responses=True)
+        a, b = _read(tmp_path / "r.jsonl")
+        assert "tool_response" not in a and b["tool_response"]["stdout"] == "hi"
 
     @pytest.mark.parametrize("response,ok", [
         ({"exit_code": 0}, True), ({"exit_code": 1}, False), ({"exitCode": 2}, False),
@@ -970,3 +999,211 @@ class TestToolResponse:
         assert len(big) < kiro.RESPONSE_MAX + 100 and "TRUNCATED" in big
         big = self._post({"rows": ["y" * 100] * 500})["tool_response"]
         assert isinstance(big, str) and len(big) < kiro.RESPONSE_MAX + 100 and "TRUNCATED" in big
+
+
+# === Synthesized call ids ================================================
+
+
+def _tool(trace_dir, kind, tool, session="p", agent_session=None, **extra):
+    payload = {"hook_event_name": kind, "session_id": agent_session or session, "tool_name": tool, "tool_input": {"path": "a"}, **extra}
+    return kiro.record(payload, trace_dir=str(trace_dir), env={"KIRO_SESSION_ID": session})
+
+
+@posix_only
+class TestCallIds:
+    def test_post_gets_the_id_of_its_pre(self, tmp_path):
+        pre = _tool(tmp_path, "PreToolUse", "fsRead")
+        post = _tool(tmp_path, "PostToolUse", "fsRead")
+        assert pre["tool_use_id"] == post["tool_use_id"] and len(pre["tool_use_id"]) == 16
+        assert pre["tool_use_id_synthesized"] is True and post["tool_use_id_synthesized"] is True
+        assert not list(tmp_path.glob("*.pending.json"))  # nothing left pending
+
+    def test_two_different_tools_interleaved(self, tmp_path):
+        a = _tool(tmp_path, "PreToolUse", "fsRead")
+        b = _tool(tmp_path, "PreToolUse", "executeBash")
+        pb = _tool(tmp_path, "PostToolUse", "executeBash")
+        pa = _tool(tmp_path, "PostToolUse", "fsRead")
+        assert pb["tool_use_id"] == b["tool_use_id"] and pa["tool_use_id"] == a["tool_use_id"]
+        assert a["tool_use_id"] != b["tool_use_id"]
+
+    def test_same_tool_pairs_in_order(self, tmp_path):
+        p1 = _tool(tmp_path, "PreToolUse", "fsRead")
+        p2 = _tool(tmp_path, "PreToolUse", "fsRead")
+        r1 = _tool(tmp_path, "PostToolUse", "fsRead")
+        r2 = _tool(tmp_path, "PostToolUse", "fsRead")
+        assert (r1["tool_use_id"], r2["tool_use_id"]) == (p1["tool_use_id"], p2["tool_use_id"])
+        assert p1["tool_use_id"] != p2["tool_use_id"]
+
+    def test_post_without_a_pending_pre_mints_a_marked_id(self, tmp_path):
+        post = _tool(tmp_path, "PostToolUse", "fsRead")
+        assert post["tool_use_id_synthesized"] is True and len(post["tool_use_id"]) == 16
+
+    def test_orphaned_pre_does_not_mispair_after_the_ttl(self, tmp_path, monkeypatch):
+        clock = [1000.0]
+        monkeypatch.setattr(kiro, "_now", lambda: clock[0])
+        orphan = _tool(tmp_path, "PreToolUse", "fsRead")
+        clock[0] += kiro.PENDING_TTL_SECONDS + 1
+        post = _tool(tmp_path, "PostToolUse", "fsRead")
+        assert post["tool_use_id"] != orphan["tool_use_id"]
+        # within the TTL it would have paired
+        clock[0] = 5000.0
+        pre = _tool(tmp_path, "PreToolUse", "fsRead")
+        clock[0] += kiro.PENDING_TTL_SECONDS - 1
+        assert _tool(tmp_path, "PostToolUse", "fsRead")["tool_use_id"] == pre["tool_use_id"]
+
+    def test_purge_drops_stale_entries_from_the_file(self, tmp_path):
+        trace = str(tmp_path / "s.jsonl")
+        f1, f2 = {"tool_name": "t"}, {"tool_name": "t"}
+        kiro.assign_tool_use_id(trace, "tool_call", "main", f1, now=1000.0)
+        kiro.assign_tool_use_id(trace, "tool_call", "main", f2, now=1000.0 + kiro.PENDING_TTL_SECONDS + 5)
+        state = json.loads(Path(kiro._pending_path(trace)).read_text())
+        assert [e["id"] for e in state["main"]] == [f2["tool_use_id"]]
+
+    def test_state_is_bounded(self, tmp_path):
+        trace = str(tmp_path / "s.jsonl")
+        for i in range(kiro.PENDING_MAX + 25):
+            kiro.assign_tool_use_id(trace, "tool_call", "main", {"tool_name": "t"}, now=1000.0 + i)
+        state = json.loads(Path(kiro._pending_path(trace)).read_text())
+        assert sum(len(v) for v in state.values()) == kiro.PENDING_MAX
+
+    def test_agents_are_paired_separately(self, tmp_path):
+        main_pre = _tool(tmp_path, "PreToolUse", "fsRead")
+        child_pre = _tool(tmp_path, "PreToolUse", "fsRead", agent_session="child-1")
+        child_post = _tool(tmp_path, "PostToolUse", "fsRead", agent_session="child-1")
+        main_post = _tool(tmp_path, "PostToolUse", "fsRead")
+        assert child_post["tool_use_id"] == child_pre["tool_use_id"] and main_post["tool_use_id"] == main_pre["tool_use_id"]
+
+    def test_a_real_id_is_used_and_skips_the_state(self, tmp_path):
+        pre = _tool(tmp_path, "PreToolUse", "fsRead", tool_use_id="real-1")
+        assert pre["tool_use_id"] == "real-1" and "tool_use_id_synthesized" not in pre
+        assert not list(tmp_path.glob("*.pending.json*"))
+
+    def test_corrupt_state_is_ignored(self, tmp_path):
+        _tool(tmp_path, "PreToolUse", "fsRead")
+        (state,) = tmp_path.glob("*.pending.json")
+        state.write_text("{not json")
+        post = _tool(tmp_path, "PostToolUse", "fsRead")
+        assert post["tool_use_id_synthesized"] is True
+
+    def test_concurrent_hooks_pair_correctly_and_keep_the_chain(self, tmp_path):
+        import threading
+        results, errors = {}, []
+
+        def work(i):
+            try:
+                tool = f"tool{i % 4}"  # four tools, several threads per tool
+                results[i] = (_tool(tmp_path, "PreToolUse", tool), _tool(tmp_path, "PostToolUse", tool))
+            except Exception as exc:  # noqa: BLE001
+                errors.append(exc)
+        threads = [threading.Thread(target=work, args=(i,)) for i in range(16)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        assert not errors
+        events = _read(tmp_path / "p.jsonl")
+        assert len(events) == 32 and verify_chain(events)
+        pre_ids = [e["tool_use_id"] for e in events if e["type"] == "tool_call"]
+        post_ids = [e["tool_use_id"] for e in events if e["type"] == "tool_result"]
+        assert len(set(pre_ids)) == 16 and sorted(pre_ids) == sorted(post_ids)  # every post paired with exactly one pre
+        # per tool, post ids are consumed in the order the pres were queued
+        for tool in ("tool0", "tool1", "tool2", "tool3"):
+            pres = [e["tool_use_id"] for e in events if e["type"] == "tool_call" and e["tool_name"] == tool]
+            posts = [e["tool_use_id"] for e in events if e["type"] == "tool_result" and e["tool_name"] == tool]
+            assert len(pres) == len(posts) == 4 and set(pres) == set(posts)
+        assert not list(tmp_path.glob("*.pending.json"))
+
+    def test_the_state_lock_is_exclusive(self, tmp_path):
+        import fcntl as _f
+        trace = str(tmp_path / "s.jsonl")
+        with kiro._state_lock(trace):
+            fd = os.open(kiro._pending_path(trace) + ".lock", os.O_WRONLY)
+            try:
+                with pytest.raises(BlockingIOError):
+                    _f.flock(fd, _f.LOCK_EX | _f.LOCK_NB)
+            finally:
+                os.close(fd)
+
+
+# === on / off / status ====================================================
+
+
+class TestToggle:
+    def _file(self, ws):
+        return Path(ws) / ".kiro" / "hooks" / "spiritwriter.json"
+
+    def _enabled(self, ws):
+        return {h["trigger"]: h["enabled"] for h in json.loads(self._file(ws).read_text())["hooks"]}
+
+    def _toggle(self, action, *args):
+        out = io.StringIO()
+        return kiro.run_toggle(action, list(args), out=out), out.getvalue()
+
+    def test_install_default_disables_only_the_tool_hooks(self, tmp_path):
+        _install(tmp_path)
+        assert self._enabled(tmp_path) == {"SessionStart": True, "UserPromptSubmit": True, "PreToolUse": False,
+                                           "PostToolUse": False, "Stop": True, "SessionEnd": True}
+
+    def test_on_and_off_flip_the_tool_hooks_and_are_idempotent(self, tmp_path):
+        _install(tmp_path)
+        rc, out = self._toggle("on", "--workspace", str(tmp_path))
+        assert rc == 0 and "updated" in out
+        assert self._enabled(tmp_path)["PreToolUse"] is True and self._enabled(tmp_path)["PostToolUse"] is True
+        first = self._file(tmp_path).read_text()
+        mtime = os.stat(self._file(tmp_path)).st_mtime_ns
+        rc, out = self._toggle("on", "--workspace", str(tmp_path))
+        assert rc == 0 and "already on" in out and self._file(tmp_path).read_text() == first
+        assert os.stat(self._file(tmp_path)).st_mtime_ns == mtime
+        rc, out = self._toggle("off", "--workspace", str(tmp_path))
+        assert rc == 0 and self._enabled(tmp_path)["PreToolUse"] is False
+        assert "already off" in self._toggle("off", "--workspace", str(tmp_path))[1]
+        assert self._enabled(tmp_path)["Stop"] is True  # other hooks untouched
+
+    def test_status_reports_the_state(self, tmp_path):
+        _install(tmp_path)
+        assert "tool tracing: off" in self._toggle("status", "--workspace", str(tmp_path))[1]
+        self._toggle("on", "--workspace", str(tmp_path))
+        rc, out = self._toggle("status", "--workspace", str(tmp_path))
+        assert rc == 0 and "tool tracing: on" in out and "PreToolUse: enabled" in out
+        doc = json.loads(self._file(tmp_path).read_text())
+        doc["hooks"][2]["enabled"] = False  # PreToolUse only
+        self._file(tmp_path).write_text(json.dumps(doc))
+        assert "tool tracing: mixed" in self._toggle("status", "--workspace", str(tmp_path))[1]
+
+    def test_never_touches_other_hook_files_or_foreign_hooks(self, tmp_path):
+        hooks = tmp_path / ".kiro" / "hooks"
+        hooks.mkdir(parents=True)
+        other = hooks / "mine.json"
+        body = '{"version": "v1", "hooks": [{"name": "mine", "trigger": "PreToolUse", "enabled": false, "action": {"type": "command", "command": "echo"}}]}'
+        other.write_text(body)
+        _install(tmp_path)
+        doc = json.loads(self._file(tmp_path).read_text())
+        foreign = {"name": "user-hook", "trigger": "PreToolUse", "enabled": False, "action": {"type": "command", "command": "echo hi"}}
+        doc["hooks"].append(foreign)
+        self._file(tmp_path).write_text(json.dumps(doc))
+        self._toggle("on", "--workspace", str(tmp_path))
+        assert other.read_text() == body
+        assert foreign in json.loads(self._file(tmp_path).read_text())["hooks"]
+
+    def test_global_and_errors(self, tmp_path):
+        assert kiro.run_install(["--global", "--command", "/x/hook"], out=io.StringIO()) == 0
+        assert self._toggle("on", "--global")[0] == 0
+        doc = json.loads((tmp_path / "home" / ".kiro" / "hooks" / "spiritwriter.json").read_text())
+        assert all(h["enabled"] for h in doc["hooks"])
+        assert self._toggle("on", "--global", "--workspace", str(tmp_path))[0] == 2
+        assert self._toggle("on", "--workspace", str(tmp_path / "nope"))[0] == 2
+        assert self._toggle("on", "--workspace", str(tmp_path))[0] == 1  # nothing installed here
+        (tmp_path / ".kiro" / "hooks").mkdir(parents=True)
+        self._file(tmp_path).write_text("not json")
+        assert self._toggle("on", "--workspace", str(tmp_path))[0] == 1 and self._file(tmp_path).read_text() == "not json"
+
+    def test_reinstall_keeps_the_state_set_by_on(self, tmp_path):
+        _install(tmp_path)
+        self._toggle("on", "--workspace", str(tmp_path))
+        _install(tmp_path, "--raw")
+        assert self._enabled(tmp_path)["PreToolUse"] is True
+
+    def test_main_dispatches(self, tmp_path, capsys):
+        _install(tmp_path)
+        assert kiro.main(["status", "--workspace", str(tmp_path)]) == 0
+        assert "tool tracing: off" in capsys.readouterr().out

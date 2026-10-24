@@ -41,7 +41,15 @@ when Kiro does not supply a session id.
 tool inputs become ``args_sha256`` plus a short ``args_summary`` built
 from an allowlist of low-risk fields and scrubbed of secret shapes.
 Prompts are recorded as a hash and a length only. A tool's
-``tool_response`` is recorded redacted and capped at :data:`RESPONSE_MAX` characters.
+``ok`` is derived from its response, but the response body is recorded only when you opt in
+(``install --with-responses`` or ``SPIRITWRITER_KIRO_RESPONSES=1``), redacted and capped at
+:data:`RESPONSE_MAX` characters.
+
+**Call ids.** Kiro's payloads carry no tool call id, so the recorder mints a ``tool_use_id`` on each
+``PreToolUse`` and gives it to the next ``PostToolUse`` of the same ``tool_name`` (first in, first
+out, per session and agent), using a small state file beside the trace. Minted ids are marked
+``tool_use_id_synthesized: true`` on both frames. The pairing assumes calls of one tool finish in
+the order they started; a real id in the payload is used as is and skips the state.
 
 **Lineage (unconfirmed for subagents).** Same naming as the Claude Code recorder. Kiro runs every
 hook with ``KIRO_SESSION_ID`` set to the root conversation id. The trace's ``session_id`` (also
@@ -53,15 +61,18 @@ did not show a subagent with a distinct ``session_id``, so this is unconfirmed.
 
 from __future__ import annotations
 
+import contextlib
 import datetime as _dt
 import hashlib
 import json
 import os
 import re
+import secrets
 import shlex
 import shutil
 import sys
 import tempfile
+import time
 from typing import Any
 
 from spiritwriter.agents.claude_code import (
@@ -95,6 +106,9 @@ STDIN_MAX_BYTES = 8 * 1024 * 1024
 STDIN_DEADLINE_SECONDS = 2.0  # a host that never closes stdin must not stall the agent
 RAW_STRING_MAX = 4000
 RESPONSE_MAX = 2000           # cap on the stored (redacted) tool_response
+RESPONSES_ENV = "SPIRITWRITER_KIRO_RESPONSES"  # opt in to recording the tool_response body
+PENDING_TTL_SECONDS = 15 * 60  # an unpaired PreToolUse older than this is forgotten
+PENDING_MAX = 200             # bound on the pending-call state file
 KIRO_SESSION_ENV = "KIRO_SESSION_ID"  # Kiro sets this to the root conversation id
 MCP_ID_MAX = 64               # Kiro caps tool ids at 64 characters
 ERROR_LOG_MAX_BYTES = 256 * 1024
@@ -392,6 +406,12 @@ def _tool_ok(payload: dict[str, Any]) -> bool | None:
     return True
 
 
+def responses_enabled(flag: bool = False, env: Any = None) -> bool:
+    """Whether to record the ``tool_response`` body: the ``--responses`` flag or the env opt-in."""
+    env = os.environ if env is None else env
+    return bool(flag) or str(env.get(RESPONSES_ENV, "")).strip().lower() in ("1", "true", "yes", "on")
+
+
 def bounded_response(value: Any) -> Any:
     """A ``tool_response`` fit for a trace frame: secret shapes redacted, secret-named keys
     blanked, and at most :data:`RESPONSE_MAX` characters (longer values become a truncated text
@@ -469,7 +489,8 @@ def _id_str(value: Any) -> str:
     return scrub_name(str(value))
 
 
-def hook_to_event(payload: dict[str, Any], event: str | None = None, env: Any = None) -> tuple[str, dict[str, Any]]:
+def hook_to_event(payload: dict[str, Any], event: str | None = None, env: Any = None,
+                  responses: bool = False) -> tuple[str, dict[str, Any]]:
     """Map one Kiro hook payload to ``(event_type, fields)`` for :meth:`TraceEmitter.emit`.
 
     ``event`` is the trigger name the hook command was registered with (``--event``); it is used
@@ -517,7 +538,7 @@ def hook_to_event(payload: dict[str, Any], event: str | None = None, env: Any = 
         else:
             fields["ok"] = ok
         response = _result_of(payload)
-        if response is not None:
+        if response is not None and responses_enabled(responses, env):
             fields["tool_response"] = bounded_response(response)
         if tool_input is not None:
             fields["args_sha256"] = _digest(tool_input)  # lets readers pair a result with its call
@@ -585,21 +606,128 @@ def record(
     signer: Any | None = None,
     event: str | None = None,
     env: Any = None,
+    responses: bool = False,
 ) -> dict[str, Any]:
-    """Append one hook payload to its session's trace. Returns the emitted event."""
+    """Append one hook payload to its session's trace. Returns the emitted event.
+
+    Tool events without a real ``tool_use_id`` get a minted one (see :func:`assign_tool_use_id`);
+    the pending-call state is updated under a per-session lock held across the trace write."""
     session_id, _ = lineage(payload, env)
     path = trace_path(session_id, trace_dir)
     os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
     if not os.path.exists(path):
         os.close(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600))
-    event_type, fields = hook_to_event(payload, event, env)
+    event_type, fields = hook_to_event(payload, event, env, responses)
     if event_type == "tool_result" and fields.get("ok") and fields.get("tool_kind") == "write":
         path_arg = _first_path(payload["tool_input"]) if isinstance(payload.get("tool_input"), dict) else ""
         if path_arg:
             fields.update(artifact_receipt({"cwd": payload.get("cwd"), "tool_input": {"file_path": path_arg}}))
     agent_id = fields.pop("agent_id")
     emitter = TraceEmitter(session_id, agent_id, path, signer=signer, concurrent=True)
+    if event_type in ("tool_call", "tool_result") and "tool_use_id" not in fields:
+        with _state_lock(path):
+            try:
+                assign_tool_use_id(path, event_type, agent_id, fields)
+            except (OSError, ValueError):  # unreadable state: still emit, with a fresh id
+                fields.update(tool_use_id=secrets.token_hex(8), tool_use_id_synthesized=True)
+            return emitter.emit(event_type, **fields)
     return emitter.emit(event_type, **fields)
+
+
+# === Synthesized tool call ids ============================================
+
+
+def _now() -> float:
+    return time.time()
+
+
+def _pending_path(trace_file: str) -> str:
+    return (trace_file[:-len(".jsonl")] if trace_file.endswith(".jsonl") else trace_file) + ".pending.json"
+
+
+@contextlib.contextmanager
+def _state_lock(trace_file: str):
+    """Exclusive lock for one session's pending-call state, held across the state update and the
+    trace write so concurrent hooks pair and append in one order. Always taken before the
+    emitter's own trace-file lock."""
+    fd = os.open(_pending_path(trace_file) + ".lock", os.O_WRONLY | os.O_CREAT, 0o600)
+    try:
+        if fcntl is not None:
+            fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        os.close(fd)  # closing releases the flock
+
+
+def _load_pending(path: str, now: float) -> dict[str, list[dict[str, Any]]]:
+    """Pending ``PreToolUse`` ids per agent, oldest first, minus entries past the TTL. A missing or
+    corrupt file is an empty state."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            raw = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    out: dict[str, list[dict[str, Any]]] = {}
+    if isinstance(raw, dict):
+        for agent, items in raw.items():
+            if not isinstance(items, list):
+                continue
+            keep = [i for i in items if isinstance(i, dict) and isinstance(i.get("id"), str) and isinstance(i.get("tool"), str)
+                    and isinstance(i.get("ts"), (int, float)) and now - i["ts"] <= PENDING_TTL_SECONDS]
+            if keep:
+                out[str(agent)] = keep
+    return out
+
+
+def _save_pending(path: str, state: dict[str, list[dict[str, Any]]]) -> None:
+    total = sum(len(v) for v in state.values())
+    while total > PENDING_MAX:  # drop the oldest entry overall
+        agent = min(state, key=lambda a: state[a][0]["ts"])
+        state[agent].pop(0)
+        if not state[agent]:
+            del state[agent]
+        total -= 1
+    if not state:
+        with contextlib.suppress(OSError):
+            os.unlink(path)
+        return
+    fd, tmp = tempfile.mkstemp(prefix=".pending-", suffix=".tmp", dir=os.path.dirname(path))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(state, f)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp)
+        raise
+
+
+def assign_tool_use_id(trace_file: str, event_type: str, agent_id: str, fields: dict[str, Any],
+                       now: float | None = None) -> None:
+    """Give a tool frame a ``tool_use_id`` (mutates ``fields``). Call under :func:`_state_lock`.
+
+    ``tool_call``: mint an id and queue it for this agent and ``tool_name``. ``tool_result``: pop
+    the oldest queued id for the same agent and ``tool_name``; if none is queued (an orphaned
+    result, or the call was purged), mint a fresh one. Ids are always marked
+    ``tool_use_id_synthesized``. Assumes calls of one tool finish in the order they started.
+    """
+    now = _now() if now is None else now
+    path = _pending_path(trace_file)
+    state = _load_pending(path, now)
+    tool = str(fields.get("tool_name") or "")
+    queue = state.setdefault(agent_id, [])
+    if event_type == "tool_call":
+        tid = secrets.token_hex(8)
+        queue.append({"tool": tool, "id": tid, "ts": now})
+    else:
+        idx = next((i for i, item in enumerate(queue) if item["tool"] == tool), None)
+        tid = queue.pop(idx)["id"] if idx is not None else secrets.token_hex(8)
+    if not queue:
+        del state[agent_id]
+    fields.update(tool_use_id=tid, tool_use_id_synthesized=True)
+    _save_pending(path, state)
 
 
 # === Raw capture ==========================================================
@@ -832,7 +960,7 @@ def _run_hook(argv: list[str]) -> None:
         payload = json.loads(stdin_text or "{}")
         if not isinstance(payload, dict):
             raise ValueError("hook payload is not a JSON object")
-        record(payload, trace_dir, event=event)
+        record(payload, trace_dir, event=event, responses="--responses" in argv)
     except BaseException as exc:  # never fail the hook (includes the watchdog's TimeoutError)
         _disarm_watchdog()
         _log_error(f"{type(exc).__name__}: {exc}", trace_dir)
@@ -841,7 +969,8 @@ def _run_hook(argv: list[str]) -> None:
 # === Installer ============================================================
 
 
-def hook_command(command: str | None = None, event: str | None = None, raw: bool = False) -> str:
+def hook_command(command: str | None = None, event: str | None = None, raw: bool = False,
+                 responses: bool = False) -> str:
     """The shell command a hook runs. Uses an absolute path to the executable.
 
     The command is guarded with ``>/dev/null 2>&1 || true`` so the shell always exits 0 and prints
@@ -854,6 +983,8 @@ def hook_command(command: str | None = None, event: str | None = None, raw: bool
         parts += f" --event {event}"
     if raw:
         parts += " --raw"
+    if responses:
+        parts += " --responses"
     return parts + HOOK_COMMAND_GUARD
 
 
@@ -868,8 +999,12 @@ def default_executable() -> str:
 
 
 def build_hooks(command: str | None = None, raw: bool = False, triggers: tuple[str, ...] = INSTALL_TRIGGERS,
-                timeout: int = HOOK_TIMEOUT_SECONDS) -> list[dict[str, Any]]:
-    """One command hook per trigger. An empty matcher on tool triggers means all tools."""
+                timeout: int = HOOK_TIMEOUT_SECONDS, responses: bool = False) -> list[dict[str, Any]]:
+    """One command hook per trigger. An empty matcher on tool triggers means all tools.
+
+    The tool hooks are written disabled (``enabled: false``): the Kiro IDE shows a card for every
+    tool call that fires one, so they are turned on only for a session you want traced, with
+    ``spiritwriter-kiro-hook on``. The other hooks fire once per session or turn and stay enabled."""
     hooks = []
     for trig in triggers:
         hook: dict[str, Any] = {
@@ -879,7 +1014,8 @@ def build_hooks(command: str | None = None, raw: bool = False, triggers: tuple[s
         }
         if trig in _TOOL_TRIGGERS:
             hook["matcher"] = ""
-        hook.update(action={"type": "command", "command": hook_command(command, trig, raw)}, timeout=timeout, enabled=True)
+        hook.update(action={"type": "command", "command": hook_command(command, trig, raw, responses)}, timeout=timeout,
+                    enabled=trig not in _TOOL_TRIGGERS)
         hooks.append(hook)
     return hooks
 
@@ -896,7 +1032,7 @@ def _is_ours(hook: Any) -> bool:
 
 
 def plan_install(path: str, uninstall: bool = False, command: str | None = None, raw: bool = False,
-                 triggers: tuple[str, ...] = INSTALL_TRIGGERS) -> tuple[str, str | None]:
+                 triggers: tuple[str, ...] = INSTALL_TRIGGERS, responses: bool = False) -> tuple[str, str | None]:
     """Decide what to do for ``path``. Returns ``(action, new_text)``.
 
     ``action`` is ``create``, ``update``, ``unchanged``, ``remove`` or ``absent``; ``new_text`` is
@@ -926,7 +1062,13 @@ def plan_install(path: str, uninstall: bool = False, command: str | None = None,
             return "remove", None
         doc["hooks"] = others
     else:
-        doc["hooks"] = others + build_hooks(command, raw, triggers)
+        # Keep the on/off state a user (or `on` / `off`) already set on a hook of ours.
+        prev = {h["name"]: h["enabled"] for h in doc["hooks"] if _is_ours(h) and isinstance(h.get("enabled"), bool)}
+        new = build_hooks(command, raw, triggers, responses=responses)
+        for h in new:
+            if h["name"] in prev:
+                h["enabled"] = prev[h["name"]]
+        doc["hooks"] = others + new
     new_text = json.dumps(doc, indent=2) + "\n"
     if existing_text is None:
         return "create", new_text
@@ -964,6 +1106,8 @@ def run_install(argv: list[str], out: Any = None) -> int:
     ap.add_argument("--dry-run", action="store_true", help="print what would change, write nothing")
     ap.add_argument("--uninstall", action="store_true", help="remove the spiritwriter hooks")
     ap.add_argument("--raw", action="store_true", help="register hooks with raw capture on")
+    ap.add_argument("--with-responses", action="store_true",
+                    help="also record the redacted tool_response body (default: only ok)")
     ap.add_argument("--command", help="hook command to register (default: absolute path of this executable)")
     ap.add_argument("--triggers", help=f"comma-separated triggers (default: {', '.join(INSTALL_TRIGGERS)}); "
                     f"also accepted, off by default: {', '.join(EXTRA_TRIGGERS)}")
@@ -990,7 +1134,7 @@ def run_install(argv: list[str], out: Any = None) -> int:
         return 2
     path = hook_file_path(ns.workspace, ns.global_)
     try:
-        action, text = plan_install(path, ns.uninstall, ns.command, ns.raw, triggers)
+        action, text = plan_install(path, ns.uninstall, ns.command, ns.raw, triggers, ns.with_responses)
     except (ValueError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
@@ -1013,6 +1157,88 @@ def run_install(argv: list[str], out: Any = None) -> int:
     return 0
 
 
+def plan_toggle(path: str, state: str) -> tuple[str, str | None]:
+    """Decide what ``on`` / ``off`` does to the tool hooks in ``path``. Returns ``(action, new_text)``
+    with action ``changed`` or ``unchanged``. Only hooks of ours for the tool triggers are touched.
+    Raises ``ValueError`` if the file is missing, unparseable, or has no tool hooks of ours."""
+    if not os.path.exists(path):
+        raise ValueError(f"{path} does not exist; run `spiritwriter-kiro-hook install` first")
+    with open(path, encoding="utf-8") as f:
+        text = f.read()
+    try:
+        doc = json.loads(text)
+    except ValueError as exc:
+        raise ValueError(f"{path} is not valid JSON ({exc}); not touching it") from exc
+    if not isinstance(doc, dict) or not isinstance(doc.get("hooks"), list):
+        raise ValueError(f"{path} is not a Kiro hook file (expected an object with a 'hooks' list); not touching it")
+    tool_hooks = [h for h in doc["hooks"] if _is_ours(h) and h.get("trigger") in _TOOL_TRIGGERS]
+    if not tool_hooks:
+        raise ValueError(f"{path} has no spiritwriter tool hooks (PreToolUse / PostToolUse); install them with --triggers")
+    want = state == "on"
+    if all(h.get("enabled") is want for h in tool_hooks):
+        return "unchanged", None
+    for h in tool_hooks:
+        h["enabled"] = want
+    return "changed", json.dumps(doc, indent=2) + "\n"
+
+
+def tool_hook_state(path: str) -> list[tuple[str, bool]]:
+    """``[(trigger, enabled)]`` for our hooks in ``path``; raises ``ValueError`` as :func:`plan_toggle`."""
+    if not os.path.exists(path):
+        raise ValueError(f"{path} does not exist; run `spiritwriter-kiro-hook install` first")
+    try:
+        with open(path, encoding="utf-8") as f:
+            doc = json.load(f)
+    except ValueError as exc:
+        raise ValueError(f"{path} is not valid JSON ({exc})") from exc
+    if not isinstance(doc, dict) or not isinstance(doc.get("hooks"), list):
+        raise ValueError(f"{path} is not a Kiro hook file")
+    return [(str(h.get("trigger")), h.get("enabled") is not False) for h in doc["hooks"] if _is_ours(h)]
+
+
+def run_toggle(action: str, argv: list[str], out: Any = None) -> int:
+    """``spiritwriter-kiro-hook on|off|status [--global | --workspace PATH]``.
+
+    ``on`` / ``off`` set ``enabled`` on the spiritwriter tool hooks (PreToolUse, PostToolUse) in
+    our own hook file; nothing else in that file or any other file is touched. ``status`` reports
+    them. Exit codes: 0 ok, 1 refused or not installed, 2 usage."""
+    import argparse
+
+    out = out or sys.stdout
+    ap = argparse.ArgumentParser(prog=f"spiritwriter-kiro-hook {action}",
+                                 description="Show tool tracing state." if action == "status" else f"Turn tool tracing {action}.")
+    ap.add_argument("--global", dest="global_", action="store_true", help="the hooks in ~/.kiro/hooks")
+    ap.add_argument("--workspace", metavar="PATH", help="the workspace directory (default: the current directory)")
+    try:
+        ns = ap.parse_args(argv)
+    except SystemExit as exc:
+        return int(exc.code or 0) if exc.code != 0 else 0
+    if ns.global_ and ns.workspace:
+        print("error: give --workspace or --global, not both", file=sys.stderr)
+        return 2
+    if ns.workspace and not os.path.isdir(os.path.expanduser(ns.workspace)):
+        print(f"error: workspace {ns.workspace!r} is not a directory", file=sys.stderr)
+        return 2
+    path = hook_file_path(ns.workspace, ns.global_)
+    try:
+        if action == "status":
+            states = tool_hook_state(path)
+            tools = [e for t, e in states if t in _TOOL_TRIGGERS]
+            word = "on" if tools and all(tools) else "off" if tools and not any(tools) else "mixed" if tools else "not installed"
+            print(f"tool tracing: {word} ({path})", file=out)
+            for trig, enabled in states:
+                print(f"  {trig}: {'enabled' if enabled else 'disabled'}", file=out)
+            return 0
+        _, text = plan_toggle(path, action)
+        if text is not None:
+            _atomic_write(path, text)
+    except (ValueError, OSError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(f"tool tracing {action}: {'updated' if text is not None else 'already ' + action}: {path}", file=out)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     """``spiritwriter-kiro-hook [install ...]``.
 
@@ -1023,6 +1249,8 @@ def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     if args and args[0] == "install":
         return run_install(args[1:])
+    if args and args[0] in ("on", "off", "status"):
+        return run_toggle(args[0], args[1:])
     return run_hook(args)
 
 
