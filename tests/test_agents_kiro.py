@@ -111,6 +111,7 @@ class TestHookToEvent:
         ("executeBash", "shell"), ("execute_bash", "shell"),
         ("webFetch", "web"), ("remote_web_search", "web"),
         ("use_aws", "other"), ("somethingNew", "other"),
+        ("invoke_sub_agent", "spawn"), ("subagent_response", "spawn"), ("report_progress", "other"),
         ("codegen", "other"), ("credit", "other"), ("tools_x", "other"), ("openai_helper", "other"), ("readCode", "read"),
     ])
     def test_tool_kinds(self, tool, kind):
@@ -178,10 +179,10 @@ class TestHookToEvent:
         assert kiro.configured_mcp_servers(str(tmp_path)) == {"one_server"}
         opens = []
         real_open = open
-        monkeypatch.setattr("builtins.open", lambda *a, **k: (opens.append(a[0]), real_open(*a, **k))[1])
-        assert kiro.configured_mcp_servers(str(tmp_path)) == {"one_server"}
-        assert not [o for o in opens if str(o).endswith("mcp.json")]
-        monkeypatch.undo()
+        with monkeypatch.context() as m:  # scope the patch; the autouse temp HOME must stay in place
+            m.setattr("builtins.open", lambda *a, **k: (opens.append(a[0]), real_open(*a, **k))[1])
+            assert kiro.configured_mcp_servers(str(tmp_path)) == {"one_server"}
+            assert not [o for o in opens if str(o).endswith("mcp.json")]
         _mcp_config(tmp_path, "one-server", "two-server")
         assert kiro.configured_mcp_servers(str(tmp_path)) == {"one_server", "two_server"}
 
@@ -488,8 +489,6 @@ class TestMain:
         monkeypatch.setattr(kiro, "record", lambda *a, **k: remaining.append(signal.alarm(0)))
         rc, _ = self._run(monkeypatch, capsys, '{"session_id": "s"}', ["--dir", str(tmp_path)])
         assert rc == 0 and remaining == [0]
-        monkeypatch.undo()
-        signal.alarm(0)
 
     @posix_only
     def test_watchdog_is_armed_during_the_stdin_read(self, tmp_path, monkeypatch, capsys):

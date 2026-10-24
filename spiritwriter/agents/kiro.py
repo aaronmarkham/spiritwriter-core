@@ -127,6 +127,10 @@ EXTRA_TRIGGERS = ("PreTaskExec", "PostTaskExec", "PostFileCreate", "PostFileSave
 _FILE_EVENTS = {"PostFileCreate": "file_created", "PostFileSave": "file_saved", "PostFileDelete": "file_deleted"}
 _TOOL_TRIGGERS = frozenset({"PreToolUse", "PostToolUse"})
 
+# Kiro built-in tool ids that the word hints cannot classify. ``spawn`` marks a subagent launch or
+# its response (viewers use the same kind for the Claude Code recorder's Agent/Task tools).
+# ``report_progress`` is deliberately not listed: it stays ``other``.
+_EXACT_KINDS = {"invoke_sub_agent": "spawn", "subagent_response": "spawn"}
 _BUILTIN_CATEGORIES = frozenset({"read", "write", "shell", "web", "spec"})
 # Whole-word hints over the tokens of the tool id (split on case changes, digits and
 # punctuation); first match wins. Built-in tool ids are not documented, so these cover the names
@@ -239,7 +243,7 @@ def split_mcp_id(tool_id: str, servers: Any) -> tuple[str, str] | None:
 def classify_tool(tool_name: Any, payload: dict[str, Any] | None = None, mcp_servers: Any = None) -> dict[str, Any]:
     """Tool id -> ``{tool_kind, ...}``.
 
-    ``tool_kind`` is one of ``read``, ``write``, ``shell``, ``web``, ``spec``, ``mcp`` or ``other``.
+    ``tool_kind`` is one of ``read``, ``write``, ``shell``, ``web``, ``spec``, ``spawn``, ``mcp`` or ``other``.
     A Kiro ``mcp_<server>_<tool>`` id always yields ``mcp_id`` (the raw id). ``mcp_server`` and
     ``mcp_tool`` are set only when ``mcp_servers`` (normalized configured server names, see
     :func:`configured_mcp_servers`) contains a prefix of the id; see :func:`split_mcp_id`. The
@@ -267,7 +271,9 @@ def classify_tool(tool_name: Any, payload: dict[str, Any] | None = None, mcp_ser
     else:
         words = {w.lower() for w in re.findall(r"[A-Z]?[a-z]+|[A-Z]+(?![a-z])|\d+", name)}
         kind = "other"
-        if name.lower() in _BUILTIN_CATEGORIES:
+        if name in _EXACT_KINDS:
+            kind = _EXACT_KINDS[name]
+        elif name.lower() in _BUILTIN_CATEGORIES:
             kind = name.lower()
         else:
             for k, hints in _KIND_HINTS:
