@@ -18,6 +18,11 @@ from spiritwriter.ingest.document import (
     DocumentIngestor,
     DocumentIngestorAgent,  # Backward compatibility alias
 )
+from spiritwriter.ingest.shingled import (
+    ExtractionRecipe,
+    ExtractionRun,
+    run_shingled_extraction,
+)
 
 __all__ = [
     "ExtractionResult",
@@ -27,4 +32,7 @@ __all__ = [
     "SUPPORTED_SUFFIXES",
     "DocumentIngestor",
     "DocumentIngestorAgent",
+    "ExtractionRecipe",
+    "ExtractionRun",
+    "run_shingled_extraction",
 ]
