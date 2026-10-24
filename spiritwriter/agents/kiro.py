@@ -43,11 +43,12 @@ from an allowlist of low-risk fields and scrubbed of secret shapes.
 Prompts are recorded as a hash and a length only. A tool's
 ``tool_response`` is recorded redacted and capped at :data:`RESPONSE_MAX` characters.
 
-**Lineage (unverified for subagents).** Kiro runs every hook with ``KIRO_SESSION_ID`` set to the
-root conversation id. It is recorded as ``root_session_id``. When it differs from the payload
-``session_id`` the trace is keyed by the root and ``agent_id`` is the payload ``session_id``, so a
-child conversation nests under its root. Whether Kiro really gives subagents their own
-``session_id`` has not been confirmed with a raw capture of a subagent call.
+**Lineage (unconfirmed for subagents).** Same naming as the Claude Code recorder. Kiro runs every
+hook with ``KIRO_SESSION_ID`` set to the root conversation id. The trace's ``session_id`` (also
+its ``run_id`` and file key) is that root, else the payload ``session_id``. When the payload
+``session_id`` differs from the root, ``agent_id`` is the payload ``session_id`` (a child
+conversation); otherwise ``agent_id`` is ``main``. No other field carries the root. A live run
+did not show a subagent with a distinct ``session_id``, so this is unconfirmed.
 """
 
 from __future__ import annotations
@@ -434,23 +435,23 @@ def kiro_root_session(env: Any = None) -> str:
     return v.strip() if isinstance(v, str) and v.strip() else ""
 
 
-def lineage(payload: dict[str, Any], env: Any = None) -> tuple[str, str, str]:
-    """``(trace_key, agent_id, root_session_id)`` for one hook call.
+def lineage(payload: dict[str, Any], env: Any = None) -> tuple[str, str]:
+    """``(session_id, agent_id)`` for one hook call, named as in the Claude Code recorder.
 
-    The trace is keyed by the root conversation id when ``KIRO_SESSION_ID`` is set and differs
-    from the payload ``session_id``; the payload ``session_id`` then names the agent, so a child
-    conversation nests under its root. Otherwise the key is :func:`session_key` and the agent is
-    ``main``. Unverified for subagents: it assumes Kiro gives a subagent's hooks a ``session_id``
+    ``session_id`` (the trace key and ``run_id``) is the root conversation id from
+    ``KIRO_SESSION_ID`` when set, else the payload ``session_id`` (:func:`session_key`).
+    ``agent_id`` is the payload ``session_id`` when it differs from the root, so a child
+    conversation nests under its root, and ``main`` otherwise. Unconfirmed for subagents: it assumes Kiro gives a subagent's hooks a ``session_id``
     different from the root id, which needs a raw capture of a real subagent call to confirm.
     """
     root = kiro_root_session(env)
     own = payload.get("session_id")
     own = str(own) if isinstance(own, (str, int)) and not isinstance(own, bool) and str(own).strip() else ""
     if root and own and own != root:
-        return root, _id_str(own) or MAIN_AGENT, root
+        return root, _id_str(own) or MAIN_AGENT
     if root and not own:
-        return root, MAIN_AGENT, root
-    return session_key(payload), MAIN_AGENT, root
+        return root, MAIN_AGENT
+    return session_key(payload), MAIN_AGENT
 
 
 # === Mapping ==============================================================
@@ -473,14 +474,12 @@ def hook_to_event(payload: dict[str, Any], event: str | None = None, env: Any = 
     """
     raw_name = payload.get("hook_event_name") or event
     hook = normalize_trigger(raw_name)
-    _, lineage_agent, root = lineage(payload, env)
+    _, lineage_agent = lineage(payload, env)
     fields: dict[str, Any] = {
         "source": SOURCE,
         "hook_event": hook,
         "agent_id": _id_str(payload.get("agent_id")) or lineage_agent,
     }
-    if root:
-        fields["root_session_id"] = _id_str(root)
     if isinstance(raw_name, str) and raw_name:
         fields["kiro_trigger"] = scrub_name(raw_name)
     if _id_str(payload.get("agent_type")):
@@ -583,7 +582,7 @@ def record(
     env: Any = None,
 ) -> dict[str, Any]:
     """Append one hook payload to its session's trace. Returns the emitted event."""
-    session_id, _, _ = lineage(payload, env)
+    session_id, _ = lineage(payload, env)
     path = trace_path(session_id, trace_dir)
     os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
     if not os.path.exists(path):
@@ -667,6 +666,7 @@ def capture_raw(
         "event_arg": event,
         "argv": [redact_text(a) for a in (argv or [])],
         "env_keys": sorted(k for k in env if k.upper().startswith("KIRO")),
+        KIRO_SESSION_ENV: redact_value(env.get(KIRO_SESSION_ENV)),  # as received, for diagnosis
     }
     with_prompts = str(env.get(RAW_PROMPTS_ENV, "")).strip().lower() in ("1", "true", "yes", "on")
     payload_obj: Any = None

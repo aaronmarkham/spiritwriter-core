@@ -575,6 +575,14 @@ class TestRawCapture:
         self._run(monkeypatch, "{}", ["--raw", "--raw-file", str(raw), "--dir", str(tmp_path / "t")])
         assert _read(raw)[0]["prompt_present"] is False
 
+    def test_raw_capture_keeps_session_values_as_received(self, tmp_path, monkeypatch):
+        raw = tmp_path / "raw.jsonl"
+        self._run(monkeypatch, json.dumps({"hook_event_name": "Stop", "session_id": "child-9"}),
+                  ["--raw", "--raw-file", str(raw), "--dir", str(tmp_path / "t")], KIRO_SESSION_ID="root-1")
+        (rec,) = _read(raw)
+        assert rec["KIRO_SESSION_ID"] == "root-1" and rec["payload"]["session_id"] == "child-9"
+        assert "root_session_id" not in rec
+
     def test_payload_prompt_counts_as_present(self, tmp_path, monkeypatch):
         raw = tmp_path / "raw.jsonl"
         self._run(monkeypatch, json.dumps({"hook_event_name": "UserPromptSubmit", "prompt": "refactor the parser"}),
@@ -835,19 +843,18 @@ class TestLineage:
     def test_no_root_env_means_main_keyed_by_payload(self):
         _, f = kiro.hook_to_event({"hook_event_name": "Stop", "session_id": "s1"}, env={})
         assert f["agent_id"] == kiro.MAIN_AGENT and "root_session_id" not in f
-        assert kiro.lineage({"session_id": "s1"}, {}) == ("s1", kiro.MAIN_AGENT, "")
+        assert kiro.lineage({"session_id": "s1"}, {}) == ("s1", kiro.MAIN_AGENT)
 
-    def test_same_id_is_main_and_records_root(self):
+    def test_same_id_is_main(self):
         _, f = kiro.hook_to_event({"hook_event_name": "Stop", "session_id": "s1"}, env={"KIRO_SESSION_ID": "s1"})
-        assert f["agent_id"] == kiro.MAIN_AGENT and f["root_session_id"] == "s1"
+        assert f["agent_id"] == kiro.MAIN_AGENT and "root_session_id" not in f
         assert kiro.lineage({"session_id": "s1"}, {"KIRO_SESSION_ID": "s1"})[0] == "s1"
 
     def test_child_conversation_keys_by_root_with_agent_id(self):
         env = {"KIRO_SESSION_ID": "root-1"}
-        key, agent, root = kiro.lineage({"session_id": "child-9"}, env)
-        assert (key, agent, root) == ("root-1", "child-9", "root-1")
+        assert kiro.lineage({"session_id": "child-9"}, env) == ("root-1", "child-9")
         _, f = kiro.hook_to_event({"hook_event_name": "PreToolUse", "session_id": "child-9", "tool_name": "readFile"}, env=env)
-        assert f["agent_id"] == "child-9" and f["root_session_id"] == "root-1"
+        assert f["agent_id"] == "child-9" and "root_session_id" not in f
 
     def test_missing_payload_session_falls_back_to_root(self):
         assert kiro.lineage({}, {"KIRO_SESSION_ID": "root-1"})[:2] == ("root-1", kiro.MAIN_AGENT)
@@ -863,7 +870,7 @@ class TestLineage:
         events = _read(trace)
         assert [e["run_id"] for e in events] == ["root-1"] * 3
         assert [e["agent_id"] for e in events] == [kiro.MAIN_AGENT, "child-9", kiro.MAIN_AGENT]
-        assert all(e["root_session_id"] == "root-1" for e in events) and verify_chain(events)
+        assert all("root_session_id" not in e for e in events) and verify_chain(events)
 
     def test_env_is_read_from_the_process_environment_by_default(self, monkeypatch):
         monkeypatch.setenv("KIRO_SESSION_ID", "root-2")
