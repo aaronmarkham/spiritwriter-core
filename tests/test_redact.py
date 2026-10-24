@@ -64,7 +64,7 @@ def _make_audit(d: Path, pkg: str) -> None:
          "evidence_files": ["classes.dex"], "evidence_file_hashes": {}},
         {"type": "audit_report_generated", "run_id": f"audit-{pkg}", "event_id": "e3",
          "ts": "2026-01-01T00:00:02Z", "agent_id": "test", "prev_event_hash": None,
-         "report_path": "report.json", "report_sha256": "b" * 64, "finding_count": 1, "permission_count": 1},
+         "report_path": "report.json", "report_sha256": "b" * 64, "finding_count": 2, "permission_count": 1},
     ]
     with open(d / "trace.jsonl", "w", encoding="utf-8") as f:
         for e in events:
@@ -201,11 +201,20 @@ def test_short_flagged_value_reported_and_not_swept(tmp_path: Path):
         "summary": {"narrative": f"Mentions {short} in prose."},
     }
     (src / "report.json").write_text(json.dumps(report), encoding="utf-8")
+    input_event = {
+        "type": "audit_input_registered", "run_id": "r", "event_id": "e1",
+        "ts": "2026-01-01T00:00:00Z", "agent_id": "t", "prev_event_hash": None,
+        "package_name": "com.test.app", "apk_sha256": "a" * 64,
+        "apk_size_bytes": 1, "download_source": "test",
+    }
+    terminal_event = {
+        "type": "audit_report_generated", "run_id": "r", "event_id": "e2",
+        "ts": "2026-01-01T00:00:01Z", "agent_id": "t", "prev_event_hash": None,
+        "report_path": "report.json", "report_sha256": "b" * 64,
+        "finding_count": 0, "permission_count": 0,
+    }
     (src / "trace.jsonl").write_text(
-        json.dumps({"type": "audit_input_registered", "run_id": "r", "event_id": "e1",
-                    "ts": "2026-01-01T00:00:00Z", "agent_id": "t", "prev_event_hash": None,
-                    "package_name": "com.test.app", "apk_sha256": "a" * 64,
-                    "apk_size_bytes": 1, "download_source": "test"}) + "\n",
+        json.dumps(input_event) + "\n" + json.dumps(terminal_event) + "\n",
         encoding="utf-8",
     )
 

@@ -12,7 +12,7 @@ import os
 import time
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Callable, Iterator
+from typing import Any, Callable, Iterator, Mapping
 
 try:
     import fcntl
@@ -25,11 +25,19 @@ from spiritwriter.fabric.shard import _canonical_json, _sha256, _now_iso
 class TraceChainError(ValueError):
     """A trace file is in a state that can't be safely extended or read.
 
-    Raised for a torn final line (a writer died mid-append), a final
-    event with no ``hash``, or a file that shrank under a reader. Each
-    of these means the on-disk chain is no longer the append-only log
-    it claims to be, so continuing silently would fork or hide it.
+    Raised for a torn final line, an invalid hash chain, an unsafe
+    single-owner append, or a stream-identity mismatch. Each means the
+    on-disk chain cannot be extended or witnessed without ambiguity.
     """
+
+
+class TraceReceiptError(TraceChainError):
+    """A trace cannot produce or verify a strict terminal receipt."""
+
+
+RESERVED_EVENT_FIELDS = frozenset(
+    {"type", "run_id", "event_id", "ts", "agent_id", "prev_event_hash", "hash", "sig"}
+)
 
 
 class TraceEmitter:
@@ -48,6 +56,13 @@ class TraceEmitter:
 
     All cap-context fields are optional. Emitters built without them
     produce events identical in shape to the pre-feature version.
+
+    **Single-owner resume (optional).** A non-concurrent emitter owns a
+    fresh file for its lifetime. It refuses its first append when the
+    file already contains events, because starting from an in-memory
+    ``None`` head would fork the chain. Pass ``strict_resume=True`` to
+    resume deliberately; the complete existing chain and its run ID
+    are validated before the first new event is appended.
 
     **Concurrent mode (optional, POSIX).** By default the chain head
     lives in memory, so one emitter owns one file. Pass
@@ -73,7 +88,10 @@ class TraceEmitter:
         subject_thumbprint: str | None = None,
         role: str | None = None,
         concurrent: bool = False,
+        strict_resume: bool = False,
     ):
+        if concurrent and strict_resume:
+            raise ValueError("strict_resume is only valid for single-owner emitters")
         if concurrent and fcntl is None:
             raise NotImplementedError(
                 "TraceEmitter(concurrent=True) needs POSIX fcntl.flock; "
@@ -84,7 +102,9 @@ class TraceEmitter:
         self.out_path = out_path
         self.signer = signer  # Optional Ed25519 signer
         self.concurrent = concurrent
+        self.strict_resume = strict_resume
         self.prev_hash: str | None = None
+        self._single_owner_ready = False
         # Cap context — sticky defaults applied to every emitted event
         # unless overridden per-call.
         self.cap_id = cap_id
@@ -96,19 +116,22 @@ class TraceEmitter:
     def emit(self, event_type: str, **kwargs: Any) -> dict[str, Any]:
         """Emit a trace event, chain it, optionally sign it.
 
-        Cap-context fields (cap_id, cap_chain, subject_thumbprint, role)
-        set on the emitter attach automatically and are covered by the
-        chained hash. Override per-event by passing them as kwargs.
-        Explicit ``None`` on a cap-context kwarg is treated as
-        "not passed" (so the emitter's sticky default still applies) —
-        otherwise a caller like ``emit("x", cap_id=maybe_none)`` would
-        silently write ``cap_id: null`` into the event, which is almost
-        never what you want.
+        Structural trace fields are reserved and cannot be supplied in
+        ``kwargs``. Cap-context fields (cap_id, cap_chain,
+        subject_thumbprint, role) set on the emitter attach automatically
+        and remain overridable per event. Explicit ``None`` on a cap-context
+        kwarg is treated as absent, so the sticky default still applies.
 
         In concurrent mode the chain head is read from the file under
         an exclusive lock rather than taken from ``self.prev_hash``.
         """
+        reserved = RESERVED_EVENT_FIELDS.intersection(kwargs)
+        if reserved:
+            names = ", ".join(sorted(reserved))
+            raise ValueError(f"reserved trace field(s) cannot be overridden: {names}")
+
         if not self.concurrent:
+            self._prepare_single_owner()
             evt = self._seal(event_type, self.prev_hash, kwargs)
             self._write(evt)
         else:
@@ -125,12 +148,42 @@ class TraceEmitter:
         self.prev_hash = evt["hash"]
         return evt
 
+    def _prepare_single_owner(self) -> None:
+        """Initialize a fresh stream or strictly resume an existing one."""
+        if self._single_owner_ready:
+            return
+
+        try:
+            size = os.path.getsize(self.out_path)
+        except FileNotFoundError:
+            size = 0
+
+        if size:
+            if not self.strict_resume:
+                raise TraceChainError(
+                    f"{self.out_path}: refusing to append to an existing trace with a "
+                    "single-owner emitter; pass strict_resume=True to validate and resume"
+                )
+            _, events, stream_id = _read_trace_snapshot(self.out_path)
+            if stream_id != self.run_id:
+                raise TraceChainError(
+                    f"{self.out_path}: trace run_id {stream_id!r} does not match "
+                    f"requested run_id {self.run_id!r}"
+                )
+            self.prev_hash = events[-1]["hash"]
+        elif self.strict_resume:
+            raise TraceChainError(
+                f"{self.out_path}: strict resume requires an existing non-empty trace"
+            )
+
+        self._single_owner_ready = True
+
     def _seal(self, event_type: str, prev_hash: str | None, kwargs: dict[str, Any]) -> dict[str, Any]:
         """Build, hash, and optionally sign one event linked to ``prev_hash``."""
         evt: dict[str, Any] = {
             "type": event_type,
             "run_id": self.run_id,
-            "event_id": kwargs.pop("event_id", str(uuid.uuid4())),
+            "event_id": str(uuid.uuid4()),
             "ts": _now_iso(),
             "agent_id": self.agent_id,
             "prev_event_hash": prev_hash,
@@ -401,6 +454,115 @@ class TraceEmitter:
                 return [json.loads(line) for line in f if line.strip()]
         except FileNotFoundError:
             return []
+
+
+def _read_trace_snapshot(path: str | os.PathLike[str]) -> tuple[bytes, list[dict[str, Any]], str]:
+    """Read and strictly validate one complete trace byte snapshot."""
+    path_str = os.fspath(path)
+    try:
+        with open(path_str, "rb") as f:
+            trace_bytes = f.read()
+    except OSError as exc:
+        raise TraceChainError(f"{path_str}: cannot read trace: {exc}") from exc
+
+    if not trace_bytes:
+        raise TraceChainError(f"{path_str}: trace is empty")
+    if not trace_bytes.endswith(b"\n"):
+        raise TraceChainError(f"{path_str}: last line is incomplete (torn append)")
+
+    events: list[dict[str, Any]] = []
+    try:
+        for line_number, line in enumerate(trace_bytes.splitlines(), start=1):
+            if not line.strip():
+                continue
+            event = json.loads(line)
+            if not isinstance(event, dict):
+                raise TraceChainError(
+                    f"{path_str}: line {line_number} is not a trace event object"
+                )
+            events.append(event)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise TraceChainError(f"{path_str}: invalid trace JSON: {exc}") from exc
+
+    if not events:
+        raise TraceChainError(f"{path_str}: trace contains no events")
+    if not verify_chain(events):
+        raise TraceChainError(f"{path_str}: hash chain verification failed")
+
+    run_ids = [event.get("run_id") for event in events]
+    if any(not isinstance(run_id, str) or not run_id for run_id in run_ids):
+        raise TraceChainError(f"{path_str}: every event must have a non-empty string run_id")
+    if any(run_id != run_ids[0] for run_id in run_ids[1:]):
+        raise TraceChainError(f"{path_str}: trace contains multiple run_id values")
+
+    return trace_bytes, events, run_ids[0]
+
+
+def generate_trace_receipt(
+    trace_path: str | os.PathLike[str],
+    terminal_artifacts: Mapping[str, str | os.PathLike[str]],
+    *,
+    stream_id: str | None = None,
+) -> dict[str, Any]:
+    """Build a self-hashing receipt for a completed trace and its artifacts.
+
+    The receipt binds the exact JSONL bytes, homogeneous trace ``run_id``,
+    event count, chain endpoints, and SHA-256 of each named terminal
+    artifact. Artifact paths are inputs only and are not embedded, so a
+    verified bundle remains relocatable.
+    """
+    trace_bytes, events, actual_stream_id = _read_trace_snapshot(trace_path)
+    if stream_id is not None and actual_stream_id != stream_id:
+        raise TraceReceiptError(
+            f"trace stream_id {actual_stream_id!r} does not match expected {stream_id!r}"
+        )
+    if not terminal_artifacts:
+        raise TraceReceiptError("at least one terminal artifact is required")
+
+    artifact_hashes: dict[str, str] = {}
+    artifact_bytes: dict[str, int] = {}
+    for name, path in terminal_artifacts.items():
+        if not isinstance(name, str) or not name:
+            raise TraceReceiptError("terminal artifact names must be non-empty strings")
+        try:
+            with open(os.fspath(path), "rb") as f:
+                data = f.read()
+        except OSError as exc:
+            raise TraceReceiptError(f"cannot read terminal artifact {name!r}: {exc}") from exc
+        artifact_hashes[name] = hashlib.sha256(data).hexdigest()
+        artifact_bytes[name] = len(data)
+
+    receipt: dict[str, Any] = {
+        "receipt_version": "1.0",
+        "receipt_sha256": None,
+        "stream_id": actual_stream_id,
+        "event_count": len(events),
+        "first_event_hash": events[0]["hash"],
+        "last_event_hash": events[-1]["hash"],
+        "trace_sha256": hashlib.sha256(trace_bytes).hexdigest(),
+        "trace_bytes": len(trace_bytes),
+        "terminal_artifact_hashes": artifact_hashes,
+        "terminal_artifact_bytes": artifact_bytes,
+    }
+    receipt["receipt_sha256"] = _sha256(_canonical_json(receipt))
+    return receipt
+
+
+def verify_trace_receipt(
+    receipt: Mapping[str, Any],
+    trace_path: str | os.PathLike[str],
+    terminal_artifacts: Mapping[str, str | os.PathLike[str]],
+) -> bool:
+    """Return whether a receipt matches the exact trace and artifact bytes."""
+    try:
+        expected = generate_trace_receipt(
+            trace_path,
+            terminal_artifacts,
+            stream_id=receipt.get("stream_id"),
+        )
+    except (TraceChainError, TypeError, ValueError):
+        return False
+    return dict(receipt) == expected
 
 
 def _last_event_hash(f: Any) -> str | None:

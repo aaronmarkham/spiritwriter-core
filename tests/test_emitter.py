@@ -21,6 +21,7 @@ from pathlib import Path
 import pytest
 
 from spiritwriter.fabric.emitter import (
+    RESERVED_EVENT_FIELDS,
     TraceEmitter,
     verify_chain,
     events_by_cap,
@@ -28,6 +29,20 @@ from spiritwriter.fabric.emitter import (
     events_by_role,
     events_under_chain,
 )
+
+
+# === Reserved event fields ==============================================
+
+
+@pytest.mark.parametrize("field", sorted(RESERVED_EVENT_FIELDS))
+def test_reserved_event_fields_cannot_be_overridden(tmp_path, field):
+    path = tmp_path / "trace.jsonl"
+    emitter = TraceEmitter(run_id="r", agent_id="a", out_path=str(path))
+
+    with pytest.raises(ValueError, match="reserved trace field"):
+        emitter.emit("step", **{field: "caller-value"})
+
+    assert not path.exists()
 
 
 # === Cap context on emitters ============================================

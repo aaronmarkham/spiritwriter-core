@@ -38,6 +38,7 @@ verifies), and a fail-closed residual gate over the output.
 """
 
 from spiritwriter.audit.provenance import (
+    AuditWitnessError,
     emit_audit_evidence,
     emit_audit_finding,
     emit_audit_input,
@@ -45,6 +46,7 @@ from spiritwriter.audit.provenance import (
     emit_audit_strings,
     generate_witness,
     trace_existing_audit,
+    validate_audit_terminal,
 )
 from spiritwriter.audit.registry import (
     AUDIT_FINDING_SCHEMA,
@@ -56,6 +58,7 @@ from spiritwriter.audit.verify import verify, verify_l1, verify_l2, verify_l3, v
 
 __all__ = [
     "AUDIT_FINDING_SCHEMA",
+    "AuditWitnessError",
     "canonical_finding_list",
     "emit_audit_evidence",
     "emit_audit_finding",
@@ -65,6 +68,7 @@ __all__ = [
     "generate_witness",
     "load_registry",
     "trace_existing_audit",
+    "validate_audit_terminal",
     "validate_report",
     "verify",
     "verify_l1",

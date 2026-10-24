@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from spiritwriter.audit import (
+    AuditWitnessError,
     generate_witness,
     load_registry,
     trace_existing_audit,
@@ -19,6 +20,7 @@ from spiritwriter.audit import (
     verify_l2,
 )
 from spiritwriter.audit.seed import seed
+from spiritwriter.fabric.emitter import TraceEmitter, verify_trace_receipt
 
 
 # ── Fixtures ────────────────────────────────────────────────────────
@@ -219,6 +221,85 @@ def test_witness_self_hash_survives_roundtrip(fake_apk, fake_report):
     witness["witness_sha256"] = None
     canon = json.dumps(witness, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     assert claimed == hashlib.sha256(canon.encode("utf-8")).hexdigest()
+
+
+def test_witness_contains_verifiable_terminal_trace_receipt(fake_apk, fake_report):
+    apk, extraction = fake_apk
+    trace_path, witness_path = trace_existing_audit(
+        package_name="com.example.app",
+        apk_path=apk,
+        extraction_dir=extraction,
+        report_path=fake_report,
+    )
+    witness = json.loads(witness_path.read_text())
+
+    assert witness["witness_version"] == "1.1"
+    assert witness["trace_receipt"]["last_event_hash"] == witness["trace_chain"]["last_event_hash"]
+    assert witness["trace_receipt"]["terminal_artifact_hashes"]["report"] == witness["report"]["sha256"]
+    assert verify_trace_receipt(
+        witness["trace_receipt"], trace_path, {"report": fake_report}
+    )
+
+
+def _report_terminal_fields(report_path):
+    report = json.loads(report_path.read_text())
+    return {
+        "report_path": str(report_path),
+        "report_sha256": hashlib.sha256(report_path.read_bytes()).hexdigest(),
+        "finding_count": len(report.get("findings", [])),
+        "permission_count": len(report.get("permissions", [])),
+    }
+
+
+def test_generate_witness_requires_terminal_report_event(fake_report):
+    trace_path = fake_report.parent / "missing-terminal.jsonl"
+    TraceEmitter("run-1", "a", str(trace_path)).emit("audit_started")
+
+    with pytest.raises(AuditWitnessError, match="exactly one"):
+        generate_witness(trace_path, fake_report)
+
+
+def test_generate_witness_rejects_duplicate_terminal_report_events(fake_report):
+    trace_path = fake_report.parent / "duplicate-terminal.jsonl"
+    emitter = TraceEmitter("run-1", "a", str(trace_path))
+    fields = _report_terminal_fields(fake_report)
+    emitter.emit("audit_report_generated", **fields)
+    emitter.emit("audit_report_generated", **fields)
+
+    with pytest.raises(AuditWitnessError, match="exactly one"):
+        generate_witness(trace_path, fake_report)
+
+
+def test_generate_witness_requires_report_event_to_be_final(fake_report):
+    trace_path = fake_report.parent / "non-final-terminal.jsonl"
+    emitter = TraceEmitter("run-1", "a", str(trace_path))
+    emitter.emit("audit_report_generated", **_report_terminal_fields(fake_report))
+    emitter.emit("unexpected_followup")
+
+    with pytest.raises(AuditWitnessError, match="final trace event"):
+        generate_witness(trace_path, fake_report)
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("report_sha256", "0" * 64, "report hash"),
+        ("finding_count", 999, "finding_count"),
+        ("permission_count", 999, "permission_count"),
+    ],
+)
+def test_generate_witness_verifies_terminal_report_commitment(
+    fake_report, field, value, message
+):
+    trace_path = fake_report.parent / f"bad-{field}.jsonl"
+    fields = _report_terminal_fields(fake_report)
+    fields[field] = value
+    TraceEmitter("run-1", "a", str(trace_path)).emit(
+        "audit_report_generated", **fields
+    )
+
+    with pytest.raises(AuditWitnessError, match=message):
+        generate_witness(trace_path, fake_report)
 
 
 def test_trace_clears_stale_jsonl_before_emitting(fake_apk, fake_report):

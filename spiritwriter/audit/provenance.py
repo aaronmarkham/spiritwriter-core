@@ -25,11 +25,65 @@ from spiritwriter.audit._util import (
     sha256_bytes,
     sha256_file,
 )
-from spiritwriter.fabric.emitter import TraceEmitter, verify_chain
+from spiritwriter.fabric.emitter import (
+    TraceEmitter,
+    generate_trace_receipt,
+    verify_chain,
+)
+
+
+class AuditWitnessError(ValueError):
+    """An audit trace does not strictly bind its terminal report."""
 
 
 def _canonical_json_str(obj: Any) -> str:
     return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def validate_audit_terminal(
+    events: list[dict[str, Any]],
+    report_bytes: bytes,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Validate the unique final report event against exact report bytes."""
+    if not events or not verify_chain(events):
+        raise AuditWitnessError("audit trace must be a non-empty valid hash chain")
+
+    terminal_events = [
+        event for event in events if event.get("type") == "audit_report_generated"
+    ]
+    if len(terminal_events) != 1:
+        raise AuditWitnessError(
+            "audit trace must contain exactly one audit_report_generated event"
+        )
+    terminal = terminal_events[0]
+    if terminal is not events[-1]:
+        raise AuditWitnessError("audit_report_generated must be the final trace event")
+
+    try:
+        report = json.loads(report_bytes)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise AuditWitnessError(f"report is not valid JSON: {exc}") from exc
+    if not isinstance(report, dict):
+        raise AuditWitnessError("report JSON must be an object")
+
+    actual_sha256 = sha256_bytes(report_bytes)
+    if terminal.get("report_sha256") != actual_sha256:
+        raise AuditWitnessError("terminal report hash does not match report bytes")
+
+    for field, report_field in (
+        ("finding_count", "findings"),
+        ("permission_count", "permissions"),
+    ):
+        value = report.get(report_field, [])
+        if not isinstance(value, list):
+            raise AuditWitnessError(f"report field {report_field!r} must be a list")
+        committed = terminal.get(field)
+        if type(committed) is not int or committed != len(value):
+            raise AuditWitnessError(
+                f"terminal {field} does not match report {report_field} count"
+            )
+
+    return terminal, report
 
 
 # ── Trace emission helpers ──────────────────────────────────────────
@@ -139,14 +193,29 @@ def emit_audit_report(
     report_path: str | Path,
     report: dict[str, Any],
 ) -> dict:
-    """Event 5: Record the final report hash."""
+    """Event 5: Commit the exact report bytes and their derived counts."""
     report_path = Path(report_path)
+    report_bytes = report_path.read_bytes()
+    try:
+        report_on_disk = json.loads(report_bytes)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise AuditWitnessError(f"report is not valid JSON: {exc}") from exc
+    if not isinstance(report_on_disk, dict):
+        raise AuditWitnessError("report JSON must be an object")
+    if report_on_disk != report:
+        raise AuditWitnessError("report argument does not match report_path contents")
+
+    findings = report_on_disk.get("findings", [])
+    permissions = report_on_disk.get("permissions", [])
+    if not isinstance(findings, list) or not isinstance(permissions, list):
+        raise AuditWitnessError("report findings and permissions must be lists")
+
     return emitter.emit(
         "audit_report_generated",
         report_path=str(report_path),
-        report_sha256=sha256_file(report_path),
-        finding_count=len(report.get("findings", [])),
-        permission_count=len(report.get("permissions", [])),
+        report_sha256=sha256_bytes(report_bytes),
+        finding_count=len(findings),
+        permission_count=len(permissions),
     )
 
 
@@ -164,12 +233,31 @@ def generate_witness(
     trace_path = Path(trace_path)
     report_path = Path(report_path)
 
-    with open(trace_path, "r", encoding="utf-8") as f:
-        events = [json.loads(line) for line in f if line.strip()]
+    trace_bytes = trace_path.read_bytes()
+    try:
+        events = [
+            json.loads(line)
+            for line in trace_bytes.splitlines()
+            if line.strip()
+        ]
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise AuditWitnessError(f"trace is not valid JSONL: {exc}") from exc
+    if any(not isinstance(event, dict) for event in events):
+        raise AuditWitnessError("every trace line must be a JSON object")
 
-    chain_intact = verify_chain(events)
-    with open(report_path, "r", encoding="utf-8") as f:
-        report = json.load(f)
+    report_bytes = report_path.read_bytes()
+    terminal_report_evt, report = validate_audit_terminal(events, report_bytes)
+    trace_receipt = generate_trace_receipt(
+        trace_path,
+        {"report": report_path},
+        stream_id=terminal_report_evt.get("run_id"),
+    )
+    # Both files are read once above for audit fields and once by the generic
+    # receipt. Refuse a mixed snapshot if either changed between those reads.
+    if trace_receipt["trace_sha256"] != sha256_bytes(trace_bytes):
+        raise AuditWitnessError("trace changed while witness was generated")
+    if trace_receipt["terminal_artifact_hashes"]["report"] != sha256_bytes(report_bytes):
+        raise AuditWitnessError("report changed while witness was generated")
 
     input_evt = next((e for e in events if e["type"] == "audit_input_registered"), None)
     evidence_evt = next((e for e in events if e["type"] == "audit_evidence_extracted"), None)
@@ -177,9 +265,10 @@ def generate_witness(
     finding_evts = [e for e in events if e["type"] == "audit_finding_derived"]
 
     witness: dict[str, Any] = {
-        "witness_version": "1.0",
+        "witness_version": "1.1",
         "witness_sha256": None,
         "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "trace_receipt": trace_receipt,
     }
 
     if input_evt:
@@ -221,9 +310,9 @@ def generate_witness(
 
     witness["report"] = {
         "path": str(report_path),
-        "sha256": sha256_file(report_path),
-        "finding_count": len(report.get("findings", [])),
-        "permission_count": len(report.get("permissions", [])),
+        "sha256": terminal_report_evt["report_sha256"],
+        "finding_count": terminal_report_evt["finding_count"],
+        "permission_count": terminal_report_evt["permission_count"],
         "hardcoded_secret_count": len(report.get("hardcoded_secrets", [])),
         "overall_risk_rating": report.get("summary", {}).get("overall_risk_rating"),
         "narrative": report.get("summary", {}).get("narrative"),
@@ -231,18 +320,19 @@ def generate_witness(
 
     witness["trace_chain"] = {
         "trace_path": str(trace_path),
-        "trace_sha256": sha256_file(trace_path),
-        "event_count": len(events),
-        "first_event_hash": events[0]["hash"] if events else None,
-        "last_event_hash": events[-1]["hash"] if events else None,
-        "chain_intact": chain_intact,
+        "trace_sha256": trace_receipt["trace_sha256"],
+        "trace_bytes": trace_receipt["trace_bytes"],
+        "stream_id": trace_receipt["stream_id"],
+        "event_count": trace_receipt["event_count"],
+        "first_event_hash": trace_receipt["first_event_hash"],
+        "last_event_hash": trace_receipt["last_event_hash"],
+        "chain_intact": True,
     }
 
-    if events:
-        witness["agent"] = {
-            "agent_id": events[0].get("agent_id"),
-            "run_id": events[0].get("run_id"),
-        }
+    witness["agent"] = {
+        "agent_id": events[0].get("agent_id"),
+        "run_id": trace_receipt["stream_id"],
+    }
 
     canonical = _canonical_json_str(witness)
     witness["witness_sha256"] = sha256_bytes(canonical.encode("utf-8"))

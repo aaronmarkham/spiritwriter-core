@@ -74,14 +74,59 @@ class TestConcurrentEmit:
         assert [e["agent_id"] for e in events] == ["a", "b"] * 3
         assert b.prev_hash == events[-1]["hash"]
 
-    def test_default_mode_still_forks_with_two_instances(self, tmp_path):
-        """Documents why concurrent mode exists: two in-memory heads on one file break the chain."""
+    def test_default_mode_refuses_existing_trace(self, tmp_path):
         path = str(tmp_path / "trace.jsonl")
-        a = TraceEmitter("run-1", "a", path)
-        b = TraceEmitter("run-1", "b", path)
-        a.emit("x")
-        b.emit("y")
-        assert not verify_chain(_load(path))
+        first = TraceEmitter("run-1", "a", path)
+        second = TraceEmitter("run-1", "b", path)
+        first.emit("x")
+        with pytest.raises(TraceChainError, match="strict_resume=True"):
+            second.emit("y")
+        assert verify_chain(_load(path))
+        assert len(_load(path)) == 1
+
+    def test_strict_resume_continues_valid_same_run_chain(self, tmp_path):
+        path = str(tmp_path / "trace.jsonl")
+        first = TraceEmitter("run-1", "a", path)
+        start = first.emit("start")
+
+        resumed = TraceEmitter("run-1", "b", path, strict_resume=True)
+        next_event = resumed.emit("next")
+
+        events = _load(path)
+        assert verify_chain(events)
+        assert next_event["prev_event_hash"] == start["hash"]
+        assert resumed.current_trace_ref().endswith(next_event["hash"])
+
+    def test_strict_resume_rejects_different_run(self, tmp_path):
+        path = str(tmp_path / "trace.jsonl")
+        TraceEmitter("run-1", "a", path).emit("start")
+        with pytest.raises(TraceChainError, match="does not match requested"):
+            TraceEmitter("run-2", "b", path, strict_resume=True).emit("next")
+
+    def test_strict_resume_rejects_corrupt_prefix(self, tmp_path):
+        path = tmp_path / "trace.jsonl"
+        emitter = TraceEmitter("run-1", "a", str(path))
+        emitter.emit("one")
+        emitter.emit("two")
+        events = _load(path)
+        events[0]["agent_id"] = "tampered"
+        path.write_text("".join(json.dumps(event) + "\n" for event in events))
+
+        with pytest.raises(TraceChainError, match="hash chain verification failed"):
+            TraceEmitter("run-1", "b", str(path), strict_resume=True).emit("next")
+
+    @pytest.mark.parametrize("existing", [False, True])
+    def test_strict_resume_requires_nonempty_existing_trace(self, tmp_path, existing):
+        path = tmp_path / "trace.jsonl"
+        if existing:
+            path.touch()
+        with pytest.raises(TraceChainError, match="existing non-empty"):
+            TraceEmitter("run-1", "a", str(path), strict_resume=True).emit("next")
+
+    def test_existing_trace_can_still_be_read_without_resume(self, tmp_path):
+        path = str(tmp_path / "trace.jsonl")
+        TraceEmitter("run-1", "a", path).emit("start")
+        assert len(TraceEmitter("ignored", "reader", path).get_events()) == 1
 
     def test_continues_existing_chain(self, tmp_path):
         path = str(tmp_path / "trace.jsonl")

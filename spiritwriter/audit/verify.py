@@ -23,7 +23,8 @@ import sys
 from pathlib import Path
 
 from spiritwriter.audit._util import extract_dex_strings, sha256_file
-from spiritwriter.fabric.emitter import verify_chain
+from spiritwriter.audit.provenance import AuditWitnessError, validate_audit_terminal
+from spiritwriter.fabric.emitter import verify_chain, verify_trace_receipt
 
 
 def verify_l1(audit_dir: Path) -> list[str]:
@@ -59,6 +60,25 @@ def verify_l1(audit_dir: Path) -> list[str]:
     trace_sha256 = sha256_file(trace_path)
     if witness.get("trace_chain", {}).get("trace_sha256") != trace_sha256:
         issues.append("trace.jsonl hash mismatch")
+
+    if witness.get("witness_version") == "1.1":
+        receipt = witness.get("trace_receipt")
+        if not isinstance(receipt, dict) or not verify_trace_receipt(
+            receipt, trace_path, {"report": report_path}
+        ):
+            issues.append("trace receipt does not match trace/report bytes")
+
+        try:
+            events = [
+                json.loads(line)
+                for line in trace_path.read_bytes().splitlines()
+                if line.strip()
+            ]
+            if any(not isinstance(event, dict) for event in events):
+                raise AuditWitnessError("every trace line must be a JSON object")
+            validate_audit_terminal(events, report_path.read_bytes())
+        except (AuditWitnessError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            issues.append(f"terminal report binding invalid: {exc}")
 
     return issues
 
