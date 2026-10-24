@@ -70,7 +70,7 @@ class TestPublishResolve:
         assert resolved.atoms[0].text == "ipfs test fact"
 
     def test_resolve_unknown_returns_none(self, backend):
-        assert backend.resolve("nonexistent") is None
+        assert backend.resolve("0" * 64) is None
 
     def test_publish_idempotent(self, backend):
         shard = _make_shard()

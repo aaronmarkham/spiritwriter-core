@@ -47,7 +47,7 @@ from spiritwriter.fabric.network import (
     ShardLocation,
     ShardManifest,
 )
-from spiritwriter.fabric.shard import MemoryShard
+from spiritwriter.fabric.shard import MemoryShard, validate_shard_id
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +63,12 @@ _OBJECT_NOT_FOUND_CODES = frozenset({"NoSuchKey", "404", "NotFound"})
 # SPIRITWRITER_S3_BUCKET surfaces here; if we treated it as "not found" the
 # whole store would read as permanently empty instead of erroring.
 _CONFIG_ERROR_CODES = frozenset({"NoSuchBucket", "InvalidBucketName"})
+
+# If-None-Match create races report one of these, depending on the S3
+# implementation and whether another conditional write is still in flight.
+_CONDITIONAL_CONFLICT_CODES = frozenset({
+    "PreconditionFailed", "412", "ConditionalRequestConflict", "409",
+})
 
 
 class S3ConfigurationError(Exception):
@@ -172,7 +178,8 @@ class S3Backend:
         return f"{self._prefix}/{rel}" if self._prefix else rel
 
     def _key(self, shard_id: str, suffix: str = ".json") -> str:
-        """Git-style object key: [prefix/]shards/ab/cd1234...json"""
+        """Git-style object key for a canonical shard identifier."""
+        shard_id = validate_shard_id(shard_id)
         return self._join(f"shards/{shard_id[:2]}/{shard_id[2:]}{suffix}")
 
     def _manifest_key(self, manifest_id: str) -> str:
@@ -227,11 +234,11 @@ class S3Backend:
         raise NetworkUnavailable(f"S3 {op} failed for {key}: {exc}") from exc
 
     def _put_bytes(self, key: str, data: bytes) -> None:
-        """Write bytes to a key.
+        """Create an immutable object or verify identical existing bytes.
 
-        Wraps a missing/misconfigured bucket as S3ConfigurationError and any
-        other transport error as NetworkUnavailable — a publish never fails
-        silently.
+        ``IfNoneMatch='*'`` makes object creation atomic. If another writer
+        already created the key, the existing bytes must match exactly;
+        otherwise the content-address collision is an integrity error.
         """
         try:
             self._client.put_object(
@@ -239,9 +246,23 @@ class S3Backend:
                 Key=key,
                 Body=data,
                 ContentType="application/json",
+                IfNoneMatch="*",
             )
-        except Exception as e:  # noqa: BLE001 — normalize to protocol error
-            self._raise_normalized(e, "put_object", key)
+            return
+        except Exception as e:  # noqa: BLE001 — inspect, then normalize
+            if self._error_code(e) not in _CONDITIONAL_CONFLICT_CODES:
+                self._raise_normalized(e, "put_object", key)
+
+        existing = self._get_bytes(key)
+        if existing is None:
+            raise NetworkUnavailable(
+                f"S3 conditional create conflicted for {key}, but no object "
+                "was readable afterward"
+            )
+        if existing != data:
+            raise IntegrityError(
+                f"S3 content-address conflict at {key}: existing bytes differ"
+            )
 
     def _get_bytes(self, key: str) -> bytes | None:
         """Read bytes from a key. Returns None ONLY if the object is absent.

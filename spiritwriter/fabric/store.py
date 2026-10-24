@@ -26,13 +26,15 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
 
-from spiritwriter.fabric.shard import MemoryShard, ShardRef, DecayClass
+from spiritwriter.fabric.shard import (
+    MemoryShard, ShardRef, DecayClass, validate_shard_id,
+)
 from spiritwriter.fabric.crypto import EncryptedShard, encrypt_shard, decrypt_shard, DecryptionError
 from spiritwriter.fabric.entitlement import (
     EntitlementToken, validate_capability, validate_scope,
     is_expired, get_shard_key, Capability,
 )
-from spiritwriter.fabric.network import NetworkResolver
+from spiritwriter.fabric.network import IntegrityError, NetworkResolver
 
 try:  # POSIX
     import fcntl
@@ -212,9 +214,38 @@ class ShardStore:
         self.shards_dir.mkdir(parents=True, exist_ok=True)
         self.refs_dir.mkdir(parents=True, exist_ok=True)
 
+    def _content_path(self, shard_id: str, suffix: str) -> Path:
+        """Return a contained object path for a validated shard identifier."""
+        shard_id = validate_shard_id(shard_id)
+        object_root = self.shards_dir.resolve()
+        path = (object_root / shard_id[:2] / f"{shard_id[2:]}{suffix}").resolve()
+        try:
+            path.relative_to(object_root)
+        except ValueError as exc:
+            raise ValueError("shard path escapes the object store") from exc
+        return path
+
     def _shard_path(self, shard_id: str) -> Path:
-        """Git-style object path: ab/cd1234...json"""
-        return self.shards_dir / shard_id[:2] / f"{shard_id[2:]}.json"
+        """Git-style object path: ab/cd1234...json."""
+        return self._content_path(shard_id, ".json")
+
+    def _store_immutable_text(self, path: Path, text: str) -> None:
+        """Create an immutable object or verify an identical existing one.
+
+        Callers hold ``_index_lock`` so competing local writers cannot both
+        observe an absent path and replace each other's bytes.
+        """
+        expected = text.encode("utf-8")
+        try:
+            existing = path.read_bytes()
+        except FileNotFoundError:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            _atomic_write_text(path, text)
+            return
+        if existing != expected:
+            raise IntegrityError(
+                f"Content-address conflict at {path}: existing bytes differ"
+            )
 
     @contextmanager
     def _index_lock(self) -> Iterator[None]:
@@ -416,17 +447,17 @@ class ShardStore:
     # === Core Operations ===
 
     def put(self, shard: MemoryShard) -> ShardRef:
-        """Store a shard. Returns its ref. Idempotent (content-addressed)."""
-        shard_id = shard.shard_id
+        """Store a shard. Returns its ref. Idempotent for identical bytes."""
+        shard_id = validate_shard_id(shard.shard_id)
         path = self._shard_path(shard_id)
+        serialized = shard.to_json()
 
-        if not path.exists():
-            path.parent.mkdir(parents=True, exist_ok=True)
-            _atomic_write_text(path, shard.to_json())
-
-        # Always ensure it is indexed, even if the file already existed: a
-        # crash after the file write must not leave the shard unindexed.
-        self._index_add(shard.scope, shard_id)
+        # One lock covers immutable object creation and index publication. A
+        # colliding envelope with the same legacy shard_id is rejected rather
+        # than silently keeping or replacing different bytes.
+        with self._index_lock():
+            self._store_immutable_text(path, serialized)
+            self._index_add(shard.scope, shard_id)
 
         return shard.ref
 
@@ -446,9 +477,28 @@ class ShardStore:
         rather than proceed as if the data were gone.
         """
         # L1: local file
+        shard_id = validate_shard_id(shard_id)
         path = self._shard_path(shard_id)
         if path.exists():
-            return MemoryShard.from_json(path.read_text(encoding="utf-8"))
+            raw = path.read_text(encoding="utf-8")
+            try:
+                declared_id = json.loads(raw).get("shard_id")
+            except AttributeError as exc:
+                raise IntegrityError(
+                    f"Plaintext shard {shard_id} is not a JSON object"
+                ) from exc
+            if declared_id != shard_id:
+                raise IntegrityError(
+                    f"Plaintext shard ID mismatch: requested {shard_id}, "
+                    f"payload declares {declared_id!r}"
+                )
+            shard = MemoryShard.from_json(raw)
+            if shard.shard_id != shard_id:
+                raise IntegrityError(
+                    f"Plaintext shard content mismatch: requested {shard_id}, "
+                    f"computed {shard.shard_id}"
+                )
+            return shard
 
         # L2: network fallback
         if self._resolver:
@@ -597,18 +647,37 @@ class ShardStore:
         return self.refs_dir / f"{_encode_ref_name(name)}.ref"
 
     def set_ref(self, name: str, shard_id: str) -> None:
-        """Set a named reference pointing to a shard.
+        """Atomically set a named reference to a validated shard identifier."""
+        shard_id = validate_shard_id(shard_id)
+        with self._index_lock():
+            _atomic_write_text(self._ref_path(name), shard_id)
 
-        Use for "latest project context" pointers that update
-        as new shards supersede old ones.
+    def compare_and_set_ref(
+        self,
+        name: str,
+        expected_shard_id: str | None,
+        new_shard_id: str,
+    ) -> bool:
+        """Set ``name`` only if its current value matches ``expected``.
+
+        ``expected_shard_id=None`` means the ref must not exist. Returns
+        ``True`` when updated and ``False`` on a stale expectation.
         """
-        self._ref_path(name).write_text(shard_id, encoding="utf-8")
+        if expected_shard_id is not None:
+            expected_shard_id = validate_shard_id(expected_shard_id)
+        new_shard_id = validate_shard_id(new_shard_id)
+        with self._index_lock():
+            current = self.get_ref(name)
+            if current != expected_shard_id:
+                return False
+            _atomic_write_text(self._ref_path(name), new_shard_id)
+            return True
 
     def get_ref(self, name: str) -> str | None:
-        """Resolve a named reference to a shard_id."""
+        """Resolve a named reference to a validated shard_id."""
         ref_path = self._ref_path(name)
         if ref_path.exists():
-            return ref_path.read_text(encoding="utf-8").strip()
+            return validate_shard_id(ref_path.read_text(encoding="utf-8").strip())
         return None
 
     def resolve_ref(self, name: str) -> MemoryShard | None:
@@ -625,12 +694,14 @@ class ShardStore:
         return None
 
     def delete_ref(self, name: str) -> bool:
-        """Remove a named ref. Returns True if it existed."""
+        """Remove a named ref under the ref-update lock."""
         ref_path = self._ref_path(name)
-        if ref_path.exists():
-            ref_path.unlink()
-            return True
-        return False
+        with self._index_lock():
+            if ref_path.exists():
+                ref_path.unlink()
+                _fsync_dir(ref_path.parent)
+                return True
+            return False
 
     def list_refs(self, prefix: str = "") -> list[str]:
         """List all named refs, optionally filtered by prefix.
@@ -713,19 +784,16 @@ class ShardStore:
 
     def _encrypted_path(self, shard_id: str) -> Path:
         """Path for encrypted shard: same layout, .enc.json suffix."""
-        return self.shards_dir / shard_id[:2] / f"{shard_id[2:]}.enc.json"
+        return self._content_path(shard_id, ".enc.json")
 
     def put_encrypted(self, encrypted: EncryptedShard) -> str:
-        """Store an encrypted shard. Returns shard_id."""
-        path = self._encrypted_path(encrypted.shard_id)
-        if not path.exists():
-            path.parent.mkdir(parents=True, exist_ok=True)
-            _atomic_write_text(path, encrypted.to_json())
-
-        # Scope is visible even when encrypted
-        self._index_add(encrypted.scope, encrypted.shard_id)
-
-        return encrypted.shard_id
+        """Store an encrypted shard, rejecting bytes that conflict by ID."""
+        shard_id = validate_shard_id(encrypted.shard_id)
+        path = self._encrypted_path(shard_id)
+        with self._index_lock():
+            self._store_immutable_text(path, encrypted.to_json())
+            self._index_add(encrypted.scope, shard_id)
+        return shard_id
 
     def get_encrypted(self, shard_id: str) -> EncryptedShard | None:
         """Retrieve an encrypted shard by id. Falls back to network.
@@ -736,9 +804,16 @@ class ShardStore:
         collapsed into ``None``, so a transient failure is not mistaken for
         "absent". See :meth:`get` for the full contract.
         """
+        shard_id = validate_shard_id(shard_id)
         path = self._encrypted_path(shard_id)
         if path.exists():
-            return EncryptedShard.from_json(path.read_text(encoding="utf-8"))
+            encrypted = EncryptedShard.from_json(path.read_text(encoding="utf-8"))
+            if encrypted.shard_id != shard_id:
+                raise IntegrityError(
+                    f"Encrypted shard ID mismatch: requested {shard_id}, "
+                    f"payload declares {encrypted.shard_id}"
+                )
+            return encrypted
 
         if self._resolver:
             encrypted = self._resolver.resolve_encrypted(shard_id)
@@ -785,13 +860,16 @@ class ShardStore:
             # Check if we have this shard (encrypted or plaintext)
             encrypted = self.get_encrypted(shard_id)
             if encrypted is not None:
-                if not validate_scope(token, encrypted.scope):
-                    raise PermissionError(
-                        f"Token not entitled to scope '{encrypted.scope}' "
-                        f"(shard {shard_id})"
-                    )
                 key = get_shard_key(token, shard_id)
                 shard = decrypt_shard(encrypted, key)
+                # The encrypted wrapper is untrusted metadata. decrypt_shard()
+                # first requires it to match the authenticated inner shard;
+                # authorization then uses the decrypted scope itself.
+                if not validate_scope(token, shard.scope):
+                    raise PermissionError(
+                        f"Token not entitled to scope '{shard.scope}' "
+                        f"(shard {shard_id})"
+                    )
                 parts.append(shard.hydrate_context())
             else:
                 # Try plaintext shard (for backward compat / unencrypted stores)
@@ -811,24 +889,21 @@ class ShardStore:
 
     def _sealed_path(self, shard_id: str) -> Path:
         """Path for sealed shard: same layout, .sealed.json suffix."""
-        return self.shards_dir / shard_id[:2] / f"{shard_id[2:]}.sealed.json"
+        return self._content_path(shard_id, ".sealed.json")
 
     def put_sealed(self, sealed) -> str:
-        """Store a sealed shard. Returns shard_id.
+        """Store a sealed shard, rejecting bytes that conflict by ID.
 
         Accepts a SealedShard from spiritwriter.fabric.sealed.
         The sealed payload is opaque to the operator — only the
         owner (holder of the private key) can decrypt it.
         """
-        path = self._sealed_path(sealed.shard_id)
-        if not path.exists():
-            path.parent.mkdir(parents=True, exist_ok=True)
-            _atomic_write_text(path, sealed.to_json())
-
-        # Scope is visible even when sealed
-        self._index_add(sealed.scope, sealed.shard_id)
-
-        return sealed.shard_id
+        shard_id = validate_shard_id(sealed.shard_id)
+        path = self._sealed_path(shard_id)
+        with self._index_lock():
+            self._store_immutable_text(path, sealed.to_json())
+            self._index_add(sealed.scope, shard_id)
+        return shard_id
 
     def get_sealed(self, shard_id: str):
         """Retrieve a sealed shard by id. Returns SealedShard or None.
@@ -842,10 +917,17 @@ class ShardStore:
         collapsed into ``None``, so a transient failure is not mistaken for
         "absent". See :meth:`get` for the full contract.
         """
+        shard_id = validate_shard_id(shard_id)
         path = self._sealed_path(shard_id)
         if path.exists():
             from spiritwriter.fabric.sealed import SealedShard
-            return SealedShard.from_json(path.read_text(encoding="utf-8"))
+            sealed = SealedShard.from_json(path.read_text(encoding="utf-8"))
+            if sealed.shard_id != shard_id:
+                raise IntegrityError(
+                    f"Sealed shard ID mismatch: requested {shard_id}, "
+                    f"payload declares {sealed.shard_id}"
+                )
+            return sealed
 
         if self._resolver:
             sealed = self._resolver.resolve_sealed(shard_id)

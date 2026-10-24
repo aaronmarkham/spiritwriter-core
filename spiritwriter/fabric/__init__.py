@@ -20,6 +20,7 @@ from spiritwriter.fabric.shard import (
     ShardRef,
     generate_signing_keypair,
     pubkey_thumbprint,
+    validate_shard_id,
 )
 from spiritwriter.fabric.store import ShardStore
 from spiritwriter.fabric.emitter import (
@@ -111,6 +112,7 @@ __all__ = [
     "ShardRef",
     "generate_signing_keypair",
     "pubkey_thumbprint",
+    "validate_shard_id",
     "ShardStore",
     "TraceEmitter",
     "EncryptedShard",

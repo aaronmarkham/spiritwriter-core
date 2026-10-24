@@ -164,14 +164,14 @@ class TestShardStoreFallback:
             resolver.resolve.return_value = None
             store = ShardStore(td, resolver=resolver)
 
-            result = store.get("nonexistent")
+            result = store.get("0" * 64)
             assert result is None
 
     def test_get_no_resolver(self):
         """Without resolver, missing shard returns None (original behavior)."""
         with tempfile.TemporaryDirectory() as td:
             store = ShardStore(td)
-            assert store.get("nonexistent") is None
+            assert store.get("0" * 64) is None
 
     def test_get_encrypted_falls_back(self):
         """Encrypted shard falls back to resolver."""

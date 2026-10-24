@@ -270,11 +270,19 @@ def seal_shard(shard: MemoryShard, owner_pubkey: bytes) -> SealedShard:
 
 
 def unseal_shard(sealed: SealedShard, owner_private_key: bytes) -> MemoryShard:
-    """Unseal a shard using the owner's private key (capability key).
+    """Unseal a shard and verify all cleartext wrapper metadata.
 
-    The owner calls this to read their shard content.
+    The owner calls this to read their shard content. Wrapper fields are not
+    authenticated by the legacy wire format, so every field derived from the
+    inner shard is compared after authenticated decryption.
     """
     _require_nacl()
+    try:
+        owner_key = PrivateKey(owner_private_key)
+    except Exception as e:
+        raise UnsealError(f"Invalid owner private key: {e}") from e
+    if bytes(owner_key.public_key) != sealed.owner_pubkey:
+        raise UnsealError("Sealed wrapper owner_pubkey does not match private key")
     try:
         plaintext = unseal_as_owner(sealed.sealed_payload, owner_private_key)
     except Exception as e:
@@ -282,4 +290,25 @@ def unseal_shard(sealed: SealedShard, owner_private_key: bytes) -> MemoryShard:
     actual_hash = _sha256(plaintext)
     if actual_hash != sealed.content_hash:
         raise UnsealError("Content hash mismatch — data may be corrupted or tampered")
-    return MemoryShard.from_json(plaintext.decode("utf-8"))
+    try:
+        shard = MemoryShard.from_json(plaintext.decode("utf-8"))
+    except Exception as e:
+        raise UnsealError(f"Unsealed shard is invalid: {e}") from e
+
+    mismatches = []
+    if sealed.shard_id != shard.shard_id:
+        mismatches.append("shard_id")
+    if sealed.scope != shard.scope:
+        mismatches.append("scope")
+    if sealed.atom_count != len(shard.atoms):
+        mismatches.append("atom_count")
+    if sealed.created_at != shard.created_at:
+        mismatches.append("created_at")
+    if sealed.origin_agent != shard.origin:
+        mismatches.append("origin_agent")
+    if mismatches:
+        raise UnsealError(
+            "Sealed wrapper does not match unsealed shard: "
+            + ", ".join(mismatches)
+        )
+    return shard

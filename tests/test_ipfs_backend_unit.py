@@ -224,18 +224,26 @@ class TestResolvePropagatesTransportError:
 
 
 class TestResolveGenuineNotFoundReturnsNone:
+    @pytest.mark.parametrize(
+        "resolve_name",
+        ["resolve", "resolve_encrypted", "resolve_sealed"],
+    )
+    def test_resolve_rejects_noncanonical_id(self, backend, resolve_name):
+        with pytest.raises(ValueError, match="64 lowercase hexadecimal"):
+            getattr(backend, resolve_name)("../escape")
+
     def test_resolve_unknown_returns_none(self, backend, kubo):
         # cid_map miss -> None, and _cat_cid is never even called.
         kubo.cat_error = NetworkUnavailable("must not be reached")
-        assert backend.resolve("nonexistent0000") is None
+        assert backend.resolve("0" * 64) is None
 
     def test_resolve_encrypted_unknown_returns_none(self, backend, kubo):
         kubo.cat_error = NetworkUnavailable("must not be reached")
-        assert backend.resolve_encrypted("nonexistent0000") is None
+        assert backend.resolve_encrypted("0" * 64) is None
 
     def test_resolve_sealed_unknown_returns_none(self, backend, kubo):
         kubo.cat_error = NetworkUnavailable("must not be reached")
-        assert backend.resolve_sealed("nonexistent0000") is None
+        assert backend.resolve_sealed("0" * 64) is None
 
 
 # === Fix 1 + Fix 3: resolve_manifest propagates transport errors AND verifies

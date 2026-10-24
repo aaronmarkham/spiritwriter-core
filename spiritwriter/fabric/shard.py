@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import uuid
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
@@ -69,6 +70,21 @@ def _canonical_json(obj: Any) -> bytes:
 def _sha256(data: bytes) -> str:
     """SHA-256 hex digest."""
     return hashlib.sha256(data).hexdigest()
+
+
+_SHARD_ID_RE = re.compile(r"^[0-9a-f]{64}$")
+
+
+def validate_shard_id(shard_id: str) -> str:
+    """Validate and return a canonical SHA-256 shard identifier.
+
+    Storage APIs use shard identifiers in paths and remote object keys. Only
+    the 64-character lowercase hexadecimal form produced by ``shard_id`` is
+    accepted; aliases, uppercase hex, prefixes, and path components are not.
+    """
+    if not isinstance(shard_id, str) or _SHARD_ID_RE.fullmatch(shard_id) is None:
+        raise ValueError("shard_id must be exactly 64 lowercase hexadecimal characters")
+    return shard_id
 
 
 def _now_iso() -> str:
