@@ -1,0 +1,9 @@
+{"hook_event_name": "agentSpawn", "cwd": "/work/demo-app", "session_id": "kiro-sess-1"}
+{"hook_event_name": "UserPromptSubmit", "cwd": "/work/demo-app", "session_id": "kiro-sess-1", "prompt": "add a retry to the client"}
+{"hook_event_name": "PreToolUse", "cwd": "/work/demo-app", "session_id": "kiro-sess-1", "tool_name": "fsWrite", "tool_input": {"path": "src/client.py", "text": "import time\nprint('hi')\n"}}
+{"hook_event_name": "PostToolUse", "cwd": "/work/demo-app", "session_id": "kiro-sess-1", "tool_name": "fsWrite", "tool_input": {"path": "src/client.py", "text": "import time\nprint('hi')\n"}, "tool_response": {"success": true}}
+{"hook_event_name": "PreToolUse", "cwd": "/work/demo-app", "session_id": "kiro-sess-1", "tool_name": "mcp_postgres_query", "tool_input": {"sql": "select 1", "password": "hunter2"}}
+{"hook_event_name": "PostToolUse", "cwd": "/work/demo-app", "session_id": "kiro-sess-1", "tool_name": "mcp_postgres_query", "tool_input": {"sql": "select 1", "password": "hunter2"}}
+{"hook_event_name": "PreToolUse", "cwd": "/work/demo-app", "session_id": "kiro-sess-1", "tool_name": "executeBash", "tool_input": {"command": "GH_TOKEN='a b c' git push"}}
+{"hook_event_name": "Stop", "cwd": "/work/demo-app", "session_id": "kiro-sess-1"}
+{"hook_event_name": "SessionEnd", "cwd": "/work/demo-app", "session_id": "kiro-sess-1", "reason": "exit"}
