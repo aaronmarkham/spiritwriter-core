@@ -72,8 +72,8 @@ class TraceEmitter:
     process per agent-hook event. Each ``emit()`` then takes an
     exclusive ``flock`` on the file, validates the last event, appends,
     and fsyncs before releasing. A new emitter may continue an
-    existing file only when its ``run_id`` matches the existing stream.
-    starting a second one.
+    existing file only when its ``run_id`` matches the existing stream;
+    a mismatched stream is rejected rather than chained together.
     """
 
     def __init__(
