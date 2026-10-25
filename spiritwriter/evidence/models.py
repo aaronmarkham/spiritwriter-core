@@ -53,7 +53,7 @@ def _require_exact_fields(
     record_name: str,
     value: object,
     required: set[str],
-    optional: set[str] | None = None,
+    optional: Optional[set[str]] = None,
 ) -> dict[str, JsonValue]:
     if type(value) is not dict:
         raise EvidenceValidationError(f"{record_name} must be a JSON object")
@@ -232,10 +232,17 @@ class Locator:
 
 @dataclass(frozen=True, init=False)
 class EvidenceUnit:
-    """One exact, source-linked evidence excerpt with typed JSON payload."""
+    """One exact, source-linked evidence excerpt with typed JSON payload.
+
+    Adapter and normalization profile identifiers participate in the evidence
+    identity, preventing semantically different extraction rules from sharing
+    an ID even when they currently produce the same excerpt.
+    """
 
     source_id: str
     kind: str
+    adapter_id: str
+    normalization_profile: str
     locator: Locator
     normalized_excerpt: str
     normalized_sha256: str
@@ -247,6 +254,8 @@ class EvidenceUnit:
         *,
         source_id: str,
         kind: str,
+        adapter_id: str,
+        normalization_profile: str,
         locator: Locator,
         normalized_excerpt: str,
         normalized_sha256: str,
@@ -255,6 +264,14 @@ class EvidenceUnit:
     ) -> None:
         object.__setattr__(self, "source_id", _require_sha256("source_id", source_id))
         object.__setattr__(self, "kind", _require_nonempty_string("kind", kind))
+        object.__setattr__(
+            self, "adapter_id", _require_nonempty_string("adapter_id", adapter_id)
+        )
+        object.__setattr__(
+            self,
+            "normalization_profile",
+            _require_nonempty_string("normalization_profile", normalization_profile),
+        )
         if type(locator) is not Locator:
             raise EvidenceValidationError("locator must be a Locator")
         object.__setattr__(self, "locator", locator)
@@ -280,8 +297,10 @@ class EvidenceUnit:
 
     def _identity_dict(self) -> dict[str, JsonValue]:
         record: dict[str, JsonValue] = {
+            "adapter_id": self.adapter_id,
             "kind": self.kind,
             "locator": self.locator.to_dict(),
+            "normalization_profile": self.normalization_profile,
             "normalized_excerpt": self.normalized_excerpt,
             "normalized_sha256": self.normalized_sha256,
             "payload": self.payload,
@@ -309,6 +328,8 @@ class EvidenceUnit:
                 "evidence_id",
                 "source_id",
                 "kind",
+                "adapter_id",
+                "normalization_profile",
                 "locator",
                 "normalized_excerpt",
                 "normalized_sha256",
@@ -323,6 +344,8 @@ class EvidenceUnit:
         unit = cls(
             source_id=record["source_id"],
             kind=record["kind"],
+            adapter_id=record["adapter_id"],
+            normalization_profile=record["normalization_profile"],
             locator=Locator.from_dict(record["locator"]),
             normalized_excerpt=record["normalized_excerpt"],
             normalized_sha256=record["normalized_sha256"],

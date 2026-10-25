@@ -5,6 +5,7 @@ reuse, or alter legacy ``fabric`` shard IDs.
 """
 
 from .canonical import (
+    MAX_JSON_DEPTH,
     MAX_SAFE_INTEGER,
     MIN_SAFE_INTEGER,
     CanonicalJsonError,
@@ -31,14 +32,19 @@ from .pack import (
     PACK_DOMAIN,
     SOURCES_NAME,
     EvidencePack,
+    PublicationCapabilityError,
+    PublicationDurabilityError,
     VerificationIssue,
     VerificationReport,
 )
 from .protocols import (
     LocatorResolver,
+    NormalizationProfile,
     ProtocolValidationError,
+    ResolvedSpan,
     SourceAdapter,
     require_locator_resolver,
+    require_normalization_profile,
     require_source_adapter,
 )
 
@@ -47,6 +53,7 @@ __all__ = [
     "EVIDENCE_DOMAIN",
     "EVIDENCE_NAME",
     "MANIFEST_NAME",
+    "MAX_JSON_DEPTH",
     "MAX_SAFE_INTEGER",
     "MIN_SAFE_INTEGER",
     "PACK_DOMAIN",
@@ -60,7 +67,11 @@ __all__ = [
     "JsonValue",
     "Locator",
     "LocatorResolver",
+    "NormalizationProfile",
     "ProtocolValidationError",
+    "PublicationCapabilityError",
+    "PublicationDurabilityError",
+    "ResolvedSpan",
     "SourceAdapter",
     "SourceSnapshot",
     "VerificationIssue",
@@ -69,6 +80,7 @@ __all__ = [
     "domain_digest",
     "parse_canonical_json_bytes",
     "require_locator_resolver",
+    "require_normalization_profile",
     "require_source_adapter",
     "sha256_hex",
     "validate_json_value",

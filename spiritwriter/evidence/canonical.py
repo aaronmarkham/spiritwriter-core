@@ -1,9 +1,18 @@
-"""Portable canonical JSON and domain-separated digests for evidence records.
+"""Portable canonical JSON and domain-separated evidence digests.
 
 The codec intentionally accepts a smaller language than general JSON:
 ``null``, booleans, interoperable integers, Unicode strings, arrays, and
 objects whose keys are strings. Floats and non-finite numeric values are never
 accepted. This profile is independent of the legacy fabric shard codec.
+
+Strings contain Unicode scalar values without normalization. The encoder emits
+those scalars directly as UTF-8 except for JSON's quotation mark and reverse
+solidus escapes and the U+0000 through U+001F control range. It uses the short
+``\\b``, ``\\t``, ``\\n``, ``\\f``, and ``\\r`` escapes where applicable and
+lowercase ``\\u00xx`` escapes for the other controls. Object keys are ordered
+lexicographically by their Unicode scalar-value sequences. This ordering is
+intentional and differs from canonical profiles that compare UTF-16 code
+units. Duplicate keys and Unicode surrogate code points are forbidden.
 """
 
 from __future__ import annotations
@@ -20,6 +29,9 @@ JsonValue = Union[JsonScalar, List["JsonValue"], Dict[str, "JsonValue"]]
 # every number as a double.
 MIN_SAFE_INTEGER = -(2**53 - 1)
 MAX_SAFE_INTEGER = 2**53 - 1
+# Container nesting is capped so validity does not depend on an implementation's
+# recursion limit. The root scalar has depth 0; each array/object adds one.
+MAX_JSON_DEPTH = 64
 
 
 class CanonicalJsonError(ValueError):
@@ -40,8 +52,20 @@ def validate_json_value(value: object, *, path: str = "$") -> None:
 
     Types are checked exactly. In particular, custom ``int``/``str``
     subclasses and tuples are rejected rather than being silently coerced.
+    Arrays and objects may be nested through ``MAX_JSON_DEPTH`` containers;
+    deeper values and reference cycles are rejected.
     """
 
+    _validate_json_value(value, path=path, depth=0, ancestors=set())
+
+
+def _validate_json_value(
+    value: object,
+    *,
+    path: str,
+    depth: int,
+    ancestors: set[int],
+) -> None:
     value_type = type(value)
     if value is None or value_type is bool:
         return
@@ -55,27 +79,67 @@ def validate_json_value(value: object, *, path: str = "$") -> None:
     if value_type is str:
         _validate_string(value, path)
         return
-    if value_type is list:
-        for index, item in enumerate(value):
-            validate_json_value(item, path=f"{path}[{index}]")
-        return
-    if value_type is dict:
+    if value_type not in (list, dict):
+        raise CanonicalJsonError(
+            f"{path} has unsupported type {value_type.__name__}; floats are not allowed"
+        )
+
+    container_depth = depth + 1
+    if container_depth > MAX_JSON_DEPTH:
+        raise CanonicalJsonError(
+            f"{path} exceeds maximum JSON container depth {MAX_JSON_DEPTH}"
+        )
+    identity = id(value)
+    if identity in ancestors:
+        raise CanonicalJsonError(f"{path} contains a reference cycle")
+    ancestors.add(identity)
+    try:
+        if value_type is list:
+            for index, item in enumerate(value):
+                _validate_json_value(
+                    item,
+                    path=f"{path}[{index}]",
+                    depth=container_depth,
+                    ancestors=ancestors,
+                )
+            return
         for key, item in value.items():
             if type(key) is not str:
                 raise CanonicalJsonError(f"{path} contains a non-string object key")
             _validate_string(key, f"{path} object key")
-            validate_json_value(item, path=f"{path}[{key!r}]")
-        return
-    raise CanonicalJsonError(
-        f"{path} has unsupported type {value_type.__name__}; floats are not allowed"
-    )
+            _validate_json_value(
+                item,
+                path=f"{path}[{key!r}]",
+                depth=container_depth,
+                ancestors=ancestors,
+            )
+    finally:
+        ancestors.remove(identity)
 
 
 def _encode_string(value: str) -> str:
-    # json.dumps has the required JSON escaping behavior. ensure_ascii=False
-    # preserves Unicode scalar values as UTF-8 instead of implementation-
-    # dependent ASCII escape choices.
-    return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+    """Encode one validated scalar-value string without library defaults."""
+
+    short_escapes = {
+        '"': '\\"',
+        "\\": "\\\\",
+        "\b": "\\b",
+        "\t": "\\t",
+        "\n": "\\n",
+        "\f": "\\f",
+        "\r": "\\r",
+    }
+    encoded = ['"']
+    for character in value:
+        escaped = short_escapes.get(character)
+        if escaped is not None:
+            encoded.append(escaped)
+        elif ord(character) <= 0x1F:
+            encoded.append(f"\\u{ord(character):04x}")
+        else:
+            encoded.append(character)
+    encoded.append('"')
+    return "".join(encoded)
 
 
 def _encode(value: JsonValue) -> str:
@@ -103,6 +167,22 @@ def canonical_json_bytes(value: JsonValue) -> bytes:
 
     validate_json_value(value)
     return _encode(value).encode("utf-8")
+
+
+def _parse_integer(value: str) -> int:
+    """Parse an interoperable integer without constructing a huge bigint."""
+
+    negative = value.startswith("-")
+    magnitude = value[1:] if negative else value
+    limit = str(-MIN_SAFE_INTEGER if negative else MAX_SAFE_INTEGER)
+    if len(magnitude) > len(limit) or (
+        len(magnitude) == len(limit) and magnitude > limit
+    ):
+        raise CanonicalJsonError(
+            f"JSON integer is outside the interoperable range "
+            f"[{MIN_SAFE_INTEGER}, {MAX_SAFE_INTEGER}]"
+        )
+    return int(value)
 
 
 def _reject_float(value: str) -> None:
@@ -134,16 +214,21 @@ def parse_canonical_json_bytes(data: bytes) -> JsonValue:
     try:
         value = json.loads(
             text,
+            parse_int=_parse_integer,
             parse_float=_reject_float,
             parse_constant=_reject_constant,
             object_pairs_hook=_object_without_duplicate_keys,
         )
     except CanonicalJsonError:
         raise
-    except (json.JSONDecodeError, UnicodeDecodeError) as error:
+    except (json.JSONDecodeError, UnicodeDecodeError, RecursionError) as error:
         raise CanonicalJsonError("invalid JSON") from error
-    validate_json_value(value)
-    if canonical_json_bytes(value) != data:
+    try:
+        validate_json_value(value)
+        canonical = canonical_json_bytes(value)
+    except RecursionError as error:
+        raise CanonicalJsonError("JSON exceeds implementation recursion limit") from error
+    if canonical != data:
         raise CanonicalJsonError("JSON bytes are not in canonical form")
     return value
 
@@ -160,14 +245,16 @@ def domain_digest(domain: str, value: JsonValue) -> str:
     """Digest a canonical JSON value under an explicit domain.
 
     The preimage is ``UTF8(domain) || NUL || canonical_json_bytes(value)``.
-    Domains must be non-empty printable ASCII without NUL, making the framing
-    reproducible in any language and keeping identities from different record
-    types separate.
+    Domains must be non-empty visible ASCII (U+0021 through U+007E), making
+    the framing reproducible in any language and keeping identities from
+    different record types separate.
     """
 
     if type(domain) is not str or not domain:
         raise CanonicalJsonError("digest domain must be a non-empty string")
     if "\x00" in domain or any(ord(character) < 0x21 or ord(character) > 0x7E for character in domain):
-        raise CanonicalJsonError("digest domain must contain printable ASCII only")
+        raise CanonicalJsonError(
+            "digest domain must contain visible ASCII from U+0021 through U+007E only"
+        )
     preimage = domain.encode("ascii") + b"\x00" + canonical_json_bytes(value)
     return sha256_hex(preimage)

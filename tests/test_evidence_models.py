@@ -10,18 +10,21 @@ from spiritwriter.evidence import (
     EvidenceValidationError,
     Locator,
     LocatorResolver,
+    NormalizationProfile,
     ProtocolValidationError,
+    ResolvedSpan,
     SourceAdapter,
     SourceSnapshot,
     canonical_json_bytes,
     require_locator_resolver,
+    require_normalization_profile,
     require_source_adapter,
     sha256_hex,
 )
 
 SOURCE_CONTENT = b"# Fugaku\nLocated in Kobe.\n"
 SOURCE_ID = "48ffcaf52fa30c7a357ce28532895359da4f8758b6ed96bc2149e6c785c1619e"
-EVIDENCE_ID = "d2704a38cb8126836d0945fc8421424928b95d73147224c658c17f091efc3eb7"
+EVIDENCE_ID = "30e527cafa1db2d794a1b3e2706b89154a1c9289b3dbc7b286a219310fbd4eca"
 SOURCE_JSON = (
     b'{"byte_length":26,"content_ref":"cas:example","logical_ref":"docs/fugaku.md",'
     b'"media_type":"text/markdown","raw_sha256":"02745eff3d74b9d82eb8226c3f230b9a'
@@ -29,12 +32,14 @@ SOURCE_JSON = (
     b'48ffcaf52fa30c7a357ce28532895359da4f8758b6ed96bc2149e6c785c1619e"}'
 )
 EVIDENCE_JSON = (
-    b'{"evidence_id":"d2704a38cb8126836d0945fc8421424928b95d73147224c658c17f091efc3eb7",'
-    b'"kind":"paragraph","locator":{"scheme":"markdown.block","value":{"heading":'
-    b'["Fugaku"],"ordinal":1},"version":"1"},"normalized_excerpt":"Located in Kobe.",'
-    b'"normalized_sha256":"4d97b17f2caacea684b28cf74e29ff3e6394fab5680e62c8bc9308f3a76cd511",'
-    b'"payload":{"language":"en","ordinal":1},"source_id":"48ffcaf52fa30c7a357ce285'
-    b'32895359da4f8758b6ed96bc2149e6c785c1619e"}'
+    b'{"adapter_id":"markdown@1","evidence_id":"30e527cafa1db2d794a1b3e2706b89154a1c'
+    b'9289b3dbc7b286a219310fbd4eca","kind":"paragraph","locator":{"scheme":"markdown.'
+    b'block","value":{"heading":["Fugaku"],"ordinal":1},"version":"1"},"normalization_'
+    b'profile":"text.v1","normalized_excerpt":"Located in Kobe.","normalized_sha256":"'
+    b'4d97b17f2caacea684b28cf74e29ff3e6394fab5680e62c8bc9308f3a76cd511","payload"'
+    b':{"language":"en","ordinal":1},"raw_span_sha256":"4d97b17f2caacea684b28cf74e29ff'
+    b'3e6394fab5680e62c8bc9308f3a76cd511","source_id":"48ffcaf52fa30c7a357ce285328'
+    b'95359da4f8758b6ed96bc2149e6c785c1619e"}'
 )
 
 
@@ -53,6 +58,8 @@ def make_unit(source_id: str = SOURCE_ID) -> EvidenceUnit:
     return EvidenceUnit(
         source_id=source_id,
         kind="paragraph",
+        adapter_id="markdown@1",
+        normalization_profile="text.v1",
         locator=Locator(
             scheme="markdown.block",
             version="1",
@@ -61,6 +68,7 @@ def make_unit(source_id: str = SOURCE_ID) -> EvidenceUnit:
         normalized_excerpt=excerpt,
         normalized_sha256=sha256_hex(excerpt.encode("utf-8")),
         payload={"language": "en", "ordinal": 1},
+        raw_span_sha256=sha256_hex(excerpt.encode("utf-8")),
     )
 
 
@@ -89,6 +97,8 @@ def test_records_and_nested_json_are_immutable_from_callers():
     unit = EvidenceUnit(
         source_id=source.source_id,
         kind="paragraph",
+        adapter_id="test@1",
+        normalization_profile="text.v1",
         locator=Locator("test", "1", locator_value),
         normalized_excerpt="text",
         normalized_sha256=sha256_hex(b"text"),
@@ -145,6 +155,8 @@ def test_model_string_and_integer_portability_fixtures_fail_closed():
         EvidenceUnit(
             source_id=SOURCE_ID,
             kind="bad\ud800kind",
+            adapter_id="test@1",
+            normalization_profile="text.v1",
             locator=Locator("test", "1", {}),
             normalized_excerpt="text",
             normalized_sha256=sha256_hex(b"text"),
@@ -154,6 +166,8 @@ def test_model_string_and_integer_portability_fixtures_fail_closed():
         EvidenceUnit(
             source_id=SOURCE_ID,
             kind="text",
+            adapter_id="test@1",
+            normalization_profile="text.v1",
             locator=Locator("test", "1", {}),
             normalized_excerpt="bad\ud800excerpt",
             normalized_sha256="0" * 64,
@@ -195,9 +209,33 @@ def test_source_content_integrity_mismatch_fails_closed():
 
 class ExampleAdapter:
     adapter_id = "example@1"
+    normalization_profile = "text.v1"
 
     def extract(self, source, content):
         return [make_unit(source.source_id)]
+
+
+class AsyncAdapter:
+    adapter_id = "example@1"
+    normalization_profile = "text.v1"
+
+    async def extract(self, source, content):
+        return []
+
+
+class AsyncResolver:
+    locator_scheme = "markdown.block"
+    locator_version = "1"
+
+    async def resolve(self, source, locator, content):
+        return ResolvedSpan(start_byte=0, end_byte=0)
+
+
+class AsyncNormalizer:
+    normalization_profile = "text.v1"
+
+    async def normalize(self, raw_span):
+        return ""
 
 
 class ExampleResolver:
@@ -205,33 +243,136 @@ class ExampleResolver:
     locator_version = "1"
 
     def resolve(self, source, locator, content):
-        return "Located in Kobe."
+        return ResolvedSpan(start_byte=9, end_byte=25)
+
+
+class ExampleNormalizer:
+    normalization_profile = "text.v1"
+
+    def normalize(self, raw_span):
+        return raw_span.decode("utf-8")
 
 
 def test_protocols_are_runtime_checkable_and_structural():
     adapter = ExampleAdapter()
     resolver = ExampleResolver()
+    normalizer = ExampleNormalizer()
     assert isinstance(adapter, SourceAdapter)
     assert isinstance(resolver, LocatorResolver)
+    assert isinstance(normalizer, NormalizationProfile)
     assert require_source_adapter(adapter) is adapter
     assert require_locator_resolver(resolver) is resolver
+    assert require_normalization_profile(normalizer) is normalizer
 
 
 @pytest.mark.parametrize(
     "candidate, validator, match",
     [
-        (type("BadAdapterId", (), {"adapter_id": 1, "extract": lambda: None})(),
-         require_source_adapter, "adapter_id"),
-        (type("BadAdapterMethod", (), {"adapter_id": "x", "extract": "no"})(),
-         require_source_adapter, "extract"),
-        (type("BadResolverScheme", (), {
-            "locator_scheme": 1, "locator_version": "1", "resolve": lambda: None
-         })(), require_locator_resolver, "locator_scheme"),
-        (type("BadResolverMethod", (), {
-            "locator_scheme": "x", "locator_version": "1", "resolve": "no"
-         })(), require_locator_resolver, "resolve"),
+        (
+            type(
+                "BadAdapterId",
+                (),
+                {
+                    "adapter_id": 1,
+                    "normalization_profile": "text.v1",
+                    "extract": lambda self, source, content: None,
+                },
+            )(),
+            require_source_adapter,
+            "adapter_id",
+        ),
+        (
+            type(
+                "BadAdapterMethod",
+                (),
+                {
+                    "adapter_id": "x",
+                    "normalization_profile": "text.v1",
+                    "extract": "no",
+                },
+            )(),
+            require_source_adapter,
+            "extract",
+        ),
+        (
+            type(
+                "BadAdapterSignature",
+                (),
+                {
+                    "adapter_id": "x",
+                    "normalization_profile": "text.v1",
+                    "extract": lambda self, source: None,
+                },
+            )(),
+            require_source_adapter,
+            "signature.*source, content",
+        ),
+        (
+            type(
+                "BadResolverScheme",
+                (),
+                {
+                    "locator_scheme": 1,
+                    "locator_version": "1",
+                    "normalization_profile": "text.v1",
+                    "resolve": lambda self, source, locator, content: None,
+                },
+            )(),
+            require_locator_resolver,
+            "locator_scheme",
+        ),
+        (
+            type(
+                "BadResolverMethod",
+                (),
+                {
+                    "locator_scheme": "x",
+                    "locator_version": "1",
+                    "normalization_profile": "text.v1",
+                    "resolve": "no",
+                },
+            )(),
+            require_locator_resolver,
+            "resolve",
+        ),
+        (
+            type(
+                "BadResolverSignature",
+                (),
+                {
+                    "locator_scheme": "x",
+                    "locator_version": "1",
+                    "normalization_profile": "text.v1",
+                    "resolve": lambda self, source, locator, content, extra: None,
+                },
+            )(),
+            require_locator_resolver,
+            "signature.*source, locator, content",
+        ),
+        (
+            type(
+                "BadNormalizerProfile",
+                (),
+                {
+                    "normalization_profile": "bad\ud800profile",
+                    "normalize": lambda self, raw_span: "",
+                },
+            )(),
+            require_normalization_profile,
+            "Unicode surrogate",
+        ),
+        (AsyncAdapter(), require_source_adapter, "must be synchronous"),
+        (AsyncResolver(), require_locator_resolver, "must be synchronous"),
+        (AsyncNormalizer(), require_normalization_profile, "must be synchronous"),
     ],
 )
 def test_runtime_protocol_validators_reject_invalid_members(candidate, validator, match):
     with pytest.raises(ProtocolValidationError, match=match):
         validator(candidate)
+
+
+def test_resolved_span_validates_portable_ordered_byte_range():
+    with pytest.raises(ProtocolValidationError, match="start_byte"):
+        ResolvedSpan(start_byte=True, end_byte=1)
+    with pytest.raises(ProtocolValidationError, match="must not precede"):
+        ResolvedSpan(start_byte=2, end_byte=1)
