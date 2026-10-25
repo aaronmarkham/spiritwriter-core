@@ -48,7 +48,7 @@ spiritwriter-claude-hook = "spiritwriter.agents.claude_code:main"
 pdf = ["pymupdf>=1.24.0"]
 sealed = ["PyNaCl>=1.5.0"]
 network = ["requests>=2.28"]
-s3 = ["boto3>=1.26"]
+s3 = ["boto3>=1.35.90"]
 strands = ["strands-agents>=0.1.0"]
 mempalace = ["mempalace>=3.0.0"]
 dev = ["pytest>=8.0", "pytest-asyncio>=0.23"]

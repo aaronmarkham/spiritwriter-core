@@ -72,15 +72,54 @@ class TestShardIdValidation:
         with pytest.raises(ValueError):
             operation(ShardStore(tmp_path / "store"))
 
+    def test_symlinked_top_level_shards_directory_is_rejected(self, tmp_path):
+        root = tmp_path / "store"
+        outside = tmp_path / "outside"
+        root.mkdir()
+        outside.mkdir()
+        (root / "shards").symlink_to(outside, target_is_directory=True)
+
+        with pytest.raises(ValueError, match="not a symlink"):
+            ShardStore(root)
+
     def test_symlinked_prefix_cannot_escape_object_root(self, tmp_path):
         store = ShardStore(tmp_path / "store")
         outside = tmp_path / "outside"
         outside.mkdir()
         (store.shards_dir / "aa").symlink_to(outside, target_is_directory=True)
 
-        with pytest.raises(ValueError, match="escapes"):
-            store._shard_path(ID_A)
+        with pytest.raises(ValueError, match="Unsafe shard prefix|unsafe or unreadable"):
+            store.get(ID_A)
         assert list(outside.iterdir()) == []
+
+    def test_symlinked_object_is_not_followed(self, tmp_path):
+        store = ShardStore(tmp_path / "store")
+        outside = tmp_path / "outside.json"
+        outside.write_text(_shard().to_json(), encoding="utf-8")
+        prefix = store.shards_dir / ID_A[:2]
+        prefix.mkdir()
+        (prefix / f"{ID_A[2:]}.json").symlink_to(outside)
+
+        with pytest.raises(ValueError, match="Unsafe shard object"):
+            store.get(ID_A)
+
+    def test_portable_fallback_rejects_object_symlink(
+        self, tmp_path, monkeypatch
+    ):
+        monkeypatch.setattr(
+            ShardStore,
+            "_secure_dir_fd_supported",
+            property(lambda self: False),
+        )
+        store = ShardStore(tmp_path / "store")
+        outside = tmp_path / "outside.json"
+        outside.write_text(_shard().to_json(), encoding="utf-8")
+        prefix = store.shards_dir / ID_A[:2]
+        prefix.mkdir()
+        (prefix / f"{ID_A[2:]}.json").symlink_to(outside)
+
+        with pytest.raises(ValueError, match="Unsafe shard object"):
+            store.get(ID_A)
 
 
 class TestStrictLocalReads:
@@ -106,6 +145,18 @@ class TestStrictLocalReads:
 
         with pytest.raises(IntegrityError, match="Plaintext shard ID mismatch"):
             store.get(ID_A)
+
+    def test_plaintext_content_mismatch_is_integrity_error(self, tmp_path):
+        store = ShardStore(tmp_path / "store")
+        shard = _shard()
+        payload = shard.to_dict()
+        payload["atoms"][0]["text"] = "tampered"
+        path = store._shard_path(shard.shard_id)
+        path.parent.mkdir(parents=True)
+        path.write_text(json.dumps(payload), encoding="utf-8")
+
+        with pytest.raises(IntegrityError, match="fails its content address"):
+            store.get(shard.shard_id)
 
     def test_encrypted_rejects_different_wrapper_id_at_path(self, tmp_path):
         store = ShardStore(tmp_path / "store")
@@ -158,6 +209,62 @@ class TestImmutableLocalObjects:
         with pytest.raises(IntegrityError, match="existing bytes differ"):
             store.put_encrypted(second)
         assert store.get_encrypted(first.shard_id).encrypted_payload == first.encrypted_payload
+    def test_encrypt_and_store_same_inner_shard_is_idempotent(self, tmp_path):
+        store = ShardStore(tmp_path / "store")
+        shard = _shard()
+        key = generate_job_key()
+        first = store.encrypt_and_store(shard, key)
+        second = store.encrypt_and_store(shard, key)
+
+        assert second.to_json() == first.to_json()
+        assert store.decrypt_and_get(shard.shard_id, key).to_json() == shard.to_json()
+
+    def test_encrypt_and_store_rejects_different_legacy_envelope(self, tmp_path):
+        store = ShardStore(tmp_path / "store")
+        key = generate_job_key()
+        store.encrypt_and_store(_shard(meta={"version": 1}), key)
+
+        with pytest.raises(IntegrityError, match="different envelope"):
+            store.encrypt_and_store(_shard(meta={"version": 2}), key)
+
+
+class TestReindexValidation:
+    def test_reindex_skips_and_reports_malformed_and_mismatched_objects(
+        self, tmp_path, caplog
+    ):
+        store = ShardStore(tmp_path / "store")
+        good = _shard(scope="project:good")
+        store.put(good)
+
+        malformed_dir = store.shards_dir / "zz"
+        malformed_dir.mkdir()
+        (malformed_dir / "not-an-id.json").write_text(
+            good.to_json(), encoding="utf-8"
+        )
+
+        wrong_path = store.shards_dir / ID_A[:2] / f"{ID_A[2:]}.json"
+        wrong_path.parent.mkdir()
+        wrong_path.write_text(good.to_json(), encoding="utf-8")
+
+        tampered = _shard(scope="project:tampered")
+        tampered_payload = tampered.to_dict()
+        tampered_payload["atoms"][0]["text"] = "changed after addressing"
+        tampered_path = (
+            store.shards_dir
+            / tampered.shard_id[:2]
+            / f"{tampered.shard_id[2:]}.json"
+        )
+        tampered_path.parent.mkdir()
+        tampered_path.write_text(json.dumps(tampered_payload), encoding="utf-8")
+
+        result = store.reindex()
+
+        assert len(result["skipped"]) == 3
+        assert any("64 lowercase hexadecimal" in item for item in result["skipped"])
+        assert any("ID mismatch" in item for item in result["skipped"])
+        assert any("content address" in item for item in result["skipped"])
+        assert store.list_scopes() == ["project:good"]
+        assert "skipped 3" in caplog.text
 
 
 class TestAtomicRefs:
@@ -257,6 +364,36 @@ class TestWrapperConsistency:
 
         with pytest.raises(UnsealError, match=field):
             unseal_shard(sealed, keypair.private_key)
+
+    def test_denied_wrapper_scope_is_rejected_before_decryption(
+        self, tmp_path, monkeypatch
+    ):
+        store = ShardStore(tmp_path / "store")
+        key = generate_job_key()
+        shard = _shard(scope="project:denied")
+        encrypted = store.encrypt_and_store(shard, key)
+        token = create_entitlement(
+            granted_to="reader",
+            granted_by="test",
+            shard_keys={shard.shard_id: key},
+            scopes=["project:allowed"],
+            capabilities=[Capability.SHARD_READ],
+            secrets=[],
+            budget_usd=1.0,
+        )
+        decrypt_called = False
+
+        def should_not_decrypt(wrapper, job_key):
+            nonlocal decrypt_called
+            decrypt_called = True
+            raise AssertionError("denied wrapper was decrypted")
+
+        monkeypatch.setattr(store_mod, "decrypt_shard", should_not_decrypt)
+        monkeypatch.setattr(store, "get_encrypted", lambda shard_id: encrypted)
+
+        with pytest.raises(PermissionError, match="project:denied"):
+            store.hydrate_with_entitlement(token)
+        assert decrypt_called is False
 
     def test_scope_tampering_cannot_bypass_entitlement(self, tmp_path):
         store = ShardStore(tmp_path / "store")

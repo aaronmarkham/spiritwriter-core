@@ -128,6 +128,24 @@ class TestShardBackendMetadataUpdate:
         with pytest.raises(KeyError):
             backend.update(ids=["missing"], metadatas=[{"tag": "x"}])
 
+    def test_encrypted_metadata_only_update_is_atomic_and_persists(self, tmp_path):
+        key = generate_job_key()
+        store_path = tmp_path / "shards"
+        backend = ShardBackend(store_path, encryption_key=key)
+        backend.add(
+            documents=["Secret"],
+            ids=["d1"],
+            metadatas=[{"wing": "private", "tag": "old"}],
+        )
+        shard_id = backend.get_shard_id("d1")
+
+        backend.update(ids=["d1"], metadatas=[{"tag": "new"}])
+
+        assert backend.get_shard_id("d1") == shard_id
+        assert backend.get(ids=["d1"])["metadatas"][0]["tag"] == "new"
+        restarted = ShardBackend(store_path, encryption_key=key)
+        assert restarted.get(ids=["d1"])["metadatas"][0]["tag"] == "new"
+
 
 class TestShardBackendEncryptedRestart:
     """Bug fix: encrypted store must survive process restart."""

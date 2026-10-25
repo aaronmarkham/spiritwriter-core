@@ -318,7 +318,13 @@ class S3Backend:
         data = self._get_bytes(self._key(shard_id, suffix))
         if data is None:
             return None
-        obj = cls.from_json(data.decode("utf-8"))
+        try:
+            obj = cls.from_json(data.decode("utf-8"))
+        except Exception as exc:
+            raise IntegrityError(
+                f"{label} payload for {shard_id} is malformed or fails its "
+                f"content address: {exc}"
+            ) from exc
         if obj.shard_id != shard_id:
             raise IntegrityError(
                 f"{label} mismatch: expected {shard_id}, got {obj.shard_id}"

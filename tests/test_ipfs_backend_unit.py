@@ -109,6 +109,16 @@ class TestPublishResolveRoundTrip:
         assert resolved.shard_id == shard.shard_id
         assert resolved.atoms[0].text == "ipfs unit fact"
 
+    def test_resolve_content_mismatch_is_integrity_error(self, backend, kubo):
+        shard = _make_shard()
+        location = backend.publish(shard)
+        payload = shard.to_dict()
+        payload["atoms"][0]["text"] = "tampered"
+        kubo.blocks[location.cid] = json.dumps(payload).encode("utf-8")
+
+        with pytest.raises(IntegrityError, match="content address"):
+            backend.resolve(shard.shard_id)
+
     def test_publish_idempotent(self, backend):
         shard = _make_shard()
         loc1 = backend.publish(shard)
@@ -164,6 +174,17 @@ class TestIdempotentReturnPinState:
         backend.publish_encrypted(encrypted)
         loc = backend.publish_encrypted(encrypted)  # cid_map hit
         assert loc.pinned is False
+
+    def test_idempotent_republish_sealed_pinned_false(self, backend):
+        pytest.importorskip("nacl")
+        from spiritwriter.fabric.sealed import seal_shard, generate_owner_keypair
+
+        keypair = generate_owner_keypair()
+        sealed = seal_shard(_make_shard("pin-sealed"), keypair.public_key)
+        first = backend.publish_sealed(sealed)
+        second = backend.publish_sealed(sealed)
+        assert second.cid == first.cid
+        assert second.pinned is False
 
     def test_idempotent_republish_public_pinned_false(self, backend, kubo):
         backend._add_bytes_raw = kubo.add

@@ -12,6 +12,7 @@ everywhere.
 """
 
 import io
+import json
 
 import pytest
 
@@ -159,6 +160,17 @@ class TestPublishResolve:
         assert resolved is not None
         assert resolved.shard_id == shard.shard_id
         assert resolved.atoms[0].text == "s3 test fact"
+
+    def test_resolve_content_mismatch_is_integrity_error(self, backend, client):
+        shard = _make_shard()
+        backend.publish(shard)
+        payload = shard.to_dict()
+        payload["atoms"][0]["text"] = "tampered"
+        object_key = ("test-bucket", backend.key_for(shard.shard_id))
+        client.store[object_key] = json.dumps(payload).encode("utf-8")
+
+        with pytest.raises(IntegrityError, match="content address"):
+            backend.resolve(shard.shard_id)
 
     def test_resolve_unknown_returns_none(self, backend):
         assert backend.resolve("0" * 64) is None

@@ -280,7 +280,7 @@ class IPFSBackend:
     def publish_sealed(self, sealed: Any) -> ShardLocation:
         """Publish a sealed shard to IPFS. Network sees opaque bytes."""
         shard_id = validate_shard_id(sealed.shard_id)
-        existing_cid = self._cid_map.get(shard_id)
+        existing_cid = self._cid_map.get(f"sealed:{shard_id}")
         if existing_cid:
             # Idempotent early-return: reflect the SAME pin state a fresh publish
             # would (pin_by_default), not a hardcoded True. With pin_by_default=False
@@ -396,7 +396,13 @@ class IPFSBackend:
             return None
 
         data = self._cat_cid(cid)
-        shard = MemoryShard.from_json(data.decode("utf-8"))
+        try:
+            shard = MemoryShard.from_json(data.decode("utf-8"))
+        except Exception as exc:
+            raise IntegrityError(
+                f"Shard payload for {shard_id} is malformed or fails its "
+                f"content address: {exc}"
+            ) from exc
         if shard.shard_id != shard_id:
             raise IntegrityError(
                 f"Shard ID mismatch: expected {shard_id}, got {shard.shard_id}"
@@ -417,7 +423,12 @@ class IPFSBackend:
 
         data = self._cat_cid(cid)
         from spiritwriter.fabric.sealed import SealedShard
-        sealed = SealedShard.from_json(data.decode("utf-8"))
+        try:
+            sealed = SealedShard.from_json(data.decode("utf-8"))
+        except Exception as exc:
+            raise IntegrityError(
+                f"Sealed shard payload for {shard_id} is malformed: {exc}"
+            ) from exc
         if sealed.shard_id != shard_id:
             raise IntegrityError(
                 f"Sealed shard ID mismatch: expected {shard_id}, got {sealed.shard_id}"
@@ -437,7 +448,12 @@ class IPFSBackend:
             return None
 
         data = self._cat_cid(cid)
-        encrypted = EncryptedShard.from_json(data.decode("utf-8"))
+        try:
+            encrypted = EncryptedShard.from_json(data.decode("utf-8"))
+        except Exception as exc:
+            raise IntegrityError(
+                f"Encrypted shard payload for {shard_id} is malformed: {exc}"
+            ) from exc
         if encrypted.shard_id != shard_id:
             raise IntegrityError(
                 f"Encrypted shard ID mismatch: expected {shard_id}, got {encrypted.shard_id}"
