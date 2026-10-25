@@ -134,6 +134,29 @@ class TestConcurrentEmit:
         TraceEmitter("run-1", "b", path, concurrent=True).emit("next")
         assert verify_chain(_load(path))
 
+    def test_concurrent_append_rejects_different_run(self, tmp_path):
+        path = str(tmp_path / "trace.jsonl")
+        TraceEmitter("run-1", "a", path).emit("start")
+
+        with pytest.raises(TraceChainError, match="does not match requested run_id"):
+            TraceEmitter("run-2", "b", path, concurrent=True).emit("next")
+
+        events = _load(path)
+        assert len(events) == 1
+        assert verify_chain(events)
+
+    def test_single_owner_rejects_changed_head(self, tmp_path):
+        path = str(tmp_path / "trace.jsonl")
+        owner = TraceEmitter("run-1", "a", path)
+        owner.emit("start")
+        TraceEmitter("run-1", "b", path, concurrent=True).emit("external")
+
+        with pytest.raises(TraceChainError, match="trace head changed"):
+            owner.emit("next")
+
+        assert verify_chain(_load(path))
+
+
     def test_event_shape_matches_default_mode(self, tmp_path):
         plain = TraceEmitter("r", "a", str(tmp_path / "p.jsonl")).emit("x", k=1)
         conc = TraceEmitter("r", "a", str(tmp_path / "c.jsonl"), concurrent=True).emit("x", k=1)

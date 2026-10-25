@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
+from spiritwriter.fabric.shard import _canonical_json, _sha256
 from spiritwriter.fabric.emitter import (
     TraceChainError,
     TraceEmitter,
     TraceReceiptError,
     generate_trace_receipt,
+    verify_chain,
     verify_trace_receipt,
 )
 
@@ -80,7 +84,17 @@ def test_receipt_rejects_wrong_or_mixed_stream_identity(tmp_path):
     with pytest.raises(TraceReceiptError, match="does not match expected"):
         generate_trace_receipt(trace_path, {"result": artifact_path}, stream_id="run-2")
 
-    TraceEmitter("run-2", "b", str(trace_path), concurrent=True).emit("second")
+    TraceEmitter("run-1", "b", str(trace_path), concurrent=True).emit("second")
+    events = [json.loads(line) for line in trace_path.read_text().splitlines()]
+    events[-1]["run_id"] = "run-2"
+    hashable = {k: v for k, v in events[-1].items() if k not in ("hash", "sig")}
+    events[-1]["hash"] = _sha256(_canonical_json(hashable))
+    trace_path.write_text(
+        "".join(json.dumps(event) + "\n" for event in events),
+        encoding="utf-8",
+    )
+    assert verify_chain(events)
+
     with pytest.raises(TraceChainError, match="multiple run_id"):
         generate_trace_receipt(trace_path, {"result": artifact_path})
 
