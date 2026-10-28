@@ -3,7 +3,11 @@
 from collections.abc import Mapping
 from pathlib import Path
 
+import ctypes
 import json
+import os
+import platform
+import sys
 import pytest
 
 import spiritwriter.evidence.pack as pack_module
@@ -507,6 +511,95 @@ def test_windows_publication_uses_write_through_no_replace_move(
     )
     pack_module._rename_directory_noreplace(source, target)
     assert calls == [(str(source), str(target), 0x00000008)]
+
+
+class _LibcWithoutRenameat2:
+    """Real libc with the renameat2() wrapper hidden, as on glibc < 2.28."""
+
+    def __init__(self, libc):
+        self._libc = libc
+
+    def __getattr__(self, name):
+        if name == "renameat2":
+            raise AttributeError(name)
+        return getattr(self._libc, name)
+
+
+def test_linux_without_renameat2_wrapper_uses_raw_syscall(tmp_path, monkeypatch):
+    calls = []
+
+    class FakeSyscall:
+        def __call__(self, *args):
+            calls.append(args)
+            return 0
+
+    class FakeLibc:
+        syscall = FakeSyscall()
+
+    source = tmp_path / "source"
+    target = tmp_path / "target"
+    source.mkdir()
+    monkeypatch.setattr(pack_module.sys, "platform", "linux")
+    monkeypatch.setattr(pack_module.platform, "machine", lambda: "x86_64")
+    monkeypatch.setattr(
+        pack_module.ctypes, "CDLL", lambda name, use_errno: FakeLibc()
+    )
+    pack_module._rename_directory_noreplace(source, target)
+    assert calls == [(316, -100, os.fsencode(source), -100, os.fsencode(target), 1)]
+
+
+def test_linux_without_wrapper_on_unknown_arch_has_capability_error(
+    tmp_path, monkeypatch
+):
+    class FakeLibc:
+        def syscall(self, *args):
+            raise AssertionError("syscall must not run without a known number")
+
+    source = tmp_path / "source"
+    target = tmp_path / "target"
+    source.mkdir()
+    monkeypatch.setattr(pack_module.sys, "platform", "linux")
+    monkeypatch.setattr(pack_module.platform, "machine", lambda: "unknown-arch")
+    monkeypatch.setattr(
+        pack_module.ctypes, "CDLL", lambda name, use_errno: FakeLibc()
+    )
+    with pytest.raises(PublicationCapabilityError, match="requires renameat2"):
+        pack_module._rename_directory_noreplace(source, target)
+    assert source.is_dir()
+    assert not target.exists()
+
+
+@pytest.mark.skipif(
+    not sys.platform.startswith("linux")
+    or platform.machine().lower() not in pack_module._LINUX_RENAMEAT2_SYSCALLS,
+    reason="raw renameat2 syscall fallback is Linux x86_64/aarch64 only",
+)
+def test_linux_raw_syscall_fallback_publishes_without_replacing(
+    tmp_path, monkeypatch
+):
+    real_cdll = ctypes.CDLL
+    monkeypatch.setattr(
+        pack_module.ctypes,
+        "CDLL",
+        lambda name, use_errno: _LibcWithoutRenameat2(
+            real_cdll(name, use_errno=use_errno)
+        ),
+    )
+    source = tmp_path / "source"
+    target = tmp_path / "target"
+    source.mkdir()
+    (source / "a").write_bytes(b"a")
+    pack_module._rename_directory_noreplace(source, target)
+    assert not source.exists()
+    assert (target / "a").read_bytes() == b"a"
+
+    second = tmp_path / "second"
+    second.mkdir()
+    (second / "b").write_bytes(b"b")
+    with pytest.raises(FileExistsError):
+        pack_module._rename_directory_noreplace(second, target)
+    assert (second / "b").read_bytes() == b"b"
+    assert sorted(entry.name for entry in target.iterdir()) == ["a"]
 
 
 def test_unsupported_platform_has_explicit_publication_capability_error(

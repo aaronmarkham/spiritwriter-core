@@ -5,6 +5,7 @@ from __future__ import annotations
 import ctypes
 import errno
 import os
+import platform
 import shutil
 import sys
 import tempfile
@@ -180,6 +181,53 @@ def _raise_rename_error(source: Path, target: Path) -> None:
     raise OSError(error_number, os.strerror(error_number), f"{source} -> {target}")
 
 
+# renameat2(2) syscall numbers, used when libc has no renameat2() wrapper. The
+# wrapper arrived in glibc 2.28; Amazon Linux 2 ships glibc 2.26 on kernels that
+# do support the syscall.
+_LINUX_RENAMEAT2_SYSCALLS = {
+    "x86_64": 316,
+    "amd64": 316,
+    "aarch64": 276,
+    "arm64": 276,
+}
+
+
+def _linux_renameat2(libc):
+    """Return a renameat2(olddirfd, oldpath, newdirfd, newpath, flags) callable."""
+
+    wrapper = getattr(libc, "renameat2", None)
+    if wrapper is not None:
+        wrapper.argtypes = [
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_uint,
+        ]
+        wrapper.restype = ctypes.c_int
+        return wrapper
+    number = _LINUX_RENAMEAT2_SYSCALLS.get(platform.machine().lower())
+    syscall = getattr(libc, "syscall", None)
+    if number is None or syscall is None:
+        raise PublicationCapabilityError(
+            "atomic no-replace directory publication requires renameat2"
+        )
+    syscall.argtypes = [
+        ctypes.c_long,
+        ctypes.c_int,
+        ctypes.c_char_p,
+        ctypes.c_int,
+        ctypes.c_char_p,
+        ctypes.c_uint,
+    ]
+    syscall.restype = ctypes.c_long
+
+    def renameat2(olddirfd, oldpath, newdirfd, newpath, flags):
+        return syscall(number, olddirfd, oldpath, newdirfd, newpath, flags)
+
+    return renameat2
+
+
 def _rename_directory_noreplace(source: Path, target: Path) -> None:
     """Atomically rename a directory while refusing an existing target.
 
@@ -201,20 +249,7 @@ def _rename_directory_noreplace(source: Path, target: Path) -> None:
             _raise_rename_error(source, target)
         return
     if sys.platform.startswith("linux"):
-        libc = ctypes.CDLL(None, use_errno=True)
-        renameat2 = getattr(libc, "renameat2", None)
-        if renameat2 is None:
-            raise PublicationCapabilityError(
-                "atomic no-replace directory publication requires renameat2"
-            )
-        renameat2.argtypes = [
-            ctypes.c_int,
-            ctypes.c_char_p,
-            ctypes.c_int,
-            ctypes.c_char_p,
-            ctypes.c_uint,
-        ]
-        renameat2.restype = ctypes.c_int
+        renameat2 = _linux_renameat2(ctypes.CDLL(None, use_errno=True))
         # AT_FDCWD and RENAME_NOREPLACE from renameat2(2).
         if renameat2(-100, os.fsencode(source), -100, os.fsencode(target), 1) != 0:
             _raise_rename_error(source, target)
