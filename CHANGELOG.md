@@ -20,6 +20,9 @@ Entries before 0.8.0 are not backfilled; consult `git log` for earlier history. 
 - Same secret handling as the Claude Code recorder: tool inputs and prompts are stored as hashes and lengths plus a scrubbed, allowlisted summary.
 - The hook always exits 0, writes nothing to stdout or stderr (Kiro puts a successful hook's stdout in the agent's context), and gives up on a stdin that never closes after 2 seconds. A 5 second watchdog bounds the stdin read only and is cancelled before the trace is written, so it cannot tear a frame. The registered command is guarded with `>/dev/null 2>&1 || true`, so a broken interpreter or import can never exit non-zero (Kiro treats a `Stop` hook that exits 1 as "keep working"); re-running `install` upgrades older unguarded hooks in place. Errors go to `errors.log` in the trace directory.
 
+### Fixed
+- `test_mutation_is_deterministic_across_processes` passes the parent environment to its child process (changing only `PYTHONHASHSEED`), so it passes where dependencies come from `PYTHONPATH` rather than site-packages.
+
 ## [0.12.3] — 2026-10-16
 
 **`ShardStore` index writes are safe with several writer processes.** `index.json` was rewritten in place, and every mutator did an unlocked load/modify/save. With concurrent writers (for example several agent hooks curating at once), updates were lost, and a shorter write over a longer file left trailing bytes, so every later load failed with `Extra data`.
