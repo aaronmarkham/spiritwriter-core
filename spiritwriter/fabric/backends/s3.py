@@ -32,7 +32,7 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
 
 try:
     import boto3
@@ -233,12 +233,19 @@ class S3Backend:
             ) from exc
         raise NetworkUnavailable(f"S3 {op} failed for {key}: {exc}") from exc
 
-    def _put_bytes(self, key: str, data: bytes) -> None:
-        """Create an immutable object or verify identical existing bytes.
+    def _put_bytes(
+        self,
+        key: str,
+        data: bytes,
+        verify: Callable[[bytes], Any] | None = None,
+    ) -> None:
+        """Create an immutable object, or keep a valid existing one.
 
         ``IfNoneMatch='*'`` makes object creation atomic. If another writer
-        already created the key, the existing bytes must match exactly;
-        otherwise the content-address collision is an integrity error.
+        already created the key with different bytes, ``verify`` checks the
+        existing object: a valid object for the same content address is kept
+        (first write wins), and a corrupt one raises :class:`IntegrityError`.
+        Without ``verify`` (manifests), different bytes are an integrity error.
         """
         try:
             self._client.put_object(
@@ -259,10 +266,13 @@ class S3Backend:
                 f"S3 conditional create conflicted for {key}, but no object "
                 "was readable afterward"
             )
-        if existing != data:
+        if existing == data:
+            return
+        if verify is None:
             raise IntegrityError(
                 f"S3 content-address conflict at {key}: existing bytes differ"
             )
+        verify(existing)
 
     def _get_bytes(self, key: str) -> bytes | None:
         """Read bytes from a key. Returns None ONLY if the object is absent.
@@ -285,7 +295,9 @@ class S3Backend:
 
     # === Shared publish/resolve helpers ===
 
-    def _publish(self, shard_id: str, suffix: str, json_bytes: bytes) -> ShardLocation:
+    def _publish(
+        self, shard_id: str, suffix: str, json_bytes: bytes, cls: Any, label: str
+    ) -> ShardLocation:
         """Write a serialized shard to its content-addressed key.
 
         Single code path for publish / publish_sealed / publish_encrypted —
@@ -302,7 +314,11 @@ class S3Backend:
         until explicitly deleted).
         """
         key = self._key(shard_id, suffix)
-        self._put_bytes(key, json_bytes)
+        self._put_bytes(
+            key,
+            json_bytes,
+            verify=lambda existing: self._parse_typed(shard_id, existing, cls, label),
+        )
         return ShardLocation(shard_id=shard_id, cid=key, local=False, pinned=True)
 
     def _resolve_typed(self, shard_id: str, suffix: str, cls: Any, label: str) -> Any:
@@ -318,6 +334,10 @@ class S3Backend:
         data = self._get_bytes(self._key(shard_id, suffix))
         if data is None:
             return None
+        return self._parse_typed(shard_id, data, cls, label)
+
+    def _parse_typed(self, shard_id: str, data: bytes, cls: Any, label: str) -> Any:
+        """Parse a typed shard payload and check it against its shard_id."""
         try:
             obj = cls.from_json(data.decode("utf-8"))
         except Exception as exc:
@@ -335,18 +355,29 @@ class S3Backend:
 
     def publish(self, shard: MemoryShard) -> ShardLocation:
         """Publish a plaintext shard to S3. Idempotent (content-addressed)."""
-        return self._publish(shard.shard_id, ".json", shard.to_json().encode("utf-8"))
+        return self._publish(
+            shard.shard_id, ".json", shard.to_json().encode("utf-8"), MemoryShard, "Shard ID"
+        )
 
     def publish_sealed(self, sealed: Any) -> ShardLocation:
         """Publish a sealed shard to S3. Object bytes are opaque to S3."""
+        from spiritwriter.fabric.sealed import SealedShard
         return self._publish(
-            sealed.shard_id, ".sealed.json", sealed.to_json().encode("utf-8")
+            sealed.shard_id,
+            ".sealed.json",
+            sealed.to_json().encode("utf-8"),
+            SealedShard,
+            "Sealed shard ID",
         )
 
     def publish_encrypted(self, encrypted: EncryptedShard) -> ShardLocation:
         """Publish an encrypted shard to S3."""
         return self._publish(
-            encrypted.shard_id, ".enc.json", encrypted.to_json().encode("utf-8")
+            encrypted.shard_id,
+            ".enc.json",
+            encrypted.to_json().encode("utf-8"),
+            EncryptedShard,
+            "Encrypted shard ID",
         )
 
     def resolve(self, shard_id: str) -> MemoryShard | None:

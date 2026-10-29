@@ -26,7 +26,7 @@ import time
 import uuid
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator
+from typing import Any, Callable, Iterator
 
 from spiritwriter.fabric.shard import (
     MemoryShard, ShardRef, DecayClass, validate_shard_id,
@@ -401,8 +401,21 @@ class ShardStore:
             os.close(fd)
         return tmp_name
 
-    def _store_immutable_text(self, shard_id: str, suffix: str, text: str) -> None:
-        """Create an immutable object or verify an identical existing one.
+    def _store_immutable_text(
+        self,
+        shard_id: str,
+        suffix: str,
+        text: str,
+        decode: Callable[[str, bytes], Any],
+    ) -> None:
+        """Create an object, or keep a valid existing object with the same ID.
+
+        ``shard_id`` is a content address, so storing an ID that is already
+        present is a no-op: the first write wins, even when the new envelope
+        differs in fields outside the address (``created_at``, ``meta``, a
+        signature). The existing bytes are checked with ``decode``; an object
+        that no longer parses or no longer matches its ID is corrupt and is
+        atomically replaced with the new bytes.
 
         On POSIX, a fully-written temp file is atomically hard-linked into its
         final name through a held prefix-directory descriptor. The link cannot
@@ -441,10 +454,15 @@ class ShardStore:
                 except FileNotFoundError:
                     _atomic_write_text(path, text)
                     return
-        if existing != expected:
-            raise IntegrityError(
-                f"Content-address conflict for shard {shard_id}: existing bytes differ"
+        if existing == expected:
+            return
+        try:
+            decode(shard_id, existing)
+        except IntegrityError:
+            logger.warning(
+                "ShardStore: replacing corrupt object for shard %s%s", shard_id, suffix
             )
+            self._replace_object_text(shard_id, suffix, text)
 
     def _replace_object_text(self, shard_id: str, suffix: str, text: str) -> None:
         """Atomically replace an existing object under the store lock."""
@@ -826,15 +844,15 @@ class ShardStore:
     # === Core Operations ===
 
     def put(self, shard: MemoryShard) -> ShardRef:
-        """Store a shard. Returns its ref. Idempotent for identical bytes."""
+        """Store a shard. Returns its ref. Idempotent by shard_id (first write wins)."""
         shard_id = validate_shard_id(shard.shard_id)
         serialized = shard.to_json()
 
-        # One lock covers immutable object creation and index publication. A
-        # colliding envelope with the same legacy shard_id is rejected rather
-        # than silently keeping or replacing different bytes.
+        # One lock covers object creation and index publication. A second put
+        # of the same shard_id keeps the stored envelope (see
+        # _store_immutable_text).
         with self._index_lock():
-            self._store_immutable_text(shard_id, ".json", serialized)
+            self._store_immutable_text(shard_id, ".json", serialized, self._decode_plaintext)
             self._index_add(shard.scope, shard_id)
 
         return shard.ref
@@ -1139,10 +1157,12 @@ class ShardStore:
         return self._content_path(shard_id, ".enc.json")
 
     def put_encrypted(self, encrypted: EncryptedShard) -> str:
-        """Store an encrypted shard, rejecting bytes that conflict by ID."""
+        """Store an encrypted shard. Idempotent by shard_id (first write wins)."""
         shard_id = validate_shard_id(encrypted.shard_id)
         with self._index_lock():
-            self._store_immutable_text(shard_id, ".enc.json", encrypted.to_json())
+            self._store_immutable_text(
+                shard_id, ".enc.json", encrypted.to_json(), self._decode_encrypted
+            )
             self._index_add(encrypted.scope, shard_id)
         return shard_id
 
@@ -1195,7 +1215,9 @@ class ShardStore:
                 self._index_add(existing.scope, shard_id)
                 return existing
             encrypted = encrypt_shard(shard, key)
-            self._store_immutable_text(shard_id, ".enc.json", encrypted.to_json())
+            self._store_immutable_text(
+                shard_id, ".enc.json", encrypted.to_json(), self._decode_encrypted
+            )
             self._index_add(encrypted.scope, shard_id)
             return encrypted
 
@@ -1303,7 +1325,7 @@ class ShardStore:
         return self._content_path(shard_id, ".sealed.json")
 
     def put_sealed(self, sealed) -> str:
-        """Store a sealed shard, rejecting bytes that conflict by ID.
+        """Store a sealed shard. Idempotent by shard_id (first write wins).
 
         Accepts a SealedShard from spiritwriter.fabric.sealed.
         The sealed payload is opaque to the operator — only the
@@ -1311,7 +1333,9 @@ class ShardStore:
         """
         shard_id = validate_shard_id(sealed.shard_id)
         with self._index_lock():
-            self._store_immutable_text(shard_id, ".sealed.json", sealed.to_json())
+            self._store_immutable_text(
+                shard_id, ".sealed.json", sealed.to_json(), self._decode_sealed
+            )
             self._index_add(sealed.scope, shard_id)
         return shard_id
 
@@ -1376,7 +1400,9 @@ class ShardStore:
                 self._index_add(existing.scope, shard_id)
                 return existing
             sealed = seal_shard(shard, owner_pubkey)
-            self._store_immutable_text(shard_id, ".sealed.json", sealed.to_json())
+            self._store_immutable_text(
+                shard_id, ".sealed.json", sealed.to_json(), self._decode_sealed
+            )
             self._index_add(sealed.scope, shard_id)
             return sealed
 

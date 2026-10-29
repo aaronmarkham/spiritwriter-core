@@ -185,7 +185,7 @@ class TestStrictLocalReads:
 
 
 class TestImmutableLocalObjects:
-    def test_plaintext_conflict_rejected_and_original_preserved(self, tmp_path):
+    def test_plaintext_reput_same_id_keeps_first_envelope(self, tmp_path):
         store = ShardStore(tmp_path / "store")
         first = _shard(meta={"envelope": 1})
         second = _shard(meta={"envelope": 2})
@@ -193,12 +193,34 @@ class TestImmutableLocalObjects:
         store.put(first)
         before = store._shard_path(first.shard_id).read_bytes()
 
-        with pytest.raises(IntegrityError, match="existing bytes differ"):
-            store.put(second)
+        assert store.put(second) == first.ref
         assert store._shard_path(first.shard_id).read_bytes() == before
         assert store.get(first.shard_id).meta == {"envelope": 1}
 
-    def test_encrypted_conflict_rejected(self, tmp_path):
+    def test_plaintext_reput_with_new_created_at_is_a_noop(self, tmp_path):
+        store = ShardStore(tmp_path / "store")
+        first = _shard()
+        second = _shard()
+        second.created_at = "2026-02-02T00:00:00Z"
+        assert first.shard_id == second.shard_id
+        store.put(first)
+
+        store.put(second)
+        assert store.get(first.shard_id).created_at == first.created_at
+        assert [s.shard_id for s in store.by_scope(first.scope)] == [first.shard_id]
+
+    def test_plaintext_corrupt_object_is_replaced_on_put(self, tmp_path):
+        store = ShardStore(tmp_path / "store")
+        shard = _shard()
+        store.put(shard)
+        path = store._shard_path(shard.shard_id)
+        path.write_bytes(b'{"shard_id": "torn"')
+
+        store.put(shard)
+        assert path.read_bytes() == shard.to_json().encode("utf-8")
+        assert store.get(shard.shard_id).shard_id == shard.shard_id
+
+    def test_encrypted_reput_same_id_keeps_first_payload(self, tmp_path):
         store = ShardStore(tmp_path / "store")
         key = generate_job_key()
         first = encrypt_shard(_shard(), key)
@@ -206,8 +228,7 @@ class TestImmutableLocalObjects:
         assert first.shard_id == second.shard_id
         store.put_encrypted(first)
 
-        with pytest.raises(IntegrityError, match="existing bytes differ"):
-            store.put_encrypted(second)
+        store.put_encrypted(second)
         assert store.get_encrypted(first.shard_id).encrypted_payload == first.encrypted_payload
     def test_encrypt_and_store_same_inner_shard_is_idempotent(self, tmp_path):
         store = ShardStore(tmp_path / "store")

@@ -182,7 +182,7 @@ class TestPublishResolve:
         assert loc1.cid == loc2.cid
         assert all(call["IfNoneMatch"] == "*" for call in client.put_calls)
 
-    def test_publish_rejects_different_bytes_under_same_id(self, backend, client):
+    def test_publish_same_id_keeps_first_object(self, backend, client):
         first = _make_shard()
         first.created_at = "2026-01-01T00:00:00Z"
         first.meta = {"envelope": 1}
@@ -194,9 +194,19 @@ class TestPublishResolve:
         object_key = ("test-bucket", backend.key_for(first.shard_id))
         before = client.store[object_key]
 
-        with pytest.raises(IntegrityError, match="existing bytes differ"):
-            backend.publish(second)
+        loc = backend.publish(second)
+        assert loc.shard_id == first.shard_id
         assert client.store[object_key] == before
+
+    def test_publish_over_corrupt_object_raises(self, backend, client):
+        shard = _make_shard()
+        backend.publish(shard)
+        object_key = ("test-bucket", backend.key_for(shard.shard_id))
+        client.store[object_key] = b'{"shard_id": "torn"'
+
+        with pytest.raises(IntegrityError, match="malformed or fails its content address"):
+            backend.publish(shard)
+        assert client.store[object_key] == b'{"shard_id": "torn"'
 
     @pytest.mark.parametrize("shard_id", ["short", "A" * 64, "../" + "a" * 61])
     def test_resolve_rejects_noncanonical_shard_id(self, backend, shard_id):
