@@ -113,7 +113,9 @@ def test_mutation_is_deterministic_across_processes(tmp_path):
     )
 
     def _run(seed: str) -> str:
-        env = {"PYTHONHASHSEED": seed, "PATH": __import__("os").environ.get("PATH", "")}
+        # Inherit the parent environment (PYTHONPATH, virtualenv, build-system wrappers) so the
+        # child can import spiritwriter's dependencies; only the hash seed varies.
+        env = {**__import__("os").environ, "PYTHONHASHSEED": seed}
         result = subprocess.run(
             [sys.executable, str(script)],
             capture_output=True, text=True, env=env, check=True,

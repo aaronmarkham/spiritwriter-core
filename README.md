@@ -271,6 +271,7 @@ spiritwriter/
 │       ├── ipfs.py      # IPFS / Kubo backend
 │       └── s3.py        # S3 backend (AWS object storage)
 ├── geo/            # Geographic types and view shards (experimental)
+├── agents/         # Agent-harness recorders (Claude Code, Kiro hooks to traces)
 ├── ingest/         # Document ingestion (PDF)
 ├── integrations/   # Third-party memory-provider adapters (mempalace, ...)
 ├── kb/             # Knowledge base CRUD
@@ -288,6 +289,53 @@ spiritwriter ships a pluggable memory-provider protocol (`spiritwriter/integrati
 - **[mempalace](https://github.com/aaronmarkham/mempalace)** — atomic memory store with decay-based recall and contextual entity weighting. The `spiritwriter/integrations/mempalace/` adapter wires it to the shard store and entity registry.
 
 The same protocol can plug in **Mem0**, **Zep**, **Mastra**, or any custom memory layer — implement `MemoryProvider` and `MemoryBackend`, and spiritwriter handles shard storage, entity resolution, encryption, and tracing underneath.
+
+## Recording Kiro sessions
+
+`spiritwriter-kiro-hook` records [Kiro](https://kiro.dev) sessions (IDE and CLI) as hash-chained traces in the same frame schema as the Claude Code recorder, so existing readers and `verify_chain` work unchanged. Every frame carries `source: "kiro"`. Needs POSIX (Linux, macOS).
+
+```bash
+pip install spiritwriter                 # provides the spiritwriter-kiro-hook command
+cd /path/to/your/workspace
+spiritwriter-kiro-hook install --dry-run # show what would be written
+spiritwriter-kiro-hook install           # writes .kiro/hooks/spiritwriter.json
+```
+
+`install` writes one command hook per trigger (`SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `Stop`, `SessionEnd`; an empty matcher means all tools), each with an absolute path to the executable so Kiro's shell `PATH` does not matter. It only touches `spiritwriter.json`, is idempotent, and `--uninstall` removes only its own hooks. `--triggers A,B` registers exactly those triggers. Besides the six defaults it accepts `PreTaskExec`, `PostTaskExec`, `PostFileCreate`, `PostFileSave`, `PostFileDelete` and `Manual`, which are not installed by default (for example `--triggers SessionStart,PreToolUse,PostToolUse,Stop,SessionEnd,PostTaskExec,PostFileSave`).
+
+| Where | Command | Notes |
+|-------|---------|-------|
+| Kiro IDE | `spiritwriter-kiro-hook install [WORKSPACE]` | The IDE reads workspace hooks from `.kiro/hooks/`. Run it once per workspace. |
+| Kiro CLI | `spiritwriter-kiro-hook install --global` | Writes `~/.kiro/hooks/` (CLI V3 loads global hooks; workspace hooks work too). |
+
+**Tool hooks are installed off.** In the Kiro IDE, every tool call that fires a `PreToolUse` or `PostToolUse` hook shows a card in the chat, which is noisy. So `install` writes those two hooks with `"enabled": false` and leaves the session, prompt and stop hooks enabled: those fire once per session or turn, so they cost nothing visible and still give a session skeleton (start, prompts, turns, end). This is the middle choice between tracing everything all the time and tracing nothing until you opt in. To capture tool calls for a session you want to inspect, run `spiritwriter-kiro-hook on`, work, then `spiritwriter-kiro-hook off`. `status` shows the current state. All three act on the spiritwriter tool hooks in our own `spiritwriter.json` only (workspace by default, `--workspace PATH` or `--global` to choose), and `on` and `off` are idempotent. Re-running `install` keeps whatever on/off state you set. The CLI is less noisy, so there you can leave it on.
+
+**Install it exactly once.** Kiro merges hooks from every scope: the global directory and each root of a multi-root workspace. Define spiritwriter once across all of them, either with `install --global` to trace every workspace, or in exactly one root to trace just that multi-root workspace. Do not combine a global install with a workspace install, and do not install it in every root: each copy runs, so every tool event is recorded twice.
+
+**Activation.** A full Kiro restart is not needed; running sessions pick up hook changes. A new agent session is the reliable boundary, and you need one to see `SessionStart`.
+
+**Virtual environments.** The hook stores the absolute path of the executable that was found at install time. If you move, delete or replace that environment, run `install` again. The `|| true` guard makes a broken path fail silently, so nothing will warn you that recording has stopped.
+
+**Trace location.** `~/.spiritwriter/kiro/traces/<session_id>.jsonl` (directory 0700, files 0600). Override with `--dir DIR` or `SPIRITWRITER_KIRO_TRACE_DIR`. When a payload has no `session_id`, the session key is `kiro-<sha256(cwd)[:12]>-<YYYYMMDD>`, so one workspace's events for one local day share a trace.
+
+**Tool call ids.** Kiro's payloads carry no tool call id, so viewers could not pair a `tool_call` with its `tool_result`. The recorder mints a `tool_use_id` (16 hex characters) on each `PreToolUse` and gives it to the next `PostToolUse` with the same `tool_name` for the same session and agent: first in, first out. Both frames carry `tool_use_id_synthesized: true`. This assumes calls of one tool finish in the order they started. A `PostToolUse` with no pending call gets a fresh id; pending calls older than 15 minutes are forgotten, so an orphaned `PreToolUse` cannot mis-pair later calls. The pending ids live in a small file beside the trace (`<session>.pending.json`, at most 200 entries, written atomically) and are updated under a per-session lock held across the trace write. A real id in the payload is used as is and skips all of this.
+
+**Event mapping.** The trace uses Claude-style event names: `SessionStart` (alias `agentSpawn`) to `session_started`, `UserPromptSubmit` to `prompt_submitted`, `PreToolUse` to `tool_call`, `PostToolUse` to `tool_result`, `Stop` to `turn_completed`, `SessionEnd` to `session_ended`; anything else is a `hook_event`. The extra triggers map to `spec_task_started` / `spec_task_completed` (`PreTaskExec` / `PostTaskExec`, with `spec_name`, `task_name`, `task_success` and `tool_kind: "spec"`), `file_created` / `file_saved` / `file_deleted` (`PostFileCreate` / `PostFileSave` / `PostFileDelete`, with `file_path`) and `manual_trigger` (`Manual`). `Stop` records `user_decision` when Kiro sends it and `SessionEnd` records `reason`. Tool ids get a `tool_kind` (`read`, `write`, `shell`, `web`, `spec`, `spawn`, `mcp`, `other`). `spawn` marks Kiro's `invoke_sub_agent` and `subagent_response` tools; `report_progress` stays `other`. A Kiro MCP tool id (`mcp_<server>_<tool>`) is always recorded as `mcp_id`; `mcp_server` and `mcp_tool` are added only when the id starts with a server configured in `<workspace>/.kiro/settings/mcp.json` or `~/.kiro/settings/mcp.json` (names normalized as Kiro does: whitespace and `-` to `_`, other characters dropped, lowercase; the longest match wins). When the id is 64 or more characters (truncated) or ends in `_<digits>` (a collision suffix, or a real name such as `get_page_2`), the server is still set and `mcp_tool` is the remainder, but `mcp_tool_exact: false` is added because the tool part may be cut short or carry a suffix. The field is omitted when the tool part is trustworthy. `PostToolUse` derives `ok` when the response says so (`success`, `is_error`, `error`, `exit_code`, `status`). Like the Claude Code recorder, it keeps no response body by default; `install --with-responses` (or `SPIRITWRITER_KIRO_RESPONSES=1`) also records `tool_response`, redacted and capped at 2000 characters. Raw tool inputs and prompts are never written, only hashes, lengths and a scrubbed short summary.
+
+**Session lineage.** This follows the Claude Code recorder's naming. Kiro runs each hook with `KIRO_SESSION_ID` set to the root conversation id. The trace's `session_id` (also its `run_id` and file name) is that root, else the payload `session_id`. When the payload `session_id` differs from the root, `agent_id` is the payload `session_id`, so a child conversation nests under its root; otherwise `agent_id` is `main`. There is no separate root field. Raw capture also records `KIRO_SESSION_ID` as received. This is unconfirmed for subagents: a live run did not show a subagent with a distinct `session_id`.
+
+**The hook never interferes with Kiro.** It always exits 0, prints nothing to stdout (Kiro adds a successful hook's stdout to the agent's context) or stderr, has no way to block a tool call, gives up reading stdin after 2 seconds, ends itself after 5 if stdin stalls (the timer is cancelled once the payload is read, so it can never interrupt a trace write), and registers with a 10 second Kiro-side timeout. The registered command is `<hook> --event <Trigger> >/dev/null 2>&1 || true`, so even a broken interpreter or a failed import cannot exit non-zero (Kiro reads a `Stop` hook that exits 1 as "keep working") or print a traceback. Re-running `install` upgrades hooks written with the older, unguarded command in place. Failures go to `errors.log` in the trace directory (`~/.spiritwriter/kiro/traces/errors.log` by default); set `SPIRITWRITER_KIRO_DEBUG=1` to also print them to stderr.
+
+**Raw capture (opt-in).** Recorded traces only keep fields the adapter knows, so raw capture shows what Kiro really sends. To use it, set `SPIRITWRITER_KIRO_RAW=1` in the environment Kiro runs in, or install with `spiritwriter-kiro-hook install --raw`. Each hook call then appends one line to `~/.spiritwriter/kiro/raw-capture.jsonl` (override with `SPIRITWRITER_KIRO_RAW_FILE`): the stdin JSON, the trigger, the payload's keys, whether a prompt arrived (the payload `prompt` field, else the legacy `USER_PROMPT` variable) and its length, and the names (not values) of `KIRO*` environment variables. Secret shapes and secret-named keys are redacted, long strings are capped, and prompt text is left out unless you also set `SPIRITWRITER_KIRO_RAW_PROMPTS=1` (then it is included, redacted). Still, the file holds your tool inputs, and one global file accumulates them across every workspace. Use raw capture as temporary diagnostics: when you have what you need, reinstall without `--raw` and delete the capture file.
+
+**Known gaps.**
+- The shape of `tool_response` varies by tool. `ok` is derived only when the response says so; otherwise the frame has `ok_unknown: true`. Results are paired to calls by `tool_use_id` when Kiro sends one, else by `args_sha256`. If you opt in to response bodies, the stored response is redacted for secret shapes but can still contain file contents or command output (capped at 2000 characters), so treat traces as private. Call ids are minted, so a `tool_call` and its `tool_result` pair only as well as the in-order-per-tool assumption holds.
+- Subagent lineage rests on `KIRO_SESSION_ID` and is unconfirmed: in a live IDE run, invoking a subagent produced no distinct `agent_id`.
+- `SessionStart` and `SessionEnd` have not been captured live in the IDE yet; that needs a fresh agent session after installing. `SessionEnd` is documented for CLI V3 only, and the IDE may not fire it.
+- A live `Stop` carried only the common fields (`session_id`, `hook_event_name`, `cwd`), so `user_decision` is optional and often absent.
+- MCP ids are split only for servers found in the two `mcp.json` files; servers defined elsewhere keep just `mcp_id`. Truncated or numerically suffixed ids are split with `mcp_tool_exact: false`, so per-tool metrics should treat those tool names as approximate.
+- Built-in tool ids are not documented, so `tool_kind` is a name heuristic. Power tools are marked only if the payload says so.
+- Kiro does not run v2 hooks in an untrusted workspace.
 
 ## Used By
 
