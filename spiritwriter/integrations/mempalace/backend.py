@@ -256,8 +256,8 @@ class ShardBackend:
         """Update existing drawers.
 
         With documents: full content upsert (creates new shard with lineage).
-        Metadata-only: atomically replaces the mutable metadata envelope while
-        preserving the shard ID, content, and scope.
+        Metadata-only: creates a new shard with updated meta and links to
+        the previous version via parent_shard_id (shards are immutable).
         """
         ids = kwargs.get("ids", [])
         documents = kwargs.get("documents")
@@ -267,19 +267,27 @@ class ShardBackend:
             metas = metadatas or [{}] * len(ids)
             self.upsert(documents=documents, ids=ids, metadatas=metas)
         elif metadatas:
-            # ``meta`` is outside the legacy shard content address, so use the
-            # store's explicit locked atomic envelope-update path. Direct file
-            # writes would bypass no-follow and immutable-object protections.
+            # Metadata-only update. Shards are content-addressed so
+            # changing only meta (which is excluded from shard_id) won't
+            # produce a new ID. We force-write the updated JSON to the
+            # same path, preserving the content address guarantee while
+            # allowing mutable metadata on the shard envelope.
             for drawer_id, new_meta in zip(ids, metadatas):
                 if drawer_id not in self._id_map:
                     raise KeyError(f"Drawer {drawer_id} not found")
                 shard_id = self._id_map[drawer_id]
-                updates = {**new_meta, "drawer_id": drawer_id}
-                self._store.update_metadata(
-                    shard_id,
-                    updates,
-                    key=self._encryption_key,
-                )
+                shard = self._resolve_shard(shard_id)
+                if shard is None:
+                    raise KeyError(f"Shard {shard_id[:12]} not found for drawer {drawer_id}")
+
+                # Merge new metadata and force-write
+                shard.meta.update(new_meta)
+                shard.meta["drawer_id"] = drawer_id
+                path = self._store._shard_path(shard_id)
+                if self._encryption_key:
+                    self._store.encrypt_and_store(shard, self._encryption_key)
+                else:
+                    path.write_text(shard.to_json(), encoding="utf-8")
 
         if self._chroma is not None:
             self._chroma.update(**kwargs)

@@ -64,9 +64,7 @@ store.delete(ref.shard_id)           # removes file and updates scope index
 
 `put()` returns a `ShardRef` — a lightweight pointer (shard_id + scope + decay_class + tags) suitable for passing across agent boundaries without dragging the full content along. The actual atoms stay in the store until `hydrate()` resolves them.
 
-`get()` returns `None` for an unknown, well-formed ID. If a network resolver is configured, it transparently falls back to L2 before giving up.
-
-Starting in 0.13, every local, S3, and IPFS shard-ID entry point requires the canonical 64-character lowercase hexadecimal SHA-256 form. Malformed IDs, including uppercase hex, shortened IDs, prefixes, and path components, raise `ValueError` instead of returning `None`. This separates invalid caller input from a valid content address that is not present. Import `validate_shard_id` from `spiritwriter.fabric.shard` when validating at an API boundary.
+`get()` returns `None` for unknown IDs. If a network resolver is configured, it transparently falls back to L2 before giving up.
 
 ## Querying
 

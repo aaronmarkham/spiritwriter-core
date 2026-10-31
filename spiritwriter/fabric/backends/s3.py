@@ -32,7 +32,7 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 
 try:
     import boto3
@@ -47,7 +47,7 @@ from spiritwriter.fabric.network import (
     ShardLocation,
     ShardManifest,
 )
-from spiritwriter.fabric.shard import MemoryShard, validate_shard_id
+from spiritwriter.fabric.shard import MemoryShard
 
 logger = logging.getLogger(__name__)
 
@@ -63,12 +63,6 @@ _OBJECT_NOT_FOUND_CODES = frozenset({"NoSuchKey", "404", "NotFound"})
 # SPIRITWRITER_S3_BUCKET surfaces here; if we treated it as "not found" the
 # whole store would read as permanently empty instead of erroring.
 _CONFIG_ERROR_CODES = frozenset({"NoSuchBucket", "InvalidBucketName"})
-
-# If-None-Match create races report one of these, depending on the S3
-# implementation and whether another conditional write is still in flight.
-_CONDITIONAL_CONFLICT_CODES = frozenset({
-    "PreconditionFailed", "412", "ConditionalRequestConflict", "409",
-})
 
 
 class S3ConfigurationError(Exception):
@@ -178,8 +172,7 @@ class S3Backend:
         return f"{self._prefix}/{rel}" if self._prefix else rel
 
     def _key(self, shard_id: str, suffix: str = ".json") -> str:
-        """Git-style object key for a canonical shard identifier."""
-        shard_id = validate_shard_id(shard_id)
+        """Git-style object key: [prefix/]shards/ab/cd1234...json"""
         return self._join(f"shards/{shard_id[:2]}/{shard_id[2:]}{suffix}")
 
     def _manifest_key(self, manifest_id: str) -> str:
@@ -233,19 +226,12 @@ class S3Backend:
             ) from exc
         raise NetworkUnavailable(f"S3 {op} failed for {key}: {exc}") from exc
 
-    def _put_bytes(
-        self,
-        key: str,
-        data: bytes,
-        verify: Callable[[bytes], Any] | None = None,
-    ) -> None:
-        """Create an immutable object, or keep a valid existing one.
+    def _put_bytes(self, key: str, data: bytes) -> None:
+        """Write bytes to a key.
 
-        ``IfNoneMatch='*'`` makes object creation atomic. If another writer
-        already created the key with different bytes, ``verify`` checks the
-        existing object: a valid object for the same content address is kept
-        (first write wins), and a corrupt one raises :class:`IntegrityError`.
-        Without ``verify`` (manifests), different bytes are an integrity error.
+        Wraps a missing/misconfigured bucket as S3ConfigurationError and any
+        other transport error as NetworkUnavailable — a publish never fails
+        silently.
         """
         try:
             self._client.put_object(
@@ -253,26 +239,9 @@ class S3Backend:
                 Key=key,
                 Body=data,
                 ContentType="application/json",
-                IfNoneMatch="*",
             )
-            return
-        except Exception as e:  # noqa: BLE001 — inspect, then normalize
-            if self._error_code(e) not in _CONDITIONAL_CONFLICT_CODES:
-                self._raise_normalized(e, "put_object", key)
-
-        existing = self._get_bytes(key)
-        if existing is None:
-            raise NetworkUnavailable(
-                f"S3 conditional create conflicted for {key}, but no object "
-                "was readable afterward"
-            )
-        if existing == data:
-            return
-        if verify is None:
-            raise IntegrityError(
-                f"S3 content-address conflict at {key}: existing bytes differ"
-            )
-        verify(existing)
+        except Exception as e:  # noqa: BLE001 — normalize to protocol error
+            self._raise_normalized(e, "put_object", key)
 
     def _get_bytes(self, key: str) -> bytes | None:
         """Read bytes from a key. Returns None ONLY if the object is absent.
@@ -295,9 +264,7 @@ class S3Backend:
 
     # === Shared publish/resolve helpers ===
 
-    def _publish(
-        self, shard_id: str, suffix: str, json_bytes: bytes, cls: Any, label: str
-    ) -> ShardLocation:
+    def _publish(self, shard_id: str, suffix: str, json_bytes: bytes) -> ShardLocation:
         """Write a serialized shard to its content-addressed key.
 
         Single code path for publish / publish_sealed / publish_encrypted —
@@ -314,11 +281,7 @@ class S3Backend:
         until explicitly deleted).
         """
         key = self._key(shard_id, suffix)
-        self._put_bytes(
-            key,
-            json_bytes,
-            verify=lambda existing: self._parse_typed(shard_id, existing, cls, label),
-        )
+        self._put_bytes(key, json_bytes)
         return ShardLocation(shard_id=shard_id, cid=key, local=False, pinned=True)
 
     def _resolve_typed(self, shard_id: str, suffix: str, cls: Any, label: str) -> Any:
@@ -334,17 +297,7 @@ class S3Backend:
         data = self._get_bytes(self._key(shard_id, suffix))
         if data is None:
             return None
-        return self._parse_typed(shard_id, data, cls, label)
-
-    def _parse_typed(self, shard_id: str, data: bytes, cls: Any, label: str) -> Any:
-        """Parse a typed shard payload and check it against its shard_id."""
-        try:
-            obj = cls.from_json(data.decode("utf-8"))
-        except Exception as exc:
-            raise IntegrityError(
-                f"{label} payload for {shard_id} is malformed or fails its "
-                f"content address: {exc}"
-            ) from exc
+        obj = cls.from_json(data.decode("utf-8"))
         if obj.shard_id != shard_id:
             raise IntegrityError(
                 f"{label} mismatch: expected {shard_id}, got {obj.shard_id}"
@@ -355,29 +308,18 @@ class S3Backend:
 
     def publish(self, shard: MemoryShard) -> ShardLocation:
         """Publish a plaintext shard to S3. Idempotent (content-addressed)."""
-        return self._publish(
-            shard.shard_id, ".json", shard.to_json().encode("utf-8"), MemoryShard, "Shard ID"
-        )
+        return self._publish(shard.shard_id, ".json", shard.to_json().encode("utf-8"))
 
     def publish_sealed(self, sealed: Any) -> ShardLocation:
         """Publish a sealed shard to S3. Object bytes are opaque to S3."""
-        from spiritwriter.fabric.sealed import SealedShard
         return self._publish(
-            sealed.shard_id,
-            ".sealed.json",
-            sealed.to_json().encode("utf-8"),
-            SealedShard,
-            "Sealed shard ID",
+            sealed.shard_id, ".sealed.json", sealed.to_json().encode("utf-8")
         )
 
     def publish_encrypted(self, encrypted: EncryptedShard) -> ShardLocation:
         """Publish an encrypted shard to S3."""
         return self._publish(
-            encrypted.shard_id,
-            ".enc.json",
-            encrypted.to_json().encode("utf-8"),
-            EncryptedShard,
-            "Encrypted shard ID",
+            encrypted.shard_id, ".enc.json", encrypted.to_json().encode("utf-8")
         )
 
     def resolve(self, shard_id: str) -> MemoryShard | None:

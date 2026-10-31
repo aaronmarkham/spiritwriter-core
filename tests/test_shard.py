@@ -26,12 +26,6 @@ from spiritwriter.fabric.extract import (
 )
 
 
-MISSING_SHARD_ID = "0" * 64
-REF_ID_A = "a" * 64
-REF_ID_B = "b" * 64
-REF_ID_C = "c" * 64
-
-
 # === ShardAtom Tests ===
 
 class TestShardAtom:
@@ -334,10 +328,10 @@ class TestShardStore:
         assert store.count() == 0
 
     def test_delete_nonexistent(self, store):
-        assert not store.delete(MISSING_SHARD_ID)
+        assert not store.delete("nonexistent")
 
     def test_get_nonexistent(self, store):
-        assert store.get(MISSING_SHARD_ID) is None
+        assert store.get("nonexistent") is None
 
     def test_resolve_ref(self, store):
         shard = self._make_shard()
@@ -358,7 +352,7 @@ class TestShardStore:
     def test_resolve_many_skips_missing(self, store):
         s1 = self._make_shard()
         ref1 = store.put(s1)
-        fake_ref = ShardRef(shard_id=MISSING_SHARD_ID, scope="test")
+        fake_ref = ShardRef(shard_id="nonexistent", scope="test")
 
         shards = store.resolve_many([ref1, fake_ref])
         assert len(shards) == 1
@@ -788,17 +782,17 @@ class TestDeleteRef:
 class TestListRefs:
     def test_list_all(self, tmp_path):
         store = ShardStore(tmp_path / "store")
-        store.set_ref("job:pipe:current", REF_ID_A)
-        store.set_ref("job:pipe:checkpoint", REF_ID_B)
-        store.set_ref("project-csp", REF_ID_C)
+        store.set_ref("job:pipe:current", "abc")
+        store.set_ref("job:pipe:checkpoint", "def")
+        store.set_ref("project-csp", "ghi")
         refs = store.list_refs()
         assert refs == ["job:pipe:checkpoint", "job:pipe:current", "project-csp"]
 
     def test_list_prefix(self, tmp_path):
         store = ShardStore(tmp_path / "store")
-        store.set_ref("job:pipe:current", REF_ID_A)
-        store.set_ref("job:pipe:checkpoint", REF_ID_B)
-        store.set_ref("project-csp", REF_ID_C)
+        store.set_ref("job:pipe:current", "abc")
+        store.set_ref("job:pipe:checkpoint", "def")
+        store.set_ref("project-csp", "ghi")
         refs = store.list_refs(prefix="job:")
         assert refs == ["job:pipe:checkpoint", "job:pipe:current"]
 
@@ -808,8 +802,8 @@ class TestRefNameEncoding:
 
     def test_roundtrip_colon(self, tmp_path):
         store = ShardStore(tmp_path / "store")
-        store.set_ref("job:pipe:current", REF_ID_A)
-        assert store.get_ref("job:pipe:current") == REF_ID_A
+        store.set_ref("job:pipe:current", "abc")
+        assert store.get_ref("job:pipe:current") == "abc"
         assert store.list_refs() == ["job:pipe:current"]
         assert store.delete_ref("job:pipe:current") is True
 
@@ -817,34 +811,33 @@ class TestRefNameEncoding:
         store = ShardStore(tmp_path / "store")
         # Windows forbids < > : " / \ | ? *
         tricky = 'weird<>:"/\\|?*name'
-        store.set_ref(tricky, REF_ID_A)
-        assert store.get_ref(tricky) == REF_ID_A
+        store.set_ref(tricky, "xyz")
+        assert store.get_ref(tricky) == "xyz"
         assert store.list_refs() == [tricky]
 
     def test_percent_sign_is_escaped(self, tmp_path):
         """A literal `%` in a ref name must roundtrip (not be read as encoding)."""
         store = ShardStore(tmp_path / "store")
-        store.set_ref("already%3Aencoded", REF_ID_A)
-        store.set_ref("already:encoded", REF_ID_B)
-        assert store.get_ref("already%3Aencoded") == REF_ID_A
-        assert store.get_ref("already:encoded") == REF_ID_B
+        store.set_ref("already%3Aencoded", "one")
+        store.set_ref("already:encoded", "two")
+        assert store.get_ref("already%3Aencoded") == "one"
+        assert store.get_ref("already:encoded") == "two"
         assert sorted(store.list_refs()) == ["already%3Aencoded", "already:encoded"]
 
     def test_safe_names_stored_unencoded(self, tmp_path):
         """Portable names must not be rewritten on disk (backward compat)."""
         store = ShardStore(tmp_path / "store")
-        store.set_ref("project-csp", REF_ID_A)
-        store.set_ref("snake_case.v2", REF_ID_B)
+        store.set_ref("project-csp", "abc")
+        store.set_ref("snake_case.v2", "def")
         on_disk = sorted(p.name for p in (tmp_path / "store" / "refs").glob("*.ref"))
         assert on_disk == ["project-csp.ref", "snake_case.v2.ref"]
 
     def test_roundtrip_windows_reserved_device_names(self, tmp_path):
         """CON, PRN, COM1, ... are illegal on Windows even with an extension."""
         store = ShardStore(tmp_path / "store")
-        for index, name in enumerate(["CON", "con", "PRN", "COM1", "lpt9", "AUX.log"]):
-            shard_id = f"{index:064x}"
-            store.set_ref(name, shard_id)
-            assert store.get_ref(name) == shard_id, f"roundtrip failed for {name!r}"
+        for name in ["CON", "con", "PRN", "COM1", "lpt9", "AUX.log"]:
+            store.set_ref(name, f"val-{name}")
+            assert store.get_ref(name) == f"val-{name}", f"roundtrip failed for {name!r}"
         listed = store.list_refs()
         assert "CON" in listed and "PRN" in listed and "COM1" in listed
         # The on-disk filename must not start with the reserved token.
@@ -858,10 +851,10 @@ class TestRefNameEncoding:
     def test_roundtrip_trailing_dot_and_space(self, tmp_path):
         """Windows silently strips trailing dots / spaces at the FS layer."""
         store = ShardStore(tmp_path / "store")
-        store.set_ref("trailing-dot.", REF_ID_A)
-        store.set_ref("trailing-space ", REF_ID_B)
-        assert store.get_ref("trailing-dot.") == REF_ID_A
-        assert store.get_ref("trailing-space ") == REF_ID_B
+        store.set_ref("trailing-dot.", "a")
+        store.set_ref("trailing-space ", "b")
+        assert store.get_ref("trailing-dot.") == "a"
+        assert store.get_ref("trailing-space ") == "b"
         assert sorted(store.list_refs()) == ["trailing-dot.", "trailing-space "]
 
 
@@ -1132,7 +1125,7 @@ class TestMoveScope:
         store = ShardStore(tmp_path / "store")
         import pytest
         with pytest.raises(KeyError):
-            store.move_scope(MISSING_SHARD_ID, "jobs:done")
+            store.move_scope("nonexistent", "jobs:done")
 
 
 # ── wire stability (golden vectors) ──────────────────────────────────

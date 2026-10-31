@@ -35,7 +35,7 @@ from spiritwriter.fabric.network import (
     ShardManifest,
     SwarmMismatchError,
 )
-from spiritwriter.fabric.shard import MemoryShard, validate_shard_id
+from spiritwriter.fabric.shard import MemoryShard
 
 logger = logging.getLogger(__name__)
 
@@ -124,8 +124,8 @@ class IPFSBackend:
         )
 
     def get_cid(self, shard_id: str) -> str | None:
-        """Look up a known CID for a validated shard_id."""
-        return self._cid_map.get(validate_shard_id(shard_id))
+        """Look up a known CID for a shard_id."""
+        return self._cid_map.get(shard_id)
 
     # === Swarm Verification ===
 
@@ -248,7 +248,7 @@ class IPFSBackend:
 
     def publish(self, shard: MemoryShard) -> ShardLocation:
         """Publish a plaintext shard to IPFS."""
-        shard_id = validate_shard_id(shard.shard_id)
+        shard_id = shard.shard_id
         # Skip if already published
         existing_cid = self._cid_map.get(shard_id)
         if existing_cid:
@@ -279,8 +279,8 @@ class IPFSBackend:
 
     def publish_sealed(self, sealed: Any) -> ShardLocation:
         """Publish a sealed shard to IPFS. Network sees opaque bytes."""
-        shard_id = validate_shard_id(sealed.shard_id)
-        existing_cid = self._cid_map.get(f"sealed:{shard_id}")
+        shard_id = sealed.shard_id
+        existing_cid = self._cid_map.get(shard_id)
         if existing_cid:
             # Idempotent early-return: reflect the SAME pin state a fresh publish
             # would (pin_by_default), not a hardcoded True. With pin_by_default=False
@@ -306,7 +306,7 @@ class IPFSBackend:
 
     def publish_encrypted(self, encrypted: EncryptedShard) -> ShardLocation:
         """Publish an encrypted shard to IPFS."""
-        shard_id = validate_shard_id(encrypted.shard_id)
+        shard_id = encrypted.shard_id
         existing_cid = self._cid_map.get(f"encrypted:{shard_id}")
         if existing_cid:
             # Idempotent early-return: reflect the SAME pin state a fresh publish
@@ -351,7 +351,7 @@ class IPFSBackend:
                 "permanently. Pass confirm_public=True to acknowledge this, or use "
                 "publish_encrypted()/publish_sealed() to keep the content private."
             )
-        shard_id = validate_shard_id(shard.shard_id)
+        shard_id = shard.shard_id
         existing_cid = self._cid_map.get(f"public:{shard_id}")
         if existing_cid:
             # Idempotent early-return: reflect the SAME pin state a fresh publish
@@ -390,19 +390,12 @@ class IPFSBackend:
         timeout reads as "shard absent" and a caller of ShardStore.get() silently
         proceeds as if the data is gone. Matches the s3 backend's posture.
         """
-        shard_id = validate_shard_id(shard_id)
         cid = self._cid_map.get(shard_id)
         if not cid:
             return None
 
         data = self._cat_cid(cid)
-        try:
-            shard = MemoryShard.from_json(data.decode("utf-8"))
-        except Exception as exc:
-            raise IntegrityError(
-                f"Shard payload for {shard_id} is malformed or fails its "
-                f"content address: {exc}"
-            ) from exc
+        shard = MemoryShard.from_json(data.decode("utf-8"))
         if shard.shard_id != shard_id:
             raise IntegrityError(
                 f"Shard ID mismatch: expected {shard_id}, got {shard.shard_id}"
@@ -416,19 +409,13 @@ class IPFSBackend:
         error from ``_cat_cid`` PROPAGATES rather than reading as absent. See
         :meth:`resolve` for the rationale.
         """
-        shard_id = validate_shard_id(shard_id)
         cid = self._cid_map.get(f"sealed:{shard_id}")
         if not cid:
             return None
 
         data = self._cat_cid(cid)
         from spiritwriter.fabric.sealed import SealedShard
-        try:
-            sealed = SealedShard.from_json(data.decode("utf-8"))
-        except Exception as exc:
-            raise IntegrityError(
-                f"Sealed shard payload for {shard_id} is malformed: {exc}"
-            ) from exc
+        sealed = SealedShard.from_json(data.decode("utf-8"))
         if sealed.shard_id != shard_id:
             raise IntegrityError(
                 f"Sealed shard ID mismatch: expected {shard_id}, got {sealed.shard_id}"
@@ -442,18 +429,12 @@ class IPFSBackend:
         error from ``_cat_cid`` PROPAGATES rather than reading as absent. See
         :meth:`resolve` for the rationale.
         """
-        shard_id = validate_shard_id(shard_id)
         cid = self._cid_map.get(f"encrypted:{shard_id}")
         if not cid:
             return None
 
         data = self._cat_cid(cid)
-        try:
-            encrypted = EncryptedShard.from_json(data.decode("utf-8"))
-        except Exception as exc:
-            raise IntegrityError(
-                f"Encrypted shard payload for {shard_id} is malformed: {exc}"
-            ) from exc
+        encrypted = EncryptedShard.from_json(data.decode("utf-8"))
         if encrypted.shard_id != shard_id:
             raise IntegrityError(
                 f"Encrypted shard ID mismatch: expected {shard_id}, got {encrypted.shard_id}"

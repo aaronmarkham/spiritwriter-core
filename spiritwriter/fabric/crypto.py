@@ -97,28 +97,7 @@ def decrypt_shard(encrypted: EncryptedShard, key: bytes) -> MemoryShard:
     actual_hash = _sha256(plaintext)
     if actual_hash != encrypted.content_hash:
         raise DecryptionError("Content hash mismatch — data may be corrupted")
-    try:
-        shard = MemoryShard.from_json(plaintext.decode("utf-8"))
-    except Exception as e:
-        raise DecryptionError(f"Decrypted shard is invalid: {e}") from e
-
-    mismatches = []
-    if encrypted.shard_id != shard.shard_id:
-        mismatches.append("shard_id")
-    if encrypted.scope != shard.scope:
-        mismatches.append("scope")
-    if encrypted.atom_count != len(shard.atoms):
-        mismatches.append("atom_count")
-    if encrypted.created_at != shard.created_at:
-        mismatches.append("created_at")
-    if encrypted.origin_agent != shard.origin:
-        mismatches.append("origin_agent")
-    if mismatches:
-        raise DecryptionError(
-            "Encrypted wrapper does not match decrypted shard: "
-            + ", ".join(mismatches)
-        )
-    return shard
+    return MemoryShard.from_json(plaintext.decode("utf-8"))
 
 
 def serialize_key(key: bytes) -> str:

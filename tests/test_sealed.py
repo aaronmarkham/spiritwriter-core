@@ -22,7 +22,6 @@ from spiritwriter.fabric.sealed import (
     HAS_NACL,
 )
 from spiritwriter.fabric.store import ShardStore
-from spiritwriter.fabric.network import IntegrityError
 
 
 pytestmark = pytest.mark.skipif(not HAS_NACL, reason="PyNaCl not installed")
@@ -218,7 +217,7 @@ class TestStoreSealed:
     def test_unseal_not_found(self, store):
         kp = generate_owner_keypair()
         with pytest.raises(KeyError, match="not found"):
-            store.unseal_and_get("0" * 64, kp.private_key)
+            store.unseal_and_get("nonexistent", kp.private_key)
 
     def test_sealed_indexed_by_scope(self, store):
         kp = generate_owner_keypair()
@@ -241,23 +240,12 @@ class TestStoreSealed:
         assert store.has(shard.shard_id)
         assert store.has_sealed(shard.shard_id)
 
-    def test_resealing_same_inner_shard_is_idempotent(self, store):
+    def test_idempotent_put(self, store):
         kp = generate_owner_keypair()
         shard = _make_shard()
-        first = store.seal_and_store(shard, kp.public_key)
-        second = store.seal_and_store(shard, kp.public_key)
-        assert second.to_json() == first.to_json()
-
-        # Re-storing the exact envelope remains idempotent.
-        assert store.put_sealed(first) == shard.shard_id
-
-    def test_resealing_same_legacy_id_for_different_owner_is_rejected(self, store):
-        shard = _make_shard()
-        first = generate_owner_keypair()
-        second = generate_owner_keypair()
-        store.seal_and_store(shard, first.public_key)
-        with pytest.raises(IntegrityError, match="different envelope"):
-            store.seal_and_store(shard, second.public_key)
+        id1 = store.seal_and_store(shard, kp.public_key).shard_id
+        id2 = store.seal_and_store(shard, kp.public_key).shard_id
+        assert id1 == id2
 
 
 # === Ed25519 Signing ===

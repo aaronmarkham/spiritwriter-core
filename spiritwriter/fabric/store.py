@@ -15,28 +15,24 @@ network resolution when a shard_id isn't found locally.
 from __future__ import annotations
 
 import errno
-import hashlib
 import json
 import logging
 import os
 import re
-import stat
 import threading
 import time
 import uuid
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Callable, Iterator
+from typing import Iterator
 
-from spiritwriter.fabric.shard import (
-    MemoryShard, ShardRef, DecayClass, validate_shard_id,
-)
+from spiritwriter.fabric.shard import MemoryShard, ShardRef, DecayClass
 from spiritwriter.fabric.crypto import EncryptedShard, encrypt_shard, decrypt_shard, DecryptionError
 from spiritwriter.fabric.entitlement import (
     EntitlementToken, validate_capability, validate_scope,
     is_expired, get_shard_key, Capability,
 )
-from spiritwriter.fabric.network import IntegrityError, NetworkResolver
+from spiritwriter.fabric.network import NetworkResolver
 
 try:  # POSIX
     import fcntl
@@ -214,307 +210,11 @@ class ShardStore:
         self._resolver = resolver
         self._lock_path = self.root / "index.json.lock"
         self.shards_dir.mkdir(parents=True, exist_ok=True)
-        self._assert_shards_dir()
         self.refs_dir.mkdir(parents=True, exist_ok=True)
 
-    def _assert_shards_dir(self) -> None:
-        """Reject a replaced or symlinked top-level object directory."""
-        try:
-            mode = os.lstat(self.shards_dir).st_mode
-        except OSError as exc:
-            raise ValueError(
-                f"Shard object directory is unavailable: {self.shards_dir}"
-            ) from exc
-        if stat.S_ISLNK(mode) or not stat.S_ISDIR(mode):
-            raise ValueError(
-                f"Shard object directory must be a real directory, not a symlink: "
-                f"{self.shards_dir}"
-            )
-
-    @property
-    def _secure_dir_fd_supported(self) -> bool:
-        """Whether this OS supports the descriptor/no-follow object path."""
-        return (
-            os.name == "posix"
-            and hasattr(os, "O_DIRECTORY")
-            and hasattr(os, "O_NOFOLLOW")
-            and os.open in os.supports_dir_fd
-            and os.mkdir in os.supports_dir_fd
-            and os.unlink in os.supports_dir_fd
-            and os.link in os.supports_dir_fd
-        )
-
-    @contextmanager
-    def _shards_fd(self) -> Iterator[int | None]:
-        """Open the object root without following a final symlink."""
-        self._assert_shards_dir()
-        if not self._secure_dir_fd_supported:
-            yield None
-            return
-        flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
-        try:
-            fd = os.open(self.shards_dir, flags)
-        except OSError as exc:
-            if exc.errno in (errno.ELOOP, errno.ENOTDIR):
-                raise ValueError(
-                    f"Shard object directory is unsafe: {self.shards_dir}"
-                ) from exc
-            raise
-        try:
-            yield fd
-        finally:
-            os.close(fd)
-
-    @contextmanager
-    def _prefix_fd(
-        self, shard_id: str, *, create: bool = False
-    ) -> Iterator[int | None]:
-        """Open one object prefix directory without following symlinks."""
-        shard_id = validate_shard_id(shard_id)
-        prefix = shard_id[:2]
-        with self._shards_fd() as root_fd:
-            if root_fd is None:
-                path = self.shards_dir / prefix
-                if create:
-                    path.mkdir(parents=False, exist_ok=True)
-                if not path.exists():
-                    yield None
-                    return
-                if path.is_symlink() or not path.is_dir():
-                    raise ValueError(f"Unsafe shard prefix directory: {path}")
-                yield None
-                return
-
-            if create:
-                try:
-                    os.mkdir(prefix, mode=0o777, dir_fd=root_fd)
-                except FileExistsError:
-                    pass
-            flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
-            try:
-                prefix_fd = os.open(prefix, flags, dir_fd=root_fd)
-            except FileNotFoundError:
-                yield None
-                return
-            except OSError as exc:
-                if exc.errno in (errno.ELOOP, errno.ENOTDIR):
-                    raise ValueError(
-                        f"Unsafe shard prefix directory: {self.shards_dir / prefix}"
-                    ) from exc
-                raise
-            try:
-                yield prefix_fd
-            finally:
-                os.close(prefix_fd)
-
-    @staticmethod
-    def _object_name(shard_id: str, suffix: str) -> str:
-        return f"{shard_id[2:]}{suffix}"
-
-    def _content_path(self, shard_id: str, suffix: str) -> Path:
-        """Return the lexical path for a validated shard identifier.
-
-        Actual object I/O uses directory descriptors and ``O_NOFOLLOW`` where
-        the platform supports them. The portable fallback must not call
-        ``resolve()`` on the object itself because that would hide a final
-        symlink before the caller can reject it.
-        """
-        shard_id = validate_shard_id(shard_id)
-        self._assert_shards_dir()
-        object_root = self.shards_dir.absolute()
-        prefix = object_root / shard_id[:2]
-        try:
-            mode = os.lstat(prefix).st_mode
-        except FileNotFoundError:
-            pass
-        else:
-            if stat.S_ISLNK(mode) or not stat.S_ISDIR(mode):
-                raise ValueError(f"Unsafe shard prefix directory: {prefix}")
-        return prefix / self._object_name(shard_id, suffix)
-
     def _shard_path(self, shard_id: str) -> Path:
-        """Git-style object path: ab/cd1234...json."""
-        return self._content_path(shard_id, ".json")
-
-    def _read_at(self, prefix_fd: int, name: str) -> bytes:
-        """Read one regular file through a held prefix descriptor."""
-        try:
-            fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=prefix_fd)
-        except OSError as exc:
-            if exc.errno in (errno.ELOOP, errno.ENOTDIR):
-                raise ValueError(f"Unsafe shard object path: {name}") from exc
-            raise
-        try:
-            if not stat.S_ISREG(os.fstat(fd).st_mode):
-                raise ValueError(f"Shard object is not a regular file: {name}")
-            with os.fdopen(fd, "rb", closefd=False) as f:
-                return f.read()
-        finally:
-            os.close(fd)
-
-    def _read_object_bytes(self, shard_id: str, suffix: str) -> bytes | None:
-        """Read an object without following object or prefix symlinks."""
-        shard_id = validate_shard_id(shard_id)
-        name = self._object_name(shard_id, suffix)
-        with self._prefix_fd(shard_id) as prefix_fd:
-            if self._secure_dir_fd_supported:
-                if prefix_fd is None:
-                    return None
-                try:
-                    return self._read_at(prefix_fd, name)
-                except FileNotFoundError:
-                    return None
-
-            path = self._content_path(shard_id, suffix)
-            try:
-                mode = os.lstat(path).st_mode
-            except FileNotFoundError:
-                return None
-            if stat.S_ISLNK(mode) or not stat.S_ISREG(mode):
-                raise ValueError(f"Unsafe shard object path: {path}")
-            return path.read_bytes()
-
-    def _object_exists(self, shard_id: str, suffix: str) -> bool:
-        return self._read_object_bytes(shard_id, suffix) is not None
-
-    def _write_temp_at(self, prefix_fd: int, name: str, text: str) -> str:
-        """Write and fsync a uniquely named temporary object."""
-        tmp_name = f"{name}.{os.getpid()}.{uuid.uuid4().hex[:8]}.tmp"
-        fd = os.open(
-            tmp_name,
-            os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
-            0o666,
-            dir_fd=prefix_fd,
-        )
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8", closefd=False) as f:
-                f.write(text)
-                f.flush()
-                os.fsync(fd)
-        except BaseException:
-            try:
-                os.unlink(tmp_name, dir_fd=prefix_fd)
-            except FileNotFoundError:
-                pass
-            raise
-        finally:
-            os.close(fd)
-        return tmp_name
-
-    def _store_immutable_text(
-        self,
-        shard_id: str,
-        suffix: str,
-        text: str,
-        decode: Callable[[str, bytes], Any],
-    ) -> None:
-        """Create an object, or keep a valid existing object with the same ID.
-
-        ``shard_id`` is a content address, so storing an ID that is already
-        present is a no-op: the first write wins, even when the new envelope
-        differs in fields outside the address (``created_at``, ``meta``, a
-        signature). The existing bytes are checked with ``decode``; an object
-        that no longer parses or no longer matches its ID is corrupt and is
-        atomically replaced with the new bytes.
-
-        On POSIX, a fully-written temp file is atomically hard-linked into its
-        final name through a held prefix-directory descriptor. The link cannot
-        replace an existing name and neither path can be redirected by a
-        symlink race. Portable platforms retain the lock + atomic-replace path.
-        """
-        shard_id = validate_shard_id(shard_id)
-        expected = text.encode("utf-8")
-        name = self._object_name(shard_id, suffix)
-        with self._prefix_fd(shard_id, create=True) as prefix_fd:
-            if self._secure_dir_fd_supported:
-                assert prefix_fd is not None
-                tmp_name = self._write_temp_at(prefix_fd, name, text)
-                try:
-                    try:
-                        os.link(
-                            tmp_name,
-                            name,
-                            src_dir_fd=prefix_fd,
-                            dst_dir_fd=prefix_fd,
-                            follow_symlinks=False,
-                        )
-                        os.fsync(prefix_fd)
-                        return
-                    except FileExistsError:
-                        existing = self._read_at(prefix_fd, name)
-                finally:
-                    try:
-                        os.unlink(tmp_name, dir_fd=prefix_fd)
-                    except FileNotFoundError:
-                        pass
-            else:
-                path = self._content_path(shard_id, suffix)
-                try:
-                    existing = path.read_bytes()
-                except FileNotFoundError:
-                    _atomic_write_text(path, text)
-                    return
-        if existing == expected:
-            return
-        try:
-            decode(shard_id, existing)
-        except IntegrityError:
-            logger.warning(
-                "ShardStore: replacing corrupt object for shard %s%s", shard_id, suffix
-            )
-            self._replace_object_text(shard_id, suffix, text)
-
-    def _replace_object_text(self, shard_id: str, suffix: str, text: str) -> None:
-        """Atomically replace an existing object under the store lock."""
-        shard_id = validate_shard_id(shard_id)
-        name = self._object_name(shard_id, suffix)
-        with self._prefix_fd(shard_id) as prefix_fd:
-            if self._secure_dir_fd_supported:
-                if prefix_fd is None:
-                    raise FileNotFoundError(name)
-                tmp_name = self._write_temp_at(prefix_fd, name, text)
-                try:
-                    os.replace(
-                        tmp_name,
-                        name,
-                        src_dir_fd=prefix_fd,
-                        dst_dir_fd=prefix_fd,
-                    )
-                    os.fsync(prefix_fd)
-                except BaseException:
-                    try:
-                        os.unlink(tmp_name, dir_fd=prefix_fd)
-                    except FileNotFoundError:
-                        pass
-                    raise
-                return
-
-            path = self._content_path(shard_id, suffix)
-            if not path.exists():
-                raise FileNotFoundError(path)
-            _atomic_write_text(path, text)
-
-    def _unlink_object(self, shard_id: str, suffix: str) -> bool:
-        """Unlink an object by descriptor without following symlinks."""
-        shard_id = validate_shard_id(shard_id)
-        name = self._object_name(shard_id, suffix)
-        with self._prefix_fd(shard_id) as prefix_fd:
-            if self._secure_dir_fd_supported:
-                if prefix_fd is None:
-                    return False
-                try:
-                    os.unlink(name, dir_fd=prefix_fd)
-                    os.fsync(prefix_fd)
-                    return True
-                except FileNotFoundError:
-                    return False
-            path = self._content_path(shard_id, suffix)
-            try:
-                path.unlink()
-                _fsync_dir(path.parent)
-                return True
-            except FileNotFoundError:
-                return False
+        """Git-style object path: ab/cd1234...json"""
+        return self.shards_dir / shard_id[:2] / f"{shard_id[2:]}.json"
 
     @contextmanager
     def _index_lock(self) -> Iterator[None]:
@@ -606,161 +306,34 @@ class ShardStore:
             return self._scan_index()
         return {} if index is None else index
 
-    def _decode_plaintext(self, shard_id: str, raw: bytes) -> MemoryShard:
-        """Parse a plaintext object and normalize integrity failures."""
-        try:
-            parsed = json.loads(raw.decode("utf-8"))
-            if not isinstance(parsed, dict):
-                raise TypeError("payload is not a JSON object")
-            declared_id = parsed.get("shard_id")
-            if declared_id != shard_id:
-                raise IntegrityError(
-                    f"Plaintext shard ID mismatch: requested {shard_id}, "
-                    f"payload declares {declared_id!r}"
-                )
-            shard = MemoryShard.from_dict(parsed)
-        except IntegrityError:
-            raise
-        except Exception as exc:
-            raise IntegrityError(
-                f"Plaintext shard {shard_id} is malformed or fails its content address: {exc}"
-            ) from exc
-        if shard.shard_id != shard_id:
-            raise IntegrityError(
-                f"Plaintext shard content mismatch: requested {shard_id}, "
-                f"computed {shard.shard_id}"
-            )
-        return shard
-
-    def _decode_encrypted(self, shard_id: str, raw: bytes) -> EncryptedShard:
-        """Parse an encrypted wrapper and normalize identity failures."""
-        try:
-            encrypted = EncryptedShard.from_json(raw.decode("utf-8"))
-        except Exception as exc:
-            raise IntegrityError(
-                f"Encrypted shard {shard_id} is malformed: {exc}"
-            ) from exc
-        if encrypted.shard_id != shard_id:
-            raise IntegrityError(
-                f"Encrypted shard ID mismatch: requested {shard_id}, "
-                f"payload declares {encrypted.shard_id}"
-            )
-        return encrypted
-
-    def _decode_sealed(self, shard_id: str, raw: bytes):
-        """Parse a sealed wrapper and normalize identity failures."""
-        from spiritwriter.fabric.sealed import SealedShard
-        try:
-            sealed = SealedShard.from_json(raw.decode("utf-8"))
-        except Exception as exc:
-            raise IntegrityError(f"Sealed shard {shard_id} is malformed: {exc}") from exc
-        if sealed.shard_id != shard_id:
-            raise IntegrityError(
-                f"Sealed shard ID mismatch: requested {shard_id}, "
-                f"payload declares {sealed.shard_id}"
-            )
-        return sealed
-
-    @staticmethod
-    def _split_object_name(name: str) -> tuple[str, str] | None:
-        """Return ``(id_tail, suffix)`` for a recognized object filename."""
-        for suffix in (".sealed.json", ".enc.json", ".json"):
-            if name.endswith(suffix):
-                return name[:-len(suffix)], suffix
-        return None
-
     def _scan_index(
-        self,
-        order: dict[str, list[str]] | None = None,
-        skipped: list[str] | None = None,
+        self, order: dict[str, list[str]] | None = None
     ) -> dict[str, list[str]]:
-        """Reconstruct the index by securely scanning shard files.
+        """Reconstruct the index by scanning shard files.
 
         Plaintext, encrypted and sealed shards all carry a top-level
-        ``scope``. Malformed object names, unsafe paths, invalid payloads and
-        filename/payload identity mismatches are omitted and appended to
-        ``skipped`` when the caller asks for a report. Ids that appear in
-        ``order`` keep that order; the rest are appended sorted.
+        ``scope``. Ids that appear in ``order`` keep that order; the rest
+        are appended sorted (their original insertion order is not
+        recoverable).
         """
         found: dict[str, set[str]] = {}
-
-        def report(path: str, reason: object) -> None:
-            if skipped is not None:
-                skipped.append(f"{path}: {reason}")
-
-        with self._shards_fd() as root_fd:
-            if self._secure_dir_fd_supported:
-                assert root_fd is not None
-                prefixes = sorted(os.listdir(root_fd))
-                for prefix in prefixes:
-                    try:
-                        prefix_fd = os.open(
-                            prefix,
-                            os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
-                            dir_fd=root_fd,
-                        )
-                    except OSError as exc:
-                        report(f"{prefix}/", f"unsafe or unreadable prefix ({exc})")
-                        continue
-                    try:
-                        names = sorted(os.listdir(prefix_fd))
-                        for name in names:
-                            split = self._split_object_name(name)
-                            if split is None:
-                                continue
-                            tail, suffix = split
-                            shard_id = prefix + tail
-                            relpath = f"{prefix}/{name}"
-                            try:
-                                validate_shard_id(shard_id)
-                            except ValueError as exc:
-                                report(relpath, exc)
-                                continue
-                            try:
-                                raw = self._read_at(prefix_fd, name)
-                                if suffix == ".json":
-                                    scope = self._decode_plaintext(shard_id, raw).scope
-                                elif suffix == ".enc.json":
-                                    scope = self._decode_encrypted(shard_id, raw).scope
-                                else:
-                                    scope = self._decode_sealed(shard_id, raw).scope
-                                if not isinstance(scope, str):
-                                    raise ValueError("scope is not a string")
-                            except Exception as exc:
-                                report(relpath, exc)
-                                continue
-                            found.setdefault(scope, set()).add(shard_id)
-                    finally:
-                        os.close(prefix_fd)
-            else:
-                for prefix_path in sorted(self.shards_dir.iterdir()):
-                    if prefix_path.is_symlink() or not prefix_path.is_dir():
-                        report(f"{prefix_path.name}/", "unsafe or unreadable prefix")
-                        continue
-                    for object_path in sorted(prefix_path.iterdir()):
-                        split = self._split_object_name(object_path.name)
-                        if split is None:
-                            continue
-                        tail, suffix = split
-                        shard_id = prefix_path.name + tail
-                        relpath = f"{prefix_path.name}/{object_path.name}"
-                        try:
-                            validate_shard_id(shard_id)
-                            if object_path.is_symlink() or not object_path.is_file():
-                                raise ValueError("object is not a regular file")
-                            raw = object_path.read_bytes()
-                            if suffix == ".json":
-                                scope = self._decode_plaintext(shard_id, raw).scope
-                            elif suffix == ".enc.json":
-                                scope = self._decode_encrypted(shard_id, raw).scope
-                            else:
-                                scope = self._decode_sealed(shard_id, raw).scope
-                            if not isinstance(scope, str):
-                                raise ValueError("scope is not a string")
-                        except Exception as exc:
-                            report(relpath, exc)
-                            continue
-                        found.setdefault(scope, set()).add(shard_id)
+        for prefix_dir in sorted(self.shards_dir.iterdir()):
+            if not prefix_dir.is_dir():
+                continue
+            for shard_file in sorted(prefix_dir.iterdir()):
+                name = shard_file.name
+                if not name.endswith(".json"):
+                    continue
+                stem = name[: -len(".json")]
+                for suffix in (".enc", ".sealed"):
+                    if stem.endswith(suffix):
+                        stem = stem[: -len(suffix)]
+                        break
+                try:
+                    scope = json.loads(shard_file.read_text(encoding="utf-8"))["scope"]
+                except (OSError, ValueError, KeyError, TypeError):
+                    continue
+                found.setdefault(scope, set()).add(prefix_dir.name + stem)
 
         index: dict[str, list[str]] = {}
         for scope, ids in found.items():
@@ -799,30 +372,29 @@ class ShardStore:
 
         Heals a store whose index lost entries (old concurrent-writer bug,
         crash windows, hand edits) or is corrupt. Ids still present keep
-        their existing order. Returns ``{"added": [...], "removed": [...],
-        "skipped": [...]}``; skipped entries include malformed IDs, unsafe
-        paths, invalid payloads, and content-address mismatches. Logs a summary.
+        their existing order. Returns ``{"added": [...], "removed": [...]}``
+        shard ids and logs a summary.
         """
         with self._index_lock():
             try:
                 old = self._read_index() or {}
             except ValueError:
                 old = {}
-            skipped: list[str] = []
-            new = self._scan_index(order=old, skipped=skipped)
+            new = self._scan_index(order=old)
             old_ids = {i for ids in old.values() for i in ids}
             new_ids = {i for ids in new.values() for i in ids}
             added = sorted(new_ids - old_ids)
             removed = sorted(old_ids - new_ids)
             self._save_index(new)
-        if added or removed or skipped:
+            for prefix_dir in self.shards_dir.iterdir():
+                if prefix_dir.is_dir():
+                    _sweep_stale_tmp(prefix_dir, "*.tmp")
+        if added or removed:
             logger.warning(
-                "Reindexed %s: added %d, removed %d, skipped %d",
-                self.index_path, len(added), len(removed), len(skipped),
+                "Reindexed %s: added %d, removed %d",
+                self.index_path, len(added), len(removed),
             )
-            for item in skipped:
-                logger.warning("Reindex skipped %s", item)
-        return {"added": added, "removed": removed, "skipped": skipped}
+        return {"added": added, "removed": removed}
 
     def verify_index(self) -> dict[str, list[str]]:
         """Compare the index with the shard files without changing anything.
@@ -844,16 +416,17 @@ class ShardStore:
     # === Core Operations ===
 
     def put(self, shard: MemoryShard) -> ShardRef:
-        """Store a shard. Returns its ref. Idempotent by shard_id (first write wins)."""
-        shard_id = validate_shard_id(shard.shard_id)
-        serialized = shard.to_json()
+        """Store a shard. Returns its ref. Idempotent (content-addressed)."""
+        shard_id = shard.shard_id
+        path = self._shard_path(shard_id)
 
-        # One lock covers object creation and index publication. A second put
-        # of the same shard_id keeps the stored envelope (see
-        # _store_immutable_text).
-        with self._index_lock():
-            self._store_immutable_text(shard_id, ".json", serialized, self._decode_plaintext)
-            self._index_add(shard.scope, shard_id)
+        if not path.exists():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            _atomic_write_text(path, shard.to_json())
+
+        # Always ensure it is indexed, even if the file already existed: a
+        # crash after the file write must not leave the shard unindexed.
+        self._index_add(shard.scope, shard_id)
 
         return shard.ref
 
@@ -873,10 +446,9 @@ class ShardStore:
         rather than proceed as if the data were gone.
         """
         # L1: local file
-        shard_id = validate_shard_id(shard_id)
-        raw = self._read_object_bytes(shard_id, ".json")
-        if raw is not None:
-            return self._decode_plaintext(shard_id, raw)
+        path = self._shard_path(shard_id)
+        if path.exists():
+            return MemoryShard.from_json(path.read_text(encoding="utf-8"))
 
         # L2: network fallback
         if self._resolver:
@@ -889,12 +461,12 @@ class ShardStore:
 
     def has(self, shard_id: str) -> bool:
         """Check if a shard exists locally."""
-        return self._object_exists(shard_id, ".json")
+        return self._shard_path(shard_id).exists()
 
     def delete(self, shard_id: str) -> bool:
         """Remove a shard. Returns True if it existed."""
-        shard_id = validate_shard_id(shard_id)
-        if not self._object_exists(shard_id, ".json"):
+        path = self._shard_path(shard_id)
+        if not path.exists():
             return False
         # Update the index first and unlink only once that succeeded, so a
         # failure never leaves a dangling index entry. Errors propagate.
@@ -909,7 +481,7 @@ class ShardStore:
                         del index[scope]
             if changed:
                 self._save_index(index)
-            self._unlink_object(shard_id, ".json")
+            path.unlink(missing_ok=True)
         return True
 
     # === Query Operations ===
@@ -988,20 +560,28 @@ class ShardStore:
         return list(self._load_index().keys())
 
     def iter_all(self) -> Iterator[MemoryShard]:
-        """Iterate all valid plaintext shards in the store.
+        """Iterate all plaintext shards in the store.
 
-        The secure scanner omits encrypted/sealed-only identifiers and unsafe,
-        malformed, or content-address-mismatched objects.
+        Encrypted (``.enc.json``) and sealed (``.sealed.json``) payloads
+        are skipped by filename — their contents aren't MemoryShard-shaped.
+        The previous implementation skipped them only by catching the
+        resulting deserialization error, which tied correctness to
+        accidental failure of ``from_json``.
         """
-        index = self._scan_index()
-        for shard_ids in index.values():
-            for shard_id in shard_ids:
-                raw = self._read_object_bytes(shard_id, ".json")
-                if raw is None:
+        for prefix_dir in sorted(self.shards_dir.iterdir()):
+            if not prefix_dir.is_dir():
+                continue
+            for shard_file in sorted(prefix_dir.iterdir()):
+                name = shard_file.name
+                if not name.endswith(".json"):
+                    continue
+                if name.endswith((".enc.json", ".sealed.json")):
                     continue
                 try:
-                    yield self._decode_plaintext(shard_id, raw)
-                except IntegrityError:
+                    yield MemoryShard.from_json(
+                        shard_file.read_text(encoding="utf-8")
+                    )
+                except Exception:
                     continue
 
     def count(self) -> int:
@@ -1017,37 +597,18 @@ class ShardStore:
         return self.refs_dir / f"{_encode_ref_name(name)}.ref"
 
     def set_ref(self, name: str, shard_id: str) -> None:
-        """Atomically set a named reference to a validated shard identifier."""
-        shard_id = validate_shard_id(shard_id)
-        with self._index_lock():
-            _atomic_write_text(self._ref_path(name), shard_id)
+        """Set a named reference pointing to a shard.
 
-    def compare_and_set_ref(
-        self,
-        name: str,
-        expected_shard_id: str | None,
-        new_shard_id: str,
-    ) -> bool:
-        """Set ``name`` only if its current value matches ``expected``.
-
-        ``expected_shard_id=None`` means the ref must not exist. Returns
-        ``True`` when updated and ``False`` on a stale expectation.
+        Use for "latest project context" pointers that update
+        as new shards supersede old ones.
         """
-        if expected_shard_id is not None:
-            expected_shard_id = validate_shard_id(expected_shard_id)
-        new_shard_id = validate_shard_id(new_shard_id)
-        with self._index_lock():
-            current = self.get_ref(name)
-            if current != expected_shard_id:
-                return False
-            _atomic_write_text(self._ref_path(name), new_shard_id)
-            return True
+        self._ref_path(name).write_text(shard_id, encoding="utf-8")
 
     def get_ref(self, name: str) -> str | None:
-        """Resolve a named reference to a validated shard_id."""
+        """Resolve a named reference to a shard_id."""
         ref_path = self._ref_path(name)
         if ref_path.exists():
-            return validate_shard_id(ref_path.read_text(encoding="utf-8").strip())
+            return ref_path.read_text(encoding="utf-8").strip()
         return None
 
     def resolve_ref(self, name: str) -> MemoryShard | None:
@@ -1064,14 +625,12 @@ class ShardStore:
         return None
 
     def delete_ref(self, name: str) -> bool:
-        """Remove a named ref under the ref-update lock."""
+        """Remove a named ref. Returns True if it existed."""
         ref_path = self._ref_path(name)
-        with self._index_lock():
-            if ref_path.exists():
-                ref_path.unlink()
-                _fsync_dir(ref_path.parent)
-                return True
-            return False
+        if ref_path.exists():
+            ref_path.unlink()
+            return True
+        return False
 
     def list_refs(self, prefix: str = "") -> list[str]:
         """List all named refs, optionally filtered by prefix.
@@ -1154,17 +713,19 @@ class ShardStore:
 
     def _encrypted_path(self, shard_id: str) -> Path:
         """Path for encrypted shard: same layout, .enc.json suffix."""
-        return self._content_path(shard_id, ".enc.json")
+        return self.shards_dir / shard_id[:2] / f"{shard_id[2:]}.enc.json"
 
     def put_encrypted(self, encrypted: EncryptedShard) -> str:
-        """Store an encrypted shard. Idempotent by shard_id (first write wins)."""
-        shard_id = validate_shard_id(encrypted.shard_id)
-        with self._index_lock():
-            self._store_immutable_text(
-                shard_id, ".enc.json", encrypted.to_json(), self._decode_encrypted
-            )
-            self._index_add(encrypted.scope, shard_id)
-        return shard_id
+        """Store an encrypted shard. Returns shard_id."""
+        path = self._encrypted_path(encrypted.shard_id)
+        if not path.exists():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            _atomic_write_text(path, encrypted.to_json())
+
+        # Scope is visible even when encrypted
+        self._index_add(encrypted.scope, encrypted.shard_id)
+
+        return encrypted.shard_id
 
     def get_encrypted(self, shard_id: str) -> EncryptedShard | None:
         """Retrieve an encrypted shard by id. Falls back to network.
@@ -1175,10 +736,9 @@ class ShardStore:
         collapsed into ``None``, so a transient failure is not mistaken for
         "absent". See :meth:`get` for the full contract.
         """
-        shard_id = validate_shard_id(shard_id)
-        raw = self._read_object_bytes(shard_id, ".enc.json")
-        if raw is not None:
-            return self._decode_encrypted(shard_id, raw)
+        path = self._encrypted_path(shard_id)
+        if path.exists():
+            return EncryptedShard.from_json(path.read_text(encoding="utf-8"))
 
         if self._resolver:
             encrypted = self._resolver.resolve_encrypted(shard_id)
@@ -1190,76 +750,13 @@ class ShardStore:
 
     def has_encrypted(self, shard_id: str) -> bool:
         """Check if an encrypted shard exists."""
-        return self._object_exists(shard_id, ".enc.json")
+        return self._encrypted_path(shard_id).exists()
 
     def encrypt_and_store(self, shard: MemoryShard, key: bytes) -> EncryptedShard:
-        """Encrypt and store a shard, returning the existing envelope on retry.
-
-        AES-GCM uses a random nonce, so encrypting the same plaintext twice
-        produces different bytes. The store lock makes this helper idempotent:
-        a repeated call with the same inner shard and key returns the original
-        authenticated envelope instead of manufacturing a content-address
-        conflict. A different envelope under the same legacy shard ID remains
-        an integrity error.
-        """
-        shard_id = validate_shard_id(shard.shard_id)
-        with self._index_lock():
-            raw = self._read_object_bytes(shard_id, ".enc.json")
-            if raw is not None:
-                existing = self._decode_encrypted(shard_id, raw)
-                existing_shard = decrypt_shard(existing, key)
-                if existing_shard.to_json() != shard.to_json():
-                    raise IntegrityError(
-                        f"Encrypted shard {shard_id} already stores a different envelope"
-                    )
-                self._index_add(existing.scope, shard_id)
-                return existing
-            encrypted = encrypt_shard(shard, key)
-            self._store_immutable_text(
-                shard_id, ".enc.json", encrypted.to_json(), self._decode_encrypted
-            )
-            self._index_add(encrypted.scope, shard_id)
-            return encrypted
-
-    def update_metadata(
-        self,
-        shard_id: str,
-        updates: dict,
-        *,
-        key: bytes | None = None,
-    ) -> MemoryShard:
-        """Atomically update mutable shard-envelope metadata.
-
-        ``MemoryShard.meta`` is intentionally outside the legacy content
-        address. This explicit exception to immutable object writes exists for
-        MemPalace metadata-only updates. It holds the store lock, reads through
-        no-follow descriptors, verifies the existing object, and atomically
-        replaces the plaintext or encrypted envelope. Atom content, scope and
-        origin cannot change through this API.
-        """
-        shard_id = validate_shard_id(shard_id)
-        with self._index_lock():
-            suffix = ".enc.json" if key is not None else ".json"
-            raw = self._read_object_bytes(shard_id, suffix)
-            if raw is None:
-                raise KeyError(f"Shard {shard_id} not found")
-            if key is None:
-                shard = self._decode_plaintext(shard_id, raw)
-            else:
-                encrypted = self._decode_encrypted(shard_id, raw)
-                shard = decrypt_shard(encrypted, key)
-
-            shard.meta.update(updates)
-            if shard.shard_id != shard_id:
-                raise IntegrityError(
-                    "Metadata update changed content-addressed shard fields"
-                )
-            if key is None:
-                replacement = shard.to_json()
-            else:
-                replacement = encrypt_shard(shard, key).to_json()
-            self._replace_object_text(shard_id, suffix, replacement)
-            return shard
+        """Encrypt a shard and store the encrypted version. Returns EncryptedShard."""
+        encrypted = encrypt_shard(shard, key)
+        self.put_encrypted(encrypted)
+        return encrypted
 
     def decrypt_and_get(self, shard_id: str, key: bytes) -> MemoryShard:
         """Retrieve and decrypt a shard. Raises DecryptionError on failure."""
@@ -1288,9 +785,6 @@ class ShardStore:
             # Check if we have this shard (encrypted or plaintext)
             encrypted = self.get_encrypted(shard_id)
             if encrypted is not None:
-                # Reject an honestly denied cleartext wrapper before touching
-                # key material or attempting decryption. The wrapper remains
-                # untrusted, so authenticated inner scope is checked again.
                 if not validate_scope(token, encrypted.scope):
                     raise PermissionError(
                         f"Token not entitled to scope '{encrypted.scope}' "
@@ -1298,11 +792,6 @@ class ShardStore:
                     )
                 key = get_shard_key(token, shard_id)
                 shard = decrypt_shard(encrypted, key)
-                if not validate_scope(token, shard.scope):
-                    raise PermissionError(
-                        f"Token not entitled to scope '{shard.scope}' "
-                        f"(shard {shard_id})"
-                    )
                 parts.append(shard.hydrate_context())
             else:
                 # Try plaintext shard (for backward compat / unencrypted stores)
@@ -1322,22 +811,24 @@ class ShardStore:
 
     def _sealed_path(self, shard_id: str) -> Path:
         """Path for sealed shard: same layout, .sealed.json suffix."""
-        return self._content_path(shard_id, ".sealed.json")
+        return self.shards_dir / shard_id[:2] / f"{shard_id[2:]}.sealed.json"
 
     def put_sealed(self, sealed) -> str:
-        """Store a sealed shard. Idempotent by shard_id (first write wins).
+        """Store a sealed shard. Returns shard_id.
 
         Accepts a SealedShard from spiritwriter.fabric.sealed.
         The sealed payload is opaque to the operator — only the
         owner (holder of the private key) can decrypt it.
         """
-        shard_id = validate_shard_id(sealed.shard_id)
-        with self._index_lock():
-            self._store_immutable_text(
-                shard_id, ".sealed.json", sealed.to_json(), self._decode_sealed
-            )
-            self._index_add(sealed.scope, shard_id)
-        return shard_id
+        path = self._sealed_path(sealed.shard_id)
+        if not path.exists():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            _atomic_write_text(path, sealed.to_json())
+
+        # Scope is visible even when sealed
+        self._index_add(sealed.scope, sealed.shard_id)
+
+        return sealed.shard_id
 
     def get_sealed(self, shard_id: str):
         """Retrieve a sealed shard by id. Returns SealedShard or None.
@@ -1351,10 +842,10 @@ class ShardStore:
         collapsed into ``None``, so a transient failure is not mistaken for
         "absent". See :meth:`get` for the full contract.
         """
-        shard_id = validate_shard_id(shard_id)
-        raw = self._read_object_bytes(shard_id, ".sealed.json")
-        if raw is not None:
-            return self._decode_sealed(shard_id, raw)
+        path = self._sealed_path(shard_id)
+        if path.exists():
+            from spiritwriter.fabric.sealed import SealedShard
+            return SealedShard.from_json(path.read_text(encoding="utf-8"))
 
         if self._resolver:
             sealed = self._resolver.resolve_sealed(shard_id)
@@ -1366,45 +857,17 @@ class ShardStore:
 
     def has_sealed(self, shard_id: str) -> bool:
         """Check if a sealed shard exists."""
-        return self._object_exists(shard_id, ".sealed.json")
+        return self._sealed_path(shard_id).exists()
 
     def seal_and_store(self, shard: MemoryShard, owner_pubkey: bytes):
-        """Seal and store a shard, returning the existing envelope on retry.
+        """Seal a shard for an owner and store it. Returns SealedShard.
 
-        NaCl sealed boxes are randomized. Under the store lock, a repeated call
-        for the same serialized inner shard and owner returns the original
-        envelope. Reusing the legacy shard ID for different metadata or a
-        different owner remains an integrity error.
+        Requires PyNaCl to be installed.
         """
         from spiritwriter.fabric.sealed import seal_shard
-
-        shard_id = validate_shard_id(shard.shard_id)
-        plaintext = shard.to_json().encode("utf-8")
-        content_hash = hashlib.sha256(plaintext).hexdigest()
-        with self._index_lock():
-            raw = self._read_object_bytes(shard_id, ".sealed.json")
-            if raw is not None:
-                existing = self._decode_sealed(shard_id, raw)
-                expected = (
-                    existing.owner_pubkey == owner_pubkey
-                    and existing.content_hash == content_hash
-                    and existing.scope == shard.scope
-                    and existing.atom_count == len(shard.atoms)
-                    and existing.created_at == shard.created_at
-                    and existing.origin_agent == shard.origin
-                )
-                if not expected:
-                    raise IntegrityError(
-                        f"Sealed shard {shard_id} already stores a different envelope"
-                    )
-                self._index_add(existing.scope, shard_id)
-                return existing
-            sealed = seal_shard(shard, owner_pubkey)
-            self._store_immutable_text(
-                shard_id, ".sealed.json", sealed.to_json(), self._decode_sealed
-            )
-            self._index_add(sealed.scope, shard_id)
-            return sealed
+        sealed = seal_shard(shard, owner_pubkey)
+        self.put_sealed(sealed)
+        return sealed
 
     def unseal_and_get(self, shard_id: str, owner_private_key: bytes) -> MemoryShard:
         """Retrieve and unseal a shard. Raises UnsealError on failure.

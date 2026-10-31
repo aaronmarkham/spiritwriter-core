@@ -270,7 +270,7 @@ Nothing here is wired by default. `ShardStore("./shards")` is still a pure local
 pip install 'spiritwriter[s3]'
 ```
 
-The `[s3]` extra adds `boto3>=1.35.90`. That minimum includes the botocore S3 model for `PutObject(IfNoneMatch="*")`, which the backend uses for atomic create-if-absent publication. The core library never imports boto3 unless you construct an `S3Backend`, so a `pip install spiritwriter` stays lean.
+The `[s3]` extra adds `boto3`. The core library never imports it unless you construct an `S3Backend`, so a `pip install spiritwriter` stays lean.
 
 ### Quick Start
 
@@ -346,7 +346,7 @@ The two backends implement the same protocol but the storage models differ, and 
 - **No `cid_map.json`.** The IPFS backend persists a `shard_id → CID` map because CIDs aren't derivable from shard IDs. S3 keys *are* a deterministic function of `shard_id` (the layout above), so the S3 backend keeps no map — `resolve(shard_id)` recomputes the key and fetches. There's nothing local to sync between nodes; access to the bucket is the whole story. (`backend.key_for(shard_id)` exposes the computed key.)
 - **`pin` / `unpin` are no-ops.** S3 has no pinning concept — objects persist until explicitly deleted. Both methods exist to satisfy the protocol and simply report success. Note `unpin()` does **not** delete the object (the IPFS analog only marks a CID garbage-collectable); to actually remove content, use an S3 delete or a lifecycle rule.
 - **Durability is the bucket's job.** Retention, versioning, and replication are bucket-level lifecycle policy, not something the backend manages. That's the trade: you get S3's eleven-nines durability for free, but the backend has no say over it.
-- **Failure semantics fail loud.** A misconfigured bucket (missing / typo'd `SPIRITWRITER_S3_BUCKET`) raises `S3ConfigurationError`, never an empty result — a silent empty store is the exact failure this backend refuses to produce. Only a genuine object-not-found (`NoSuchKey`/`404`) returns `None` from a `resolve*`. Every other error — `AccessDenied`, throttling, connection reset — propagates as `NetworkUnavailable` rather than being swallowed into `None`, because a hosted worker that treats a transport error as "shard missing" reports success on partial data. IPFS follows the same fail-loud contract after a known CID has been selected. `resolve_manifest()` also content-address-verifies the parsed manifest against the requested key (`IntegrityError` on mismatch), since manifests feed the receipt/lineage path.
+- **Failure semantics fail loud.** A misconfigured bucket (missing / typo'd `SPIRITWRITER_S3_BUCKET`) raises `S3ConfigurationError`, never an empty result — a silent empty store is the exact failure this backend refuses to produce. Only a genuine object-not-found (`NoSuchKey`/`404`) returns `None` from a `resolve*`. Every other error — `AccessDenied`, throttling, connection reset — propagates as `NetworkUnavailable` rather than being swallowed into `None`, because a hosted worker that treats a transport error as "shard missing" reports success on partial data. This diverges from the IPFS backend, which returns `None` on transport error. `resolve_manifest()` also content-address-verifies the parsed manifest against the requested key (`IntegrityError` on mismatch), since manifests feed the receipt/lineage path.
 
 ## Choosing a backend: S3 vs IPFS
 
