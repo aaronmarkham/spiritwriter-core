@@ -26,6 +26,7 @@ from spiritwriter.audit._util import (
     sha256_file,
 )
 from spiritwriter.fabric.emitter import (
+    TraceChainError,
     TraceEmitter,
     generate_trace_receipt,
     verify_chain,
@@ -247,11 +248,14 @@ def generate_witness(
 
     report_bytes = report_path.read_bytes()
     terminal_report_evt, report = validate_audit_terminal(events, report_bytes)
-    trace_receipt = generate_trace_receipt(
-        trace_path,
-        {"report": report_path},
-        stream_id=terminal_report_evt.get("run_id"),
-    )
+    try:
+        trace_receipt = generate_trace_receipt(
+            trace_path,
+            {"report": report_path},
+            stream_id=terminal_report_evt.get("run_id"),
+        )
+    except TraceChainError as exc:  # includes TraceReceiptError
+        raise AuditWitnessError(f"failed to generate trace receipt: {exc}") from exc
     # Both files are read once above for audit fields and once by the generic
     # receipt. Refuse a mixed snapshot if either changed between those reads.
     if trace_receipt["trace_sha256"] != sha256_bytes(trace_bytes):

@@ -507,3 +507,25 @@ def test_validate_report_handles_missing_name(seeded_registry):
     issues = validate_report(report, seeded_registry)
     assert len(issues) == 1
     assert issues[0]["issue"] == "malformed_finding"
+
+
+def test_generate_witness_reports_receipt_failures_as_witness_errors(
+    fake_apk, fake_report, monkeypatch
+):
+    import spiritwriter.audit.provenance as provenance
+    from spiritwriter.fabric.emitter import TraceReceiptError
+
+    apk, extraction = fake_apk
+    trace_path, _ = trace_existing_audit(
+        package_name="com.example.app",
+        apk_path=apk,
+        extraction_dir=extraction,
+        report_path=fake_report,
+    )
+
+    def failing_receipt(*args, **kwargs):
+        raise TraceReceiptError("trace contains multiple run_id values")
+
+    monkeypatch.setattr(provenance, "generate_trace_receipt", failing_receipt)
+    with pytest.raises(AuditWitnessError, match="failed to generate trace receipt"):
+        generate_witness(trace_path, fake_report)
