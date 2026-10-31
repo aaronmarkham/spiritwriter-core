@@ -266,10 +266,6 @@ class TraceEmitter:
             return None
         return f"chain:{self.run_id}#{self.prev_hash}"
 
-    def _write(self, evt: dict[str, Any]) -> None:
-        with open(self.out_path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(evt, ensure_ascii=False) + "\n")
-
     # === Shard Lifecycle Events ===
 
     def shard_created(self, shard_id: str, scope: str, atom_count: int, **kwargs: Any) -> dict[str, Any]:
