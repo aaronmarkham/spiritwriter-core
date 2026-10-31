@@ -569,6 +569,31 @@ def test_linux_without_wrapper_on_unknown_arch_has_capability_error(
     assert not target.exists()
 
 
+def test_linux_without_wrapper_in_32bit_process_has_capability_error(
+    tmp_path, monkeypatch
+):
+    class FakeSyscall:
+        def __call__(self, *args):
+            raise AssertionError("a 32-bit process must not use 64-bit syscall numbers")
+
+    class FakeLibc:
+        syscall = FakeSyscall()
+
+    source = tmp_path / "source"
+    target = tmp_path / "target"
+    source.mkdir()
+    monkeypatch.setattr(pack_module.sys, "platform", "linux")
+    monkeypatch.setattr(pack_module.platform, "machine", lambda: "aarch64")
+    monkeypatch.setattr(pack_module, "_process_is_64bit", lambda: False)
+    monkeypatch.setattr(
+        pack_module.ctypes, "CDLL", lambda name, use_errno: FakeLibc()
+    )
+    with pytest.raises(PublicationCapabilityError, match="requires renameat2"):
+        pack_module._rename_directory_noreplace(source, target)
+    assert source.is_dir()
+    assert not target.exists()
+
+
 @pytest.mark.skipif(
     not sys.platform.startswith("linux")
     or platform.machine().lower() not in pack_module._LINUX_RENAMEAT2_SYSCALLS,

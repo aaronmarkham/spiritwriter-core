@@ -192,6 +192,17 @@ _LINUX_RENAMEAT2_SYSCALLS = {
 }
 
 
+def _process_is_64bit() -> bool:
+    """Whether this interpreter uses the 64-bit syscall ABI's pointer size.
+
+    ``platform.machine()`` reports the kernel's architecture, so a 32-bit
+    userspace on a 64-bit kernel (armhf on aarch64, x32 or i386 on x86_64)
+    would otherwise pick a 64-bit syscall number that is wrong for its ABI.
+    """
+
+    return ctypes.sizeof(ctypes.c_void_p) == 8
+
+
 def _linux_renameat2(libc):
     """Return a renameat2(olddirfd, oldpath, newdirfd, newpath, flags) callable."""
 
@@ -206,7 +217,11 @@ def _linux_renameat2(libc):
         ]
         wrapper.restype = ctypes.c_int
         return wrapper
-    number = _LINUX_RENAMEAT2_SYSCALLS.get(platform.machine().lower())
+    number = (
+        _LINUX_RENAMEAT2_SYSCALLS.get(platform.machine().lower())
+        if _process_is_64bit()
+        else None
+    )
     syscall = getattr(libc, "syscall", None)
     if number is None or syscall is None:
         raise PublicationCapabilityError(
