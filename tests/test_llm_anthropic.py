@@ -1,5 +1,6 @@
 """Tests for spiritwriter.llm.anthropic — model configuration."""
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -164,6 +165,54 @@ class TestAgentSDKPathModelThreading:
             await provider.query("hello", model="override-model")
 
         fake_options_cls.assert_called_once_with(model="override-model")
+
+
+class TestAgentSDKPathReplyText:
+    """The Agent SDK stream carries the reply twice: in the AssistantMessage's
+    text blocks and again in the final ResultMessage's ``.result``. The
+    provider must return it once."""
+
+    @staticmethod
+    def _make_fake_agent_sdk(messages):
+        async def fake_query(prompt, options=None):
+            for message in messages:
+                yield message
+
+        fake_sdk = MagicMock()
+        fake_sdk.query = fake_query
+        return fake_sdk
+
+    @staticmethod
+    def _assistant(text):
+        return SimpleNamespace(content=[SimpleNamespace(text=text)], model="m", usage=None)
+
+    @staticmethod
+    def _result(text):
+        return SimpleNamespace(subtype="success", is_error=False, result=text, usage=None)
+
+    @pytest.mark.asyncio
+    async def test_reply_is_not_duplicated_by_result_message(self):
+        reply = '{"word": "ruler"}'
+        fake_sdk = self._make_fake_agent_sdk([
+            SimpleNamespace(subtype="init", data={}),
+            self._assistant(reply),
+            self._result(reply),
+        ])
+
+        with patch.dict("sys.modules", {"claude_agent_sdk": fake_sdk}):
+            out = await AnthropicProvider(model="m").query("hello")
+
+        assert out == reply
+        assert JSONExtractor.extract(out) == {"word": "ruler"}
+
+    @pytest.mark.asyncio
+    async def test_result_message_used_when_no_assistant_text(self):
+        fake_sdk = self._make_fake_agent_sdk([self._result("only-result")])
+
+        with patch.dict("sys.modules", {"claude_agent_sdk": fake_sdk}):
+            out = await AnthropicProvider(model="m").query("hello")
+
+        assert out == "only-result"
 
 
 class TestJSONExtractor:

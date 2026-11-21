@@ -127,10 +127,18 @@ class AnthropicProvider(LLMProvider):
         try:
             from claude_agent_sdk import query, ClaudeAgentOptions
             options = ClaudeAgentOptions(model=selected_model)
+            result_text = ""
             async for message in query(prompt=full_prompt, options=options):
                 text = self._extract_text_from_message(message)
                 if text:
-                    response_text += text
+                    # The final ResultMessage repeats the assistant's reply in
+                    # `.result`. Keep it aside as a fallback instead of
+                    # appending it, or the reply is returned twice.
+                    if not getattr(message, 'content', None) and \
+                            isinstance(getattr(message, 'result', None), str):
+                        result_text = text
+                    else:
+                        response_text += text
                 # Try to extract usage from message if available
                 if hasattr(message, 'usage') and message.usage:
                     usage = {
@@ -138,6 +146,8 @@ class AnthropicProvider(LLMProvider):
                         'output_tokens': getattr(message.usage, 'output_tokens', 0),
                     }
                     usage['total_tokens'] = usage['input_tokens'] + usage['output_tokens']
+            if not response_text:
+                response_text = result_text
         except (ImportError, Exception) as sdk_err:
             # Fall back to Anthropic SDK (catches both missing SDK and runtime errors)
             if self.debug and not isinstance(sdk_err, ImportError):
