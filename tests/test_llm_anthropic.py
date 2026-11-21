@@ -1,5 +1,6 @@
 """Tests for spiritwriter.llm.anthropic — model configuration."""
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -164,6 +165,151 @@ class TestAgentSDKPathModelThreading:
             await provider.query("hello", model="override-model")
 
         fake_options_cls.assert_called_once_with(model="override-model")
+
+
+class TestAgentSDKPathReplyText:
+    """The Agent SDK stream carries the reply twice: in the AssistantMessage's
+    text blocks and again in the final ResultMessage's ``.result``. The
+    provider must return it once."""
+
+    @staticmethod
+    def _make_fake_agent_sdk(messages):
+        async def fake_query(prompt, options=None):
+            for message in messages:
+                yield message
+
+        fake_sdk = MagicMock()
+        fake_sdk.query = fake_query
+        return fake_sdk
+
+    # The fakes mirror the field shapes of the real claude_agent_sdk dataclasses
+    # (AssistantMessage, UserMessage, ResultMessage): usage is a dict, result
+    # may be None, and tool-use blocks carry no `text`.
+
+    @staticmethod
+    def _assistant(*texts, parent_tool_use_id=None, tool_use=False):
+        content = [SimpleNamespace(text=t) for t in texts]
+        if tool_use:
+            content.append(SimpleNamespace(id="toolu_1", name="Read", input={}))
+        return SimpleNamespace(
+            content=content, model="m", parent_tool_use_id=parent_tool_use_id, error=None
+        )
+
+    @staticmethod
+    def _user(content):
+        return SimpleNamespace(content=content, uuid="u1", parent_tool_use_id=None)
+
+    @staticmethod
+    def _result(text, *, is_error=False, subtype="success", usage=None):
+        return SimpleNamespace(
+            subtype=subtype, duration_ms=1, duration_api_ms=1, is_error=is_error,
+            num_turns=1, session_id="s", total_cost_usd=0.0, usage=usage,
+            result=text, structured_output=None,
+        )
+
+    async def _run(self, messages, **kwargs):
+        fake_sdk = self._make_fake_agent_sdk(messages)
+        with patch.dict("sys.modules", {"claude_agent_sdk": fake_sdk}):
+            return await AnthropicProvider(model="m").query("hello", **kwargs)
+
+    @pytest.mark.asyncio
+    async def test_reply_is_not_duplicated_by_result_message(self):
+        reply = '{"word": "ruler"}'
+        fake_sdk = self._make_fake_agent_sdk([
+            SimpleNamespace(subtype="init", data={}),
+            self._assistant(reply),
+            self._result(reply),
+        ])
+
+        with patch.dict("sys.modules", {"claude_agent_sdk": fake_sdk}):
+            out = await AnthropicProvider(model="m").query("hello")
+
+        assert out == reply
+        assert JSONExtractor.extract(out) == {"word": "ruler"}
+
+    @pytest.mark.asyncio
+    async def test_result_message_used_when_no_assistant_text(self):
+        fake_sdk = self._make_fake_agent_sdk([self._result("only-result")])
+
+        with patch.dict("sys.modules", {"claude_agent_sdk": fake_sdk}):
+            out = await AnthropicProvider(model="m").query("hello")
+
+        assert out == "only-result"
+
+    @pytest.mark.asyncio
+    async def test_usage_dict_is_read(self):
+        out, usage = await self._run(
+            [self._assistant("hi"),
+             self._result("hi", usage={"input_tokens": 5, "output_tokens": 7,
+                                       "cache_read_input_tokens": 3})],
+            return_usage=True,
+        )
+        assert out == "hi"
+        assert usage == {"input_tokens": 5, "output_tokens": 7, "total_tokens": 12}
+
+    @pytest.mark.asyncio
+    async def test_none_result_does_not_leak_into_reply(self):
+        out = await self._run([self._assistant("the reply"), self._result(None)])
+        assert out == "the reply"
+
+    @pytest.mark.asyncio
+    async def test_error_result_falls_back_instead_of_returning_error_text(self):
+        """is_error=True: neither the error text nor partial output is the reply."""
+        fake_sdk = self._make_fake_agent_sdk([
+            self._assistant("partial outp"),
+            self._result("API Error: 529 overloaded", is_error=True),
+        ])
+        fake_anthropic, fake_client = _make_fake_anthropic(text="fallback reply")
+
+        with patch.dict("sys.modules", {"claude_agent_sdk": fake_sdk, "anthropic": fake_anthropic}), \
+             patch("spiritwriter.llm.anthropic.get_api_key", return_value="fake-key"):
+            out = await AnthropicProvider(model="m").query("hello")
+
+        assert out == "fallback reply"
+        fake_client.messages.create.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_error_result_without_fallback_key_raises(self):
+        fake_sdk = self._make_fake_agent_sdk([
+            self._result("max turns reached", is_error=True, subtype="error_max_turns"),
+        ])
+        fake_anthropic, _ = _make_fake_anthropic()
+
+        with patch.dict("sys.modules", {"claude_agent_sdk": fake_sdk, "anthropic": fake_anthropic}), \
+             patch("spiritwriter.llm.anthropic.get_api_key", return_value=None):
+            with pytest.raises(ValueError, match="ANTHROPIC_API_KEY"):
+                await AnthropicProvider(model="m").query("hello")
+
+    @pytest.mark.asyncio
+    async def test_agentic_run_returns_final_reply_not_narration(self):
+        final = '{"word": "ruler"}'
+        out = await self._run([
+            self._assistant("Let me check that file.", tool_use=True),
+            self._user([SimpleNamespace(tool_use_id="toolu_1", content="file body")]),
+            self._assistant("subagent chatter", parent_tool_use_id="toolu_1"),
+            self._assistant(final),
+            self._result(final),
+        ])
+        assert out == final
+
+    @pytest.mark.asyncio
+    async def test_assistant_fallback_joins_turns_and_skips_subagents(self):
+        out = await self._run([
+            self._assistant("first"),
+            self._assistant("subagent chatter", parent_tool_use_id="toolu_1"),
+            self._assistant("second"),
+            self._result(None),
+        ])
+        assert out == "first\nsecond"
+
+    @pytest.mark.asyncio
+    async def test_user_message_text_is_not_part_of_reply(self):
+        out = await self._run([
+            self._user("replayed user prompt"),
+            self._assistant("the reply"),
+            self._result(None),
+        ])
+        assert out == "the reply"
 
 
 class TestJSONExtractor:

@@ -127,17 +127,42 @@ class AnthropicProvider(LLMProvider):
         try:
             from claude_agent_sdk import query, ClaudeAgentOptions
             options = ClaudeAgentOptions(model=selected_model)
+            assistant_texts: list[str] = []
+            assistant_usage = None
+            result_text = ""
             async for message in query(prompt=full_prompt, options=options):
-                text = self._extract_text_from_message(message)
-                if text:
-                    response_text += text
-                # Try to extract usage from message if available
-                if hasattr(message, 'usage') and message.usage:
-                    usage = {
-                        'input_tokens': getattr(message.usage, 'input_tokens', 0),
-                        'output_tokens': getattr(message.usage, 'output_tokens', 0),
-                    }
-                    usage['total_tokens'] = usage['input_tokens'] + usage['output_tokens']
+                if self._is_result_message(message):
+                    result = getattr(message, 'result', None)
+                    if getattr(message, 'is_error', False):
+                        # On a failed run `.result` holds the error text, not a
+                        # reply. Raise so the Anthropic SDK fallback below runs
+                        # instead of returning the error (or partial output).
+                        raise RuntimeError(
+                            f"Claude Agent SDK run failed "
+                            f"({getattr(message, 'subtype', 'error')}): {result}"
+                        )
+                    if isinstance(result, str):
+                        result_text = result
+                    usage = self._usage_from(getattr(message, 'usage', None)) or usage
+                elif self._is_assistant_message(message):
+                    # Skip subagent turns; only the main thread is the reply.
+                    if getattr(message, 'parent_tool_use_id', None):
+                        continue
+                    text = self._extract_text_from_message(message)
+                    if text:
+                        assistant_texts.append(text)
+                    assistant_usage = (
+                        self._usage_from(getattr(message, 'usage', None)) or assistant_usage
+                    )
+                # Anything else (system, user, tool-result, stream events) is
+                # not model output and is ignored.
+
+            # The final ResultMessage's `.result` is the canonical reply and
+            # repeats the last assistant turn, so the two must not be summed.
+            # Assistant text is the fallback when no result text arrived.
+            response_text = result_text or "\n".join(assistant_texts)
+            if usage is None:
+                usage = assistant_usage
         except (ImportError, Exception) as sdk_err:
             # Fall back to Anthropic SDK (catches both missing SDK and runtime errors)
             if self.debug and not isinstance(sdk_err, ImportError):
@@ -304,6 +329,36 @@ class AnthropicProvider(LLMProvider):
                 "Install with: pip install anthropic"
             )
 
+    @staticmethod
+    def _is_result_message(message) -> bool:
+        """The Agent SDK's final ResultMessage (identified by shape, not import)."""
+        return hasattr(message, 'is_error') and hasattr(message, 'result')
+
+    @staticmethod
+    def _is_assistant_message(message) -> bool:
+        """An AssistantMessage: has a model and a list of content blocks.
+
+        UserMessage also has `content` (sometimes a plain string) but no model.
+        """
+        return hasattr(message, 'model') and isinstance(getattr(message, 'content', None), list)
+
+    @staticmethod
+    def _usage_from(raw) -> Optional[Dict[str, int]]:
+        """Normalize SDK usage, which is a dict on the Agent SDK path."""
+        if not raw:
+            return None
+        if isinstance(raw, dict):
+            input_tokens = raw.get('input_tokens') or 0
+            output_tokens = raw.get('output_tokens') or 0
+        else:
+            input_tokens = getattr(raw, 'input_tokens', 0) or 0
+            output_tokens = getattr(raw, 'output_tokens', 0) or 0
+        return {
+            'input_tokens': input_tokens,
+            'output_tokens': output_tokens,
+            'total_tokens': input_tokens + output_tokens,
+        }
+
     def _extract_text_from_message(self, message) -> str:
         """Extract text content from Claude SDK message objects"""
         
@@ -328,19 +383,8 @@ class AnthropicProvider(LLMProvider):
             if isinstance(result, str):
                 return result
         
-        # Fallback to string parsing (less reliable due to escaping issues)
-        msg_str = str(message)
-        
-        # Skip system initialization messages
-        if 'SystemMessage' in msg_str and 'subtype' in msg_str:
-            return ""
-        
-        # Look for ResultMessage - but be careful with escaping
-        # We need to extract the actual result value, not the escaped string repr
-        if hasattr(message, '__dict__'):
-            if 'result' in message.__dict__:
-                return str(message.__dict__['result'])
-        
+        # No text: system messages, tool-only turns, or a result of None.
+        # (Never stringify `.result` here — str(None) would leak "None".)
         return ""
 
 
